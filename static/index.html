@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arbeitspanel</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --ink: #1d1d1b; --quiet: #6b6b66; --line: #e3e3de;
+    --ok: #1f7a4d; --bad: #b3261e; --run: #2457b8; --warn: #9a6200; --accent: #2457b8;
+    --okbg: #e4f3ea; --badbg: #fbe6e4; --runbg: #e3ebfa; --warnbg: #fbf0d9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --card: #1e1e1c; --ink: #ecece8; --quiet: #9a9a93; --line: #34342f;
+      --ok: #6fd1a0; --bad: #f2877f; --run: #8fb2f5; --warn: #e9b659; --accent: #8fb2f5;
+      --okbg: #1b2e24; --badbg: #38211f; --runbg: #1d2638; --warnbg: #33290f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+  .pill.ok { background: var(--okbg); color: var(--ok); }
+  .pill.bad { background: var(--badbg); color: var(--bad); }
+  .pill.neutral { background: var(--line); color: var(--quiet); }
+  .pill.warn { background: var(--warnbg); color: var(--warn); }
+  a.pill { text-decoration: none; }
+  .spacer { flex: 1; }
+  .quiet { color: var(--quiet); font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; padding: 16px; max-width: 1300px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--quiet); margin: 18px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; }
+  .banner.bad { background: var(--badbg); color: var(--bad); }
+  .banner.warn { background: var(--warnbg); color: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .card.stale { border-left: 4px solid var(--warn); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .title { font-weight: 600; }
+  .meta { color: var(--quiet); font-size: 13px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--line); color: var(--quiet); }
+  .badge.success { background: var(--okbg); color: var(--ok); }
+  .badge.failed { background: var(--badbg); color: var(--bad); }
+  .badge.running, .badge.pending { background: var(--runbg); color: var(--run); }
+  .badge.draft { background: var(--warnbg); color: var(--warn); }
+  .badge.ticket { background: var(--runbg); color: var(--run); }
+  .badge.noticket { background: var(--warnbg); color: var(--warn); }
+  a.btn { font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  a.btn:hover { border-color: var(--accent); text-decoration: none; }
+  button, select { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  textarea { width: 100%; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); resize: vertical; }
+  .idea { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .idea.expired { opacity: .5; }
+  .idea:last-child { border-bottom: 0; }
+  .empty { color: var(--quiet); font-style: italic; padding: 6px 0; }
+  pre.log { background: #111; color: #d8d8d2; padding: 8px; border-radius: 8px; max-height: 240px; overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); width: min(720px, 92vw); }
+  dialog textarea { height: 300px; font-family: ui-monospace, monospace; font-size: 13px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; z-index: 10; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arbeitspanel</h1>
+  <span id="stories" class="pill neutral" style="display:none"></span>
+  <span id="wip" class="pill ok">WIP –</span>
+  <a id="helpdesk" class="pill neutral" style="display:none" target="_blank" rel="noopener"></a>
+  <span id="demo" class="pill" style="display:none;background:var(--warnbg);color:var(--warn)">Demo-Daten</span>
+  <span class="spacer"></span>
+  <span id="fetched" class="quiet"></span>
+  <button id="refresh">Neu laden</button>
+</header>
+<main>
+  <section id="left"></section>
+  <aside>
+    <h2>Ideenbox <span id="ideaCount" class="quiet"></span></h2>
+    <div class="card">
+      <textarea id="ideaText" rows="2" placeholder="Idee kurz festhalten, Enter speichert (Shift+Enter = neue Zeile)"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="triage">Triage-Prompt kopieren</button>
+        <span class="quiet">Nur erfassen. Gestartet wird nichts.</span>
+      </div>
+      <div id="ideas"></div>
+    </div>
+    <h2>Test-Jobs</h2>
+    <div id="jobs"></div>
+  </aside>
+</main>
+
+<dialog id="dlg">
+  <div class="row" style="justify-content:space-between"><strong id="dlgTitle">Prompt</strong><button id="dlgClose">Schließen</button></div>
+  <textarea id="dlgText" readonly></textarea>
+  <div class="row" style="margin-top:8px"><button class="primary" id="dlgCopy">Kopieren</button></div>
+</dialog>
+
+<script>
+const H = { 'X-Requested-With': 'tinyops', 'Content-Type': 'application/json' };
+let state = null;
+const openLogs = new Set();
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+async function copyText(text, title) {
+  try { await navigator.clipboard.writeText(text); toast('Kopiert'); return; } catch (e) { /* Fallback unten */ }
+  document.getElementById('dlgTitle').textContent = title || 'Prompt';
+  document.getElementById('dlgText').value = text;
+  document.getElementById('dlg').showModal();
+}
+
+const pipelineLabel = { success: 'Pipeline grün', failed: 'Pipeline rot', running: 'Pipeline läuft', pending: 'Pipeline wartet', none: 'keine Pipeline' };
+
+function card(it) {
+  const badges = [];
+  if (it.kind === 'branch') {
+    badges.push('<span class="badge">kein MR</span>');
+    if (it.ahead) badges.push(`<span class="badge" title="Commits vor dem Default-Branch">${it.ahead} Commit${it.ahead === 1 ? '' : 's'}</span>`);
+    if (it.by_agent) badges.push('<span class="badge draft" title="Commits vom Agenten (Konto oder Co-Authored-By)">Agent</span>');
+    else if (it.by_me) badges.push('<span class="badge" title="Mindestens ein Commit von dir">von mir</span>');
+  }
+  if (it.draft) badges.push('<span class="badge draft">Draft</span>');
+  if (it.kind !== 'branch') badges.push(`<span class="badge ${esc(it.pipeline)}">${esc(pipelineLabel[it.pipeline] || it.pipeline)}</span>`);
+  if (it.ticket) badges.push(`<a class="badge ticket" href="${esc(it.ticket.url)}" target="_blank" rel="noopener" title="${esc(it.ticket.summary)}">${esc(it.ticket.key)} · ${esc(it.ticket.status)}</a>`);
+  else if (it.ticket_unknown) badges.push(`<span class="badge noticket" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>`);
+  else if (it.no_ticket) badges.push('<span class="badge noticket">ohne Ticket</span>');
+  const age = it.age_days === 0 ? 'heute' : `${it.age_days} Tage ohne Änderung`;
+  const mrLabel = it.iid ? ` !${it.iid}` : '';
+  const parts = [];
+  if (it.iid && it.can_deploy) {
+    const opts = state.prompts.map(p => `<option>${esc(p)}</option>`).join('');
+    const lock = it.agent_locked ? ' disabled title="Story-Limit überschritten: Agenten nur für Tickets, die schon in Arbeit sind"' : '';
+    parts.push(`<button class="primary" data-act="deploy">Testumgebung starten</button>
+      <button data-act="teardown">Abbauen</button>
+      <select class="ps">${opts}</select>
+      <button data-act="copy">Prompt kopieren</button>
+      ${state.agent_enabled ? `<button data-act="agent"${lock}>Agent starten</button>` : ''}`);
+  }
+  if (it.no_ticket) {
+    parts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>
+      <button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>`);
+  }
+  const actions = parts.length ? `<div class="row" style="margin-top:8px" data-p="${it.project_id}" data-i="${it.iid ?? ''}">${parts.join('')}</div>` : '';
+  return `<div class="card ${it.stale ? 'stale' : ''}">
+    <div class="row"><span class="title">${esc(it.title)}</span>${badges.join('')}</div>
+    <div class="meta">${esc(it.project)}${mrLabel} · <code>${esc(it.branch)}</code> · ${esc(age)}
+      · <a href="${esc(it.url)}" target="_blank" rel="noopener">öffnen</a>${it.pipeline_url ? ` · <a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>` : ''}</div>
+    ${actions}
+  </div>`;
+}
+
+function section(title, items, emptyText) {
+  return `<h2>${esc(title)} (${items.length})</h2>` + (items.length ? items.map(card).join('') : `<div class="empty">${esc(emptyText)}</div>`);
+}
+
+function storiesSection() {
+  const j = state.jira;
+  if (!j || !j.ok) return '';
+  const rows = j.stories.map(s => {
+    const linked = s.items.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join(', ');
+    const flag = s.no_mr ? '<span class="badge noticket">kein MR</span>' : '';
+    return `<div class="card story">
+      <div class="row"><a class="title" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.key)} ${esc(s.summary)}</a>
+        <span class="badge ticket">${esc(s.status)}</span>${flag}</div>
+      <div class="meta">${linked ? 'MR/Branch: ' + linked : 'Noch kein MR oder Branch mit diesem Key.'}</div>
+    </div>`;
+  }).join('');
+  return `<h2>Stories in Arbeit (${j.count}/${j.limit})</h2>` + (rows || '<div class="empty">Keine Story in Arbeit.</div>');
+}
+
+function renderLeft() {
+  const mine = state.mine, review = state.review;
+  const j = state.jira;
+  const bereit = mine.filter(i => i.state === 'bereit' || i.state === 'offen');
+  const waiting = review.concat(bereit);
+  let html = '';
+  if (state.errors.length) html += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
+  if (j && j.ok && j.over) html += `<div class="banner bad"><strong>${j.count} Stories in Arbeit, Limit ${j.limit}.</strong> Schließe eine ab oder setze sie zurück, bevor etwas Neues beginnt. Agenten starten nur noch für Stories, die schon laufen.</div>`;
+  else if (!(j && j.ok) && state.wip > state.wip_limit) html += `<div class="banner bad"><strong>${state.wip} offene Arbeiten, Limit ${state.wip_limit}.</strong> Erst abschließen oder parken, bevor etwas Neues startet.</div>`;
+  const stale = mine.filter(i => i.stale).length;
+  if (stale) html += `<div class="banner warn">${stale} Eintrag/Einträge seit ${state.stale_days} Tagen oder länger unberührt (gelb markiert). Mergen, parken oder löschen.</div>`;
+  html += storiesSection();
+  html += section('Wartet auf mich', waiting, 'Nichts wartet auf dich.');
+  html += section('Mir zugeteilt', state.assigned, 'Dir ist nichts zugeteilt, was nicht von dir ist.');
+  html += section('Läuft', mine.filter(i => i.state === 'laeuft'), 'Keine laufenden Pipelines.');
+  html += section('Rot', mine.filter(i => i.state === 'rot'), 'Nichts Rotes.');
+  html += section('Draft', mine.filter(i => i.state === 'draft'), 'Keine Drafts.');
+  html += section('Offene Branches mit meinen oder Agent-Commits (ohne MR)', mine.filter(i => i.state === 'kein-mr'), 'Keine offenen Branches von dir oder deinem Agenten.');
+  document.getElementById('left').innerHTML = html;
+}
+
+function renderIdeas() {
+  const ideas = state.ideas;
+  const open = ideas.filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length;
+  document.getElementById('ideaCount').textContent = `${open}/${state.idea_cap}`;
+  const list = ideas.filter(i => !['verworfen', 'erledigt'].includes(i.status));
+  document.getElementById('ideas').innerHTML = list.length ? list.map(i => `
+    <div class="idea ${i.expired ? 'expired' : ''}" data-id="${i.id}">
+      <div>${esc(i.text)}</div>
+      <div class="meta">${i.expired ? 'verfallen · ' : ''}${esc(i.status)} · ${i.age_days} Tage</div>
+      <div class="row" style="margin-top:4px">
+        ${i.status === 'neu' && !i.expired ? '<button data-ia="park">Parken</button>' : ''}
+        <button data-ia="done">Erledigt</button>
+        <button data-ia="drop">Verwerfen</button>
+      </div>
+    </div>`).join('') : '<div class="empty">Leer. Das ist ein gutes Zeichen.</div>';
+}
+
+function renderJobs() {
+  const jobs = state.jobs;
+  document.getElementById('jobs').innerHTML = jobs.length ? jobs.map(j => `
+    <div class="card" data-job="${j.id}">
+      <div class="row"><span class="badge ${j.status === 'ok' ? 'success' : j.status === 'fehler' ? 'failed' : 'running'}">${esc(j.status)}</span>
+        <span>${esc(j.title)}</span></div>
+      <div class="row" style="margin-top:6px"><button data-ja="log">${openLogs.has(j.id) ? 'Log zu' : 'Log'}</button></div>
+      <pre class="log" id="log${j.id}" style="display:${openLogs.has(j.id) ? 'block' : 'none'}"></pre>
+    </div>`).join('') : '<div class="empty">Noch nichts gestartet.</div>';
+  openLogs.forEach(loadLog);
+}
+
+async function loadLog(id) {
+  try {
+    const j = await api('GET', '/api/jobs/' + id);
+    const el = document.getElementById('log' + id);
+    if (el) { el.textContent = j.log.join('\n'); el.scrollTop = el.scrollHeight; }
+  } catch (e) { /* Job weg */ }
+}
+
+function renderHeader() {
+  const j = state.jira;
+  const s = document.getElementById('stories');
+  const w = document.getElementById('wip');
+  if (j && j.ok) {
+    s.style.display = '';
+    s.textContent = `Stories ${j.count}/${j.limit}`;
+    s.className = 'pill ' + (j.over ? 'bad' : 'ok');
+    w.textContent = `${state.wip} MR/Branches`;
+    w.className = 'pill neutral';
+  } else {
+    s.style.display = 'none';
+    w.textContent = `WIP ${state.wip}/${state.wip_limit}`;
+    w.className = 'pill ' + (state.wip > state.wip_limit ? 'bad' : 'ok');
+  }
+  const h = state.helpdesk, hd = document.getElementById('helpdesk');
+  if (!h) { hd.style.display = 'none'; }
+  else {
+    hd.style.display = '';
+    if (h.error) {
+      hd.textContent = 'Helpdesk ?'; hd.title = h.error; hd.removeAttribute('href'); hd.className = 'pill neutral';
+    } else {
+      hd.textContent = `Helpdesk ${h.open}${h.truncated ? '+' : ''} · ältestes ${h.oldest_hours} h` + (h.over_hours ? ` · ${h.over_hours} über ${h.sla_hours} h` : '');
+      hd.title = 'Öffnet die Liste in Jira. Zahl wird nur alle paar Minuten aktualisiert.';
+      hd.href = h.url; hd.className = 'pill ' + (h.over_hours ? 'warn' : 'neutral');
+    }
+  }
+  document.getElementById('demo').style.display = state.demo ? '' : 'none';
+  document.getElementById('fetched').textContent = 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function load() {
+  try {
+    state = await api('GET', '/api/overview');
+    renderHeader(); renderLeft(); renderIdeas(); renderJobs();
+  } catch (e) { toast(e.message); }
+}
+
+// Aktionen auf Karten
+document.getElementById('left').addEventListener('click', async ev => {
+  const btn = ev.target.closest('button[data-act]');
+  if (!btn) return;
+  if (btn.dataset.act === 'idea') {
+    try { await api('POST', '/api/ideas', { text: btn.dataset.text }); toast('In der Ideenbox'); await load(); } catch (e) { toast(e.message); }
+    return;
+  }
+  const row = btn.closest('[data-p]');
+  const body = { project_id: +row.dataset.p, iid: +row.dataset.i };
+  const name = row.querySelector('.ps')?.value;
+  try {
+    if (btn.dataset.act === 'deploy') { await api('POST', '/api/deploy', body); toast('Deploy gestartet'); }
+    if (btn.dataset.act === 'teardown') {
+      if (!confirm('Test-Namespace dieses MR abbauen?')) return;
+      await api('POST', '/api/teardown', body); toast('Abbau gestartet');
+    }
+    if (btn.dataset.act === 'copy') { const r = await api('POST', '/api/prompt', { ...body, name }); await copyText(r.prompt, 'Prompt: ' + name); return; }
+    if (btn.dataset.act === 'agent') {
+      if (!confirm(`Agent mit Prompt "${name}" lokal starten?`)) return;
+      await api('POST', '/api/agent', { ...body, name }); toast('Agent gestartet');
+    }
+    await load();
+  } catch (e) { toast(e.message); }
+});
+
+// Ideen
+document.getElementById('ideaText').addEventListener('keydown', async ev => {
+  if (ev.key !== 'Enter' || ev.shiftKey) return;
+  ev.preventDefault();
+  const el = ev.target;
+  if (!el.value.trim()) return;
+  try { await api('POST', '/api/ideas', { text: el.value }); el.value = ''; await load(); } catch (e) { toast(e.message); }
+});
+document.getElementById('ideas').addEventListener('click', async ev => {
+  const btn = ev.target.closest('button[data-ia]');
+  if (!btn) return;
+  const id = btn.closest('.idea').dataset.id;
+  const status = { park: 'geparkt', done: 'erledigt', drop: 'verworfen' }[btn.dataset.ia];
+  try { await api('PATCH', '/api/ideas/' + id, { status }); await load(); } catch (e) { toast(e.message); }
+});
+document.getElementById('triage').addEventListener('click', async () => {
+  try { const r = await api('GET', '/api/ideas/triage-prompt'); await copyText(r.prompt, 'Triage-Prompt'); } catch (e) { toast(e.message); }
+});
+
+// Jobs
+document.getElementById('jobs').addEventListener('click', ev => {
+  const btn = ev.target.closest('button[data-ja]');
+  if (!btn) return;
+  const id = +btn.closest('[data-job]').dataset.job;
+  openLogs.has(id) ? openLogs.delete(id) : openLogs.add(id);
+  renderJobs();
+});
+
+// Dialog
+document.getElementById('dlgClose').onclick = () => document.getElementById('dlg').close();
+document.getElementById('dlgCopy').onclick = () => {
+  const t = document.getElementById('dlgText'); t.select();
+  document.execCommand('copy'); toast('Kopiert');
+};
+
+document.getElementById('refresh').onclick = load;
+load();
+setInterval(load, 60000);
+setInterval(() => { if (state && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
+</script>
+</body>
+</html>

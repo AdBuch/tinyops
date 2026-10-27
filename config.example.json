@@ -1,0 +1,50 @@
+{
+  "gitlab_url": "https://gitlab.example.com",
+  "ca_bundle": "",
+  "my_emails": [],
+
+  "branch_filter": {
+    "emails": ["du@firma.example", "du@privat.example"],
+    "names": ["Dein Name"],
+    "agent_emails": [],
+    "agent_names": ["claude-agent"],
+    "agent_message_patterns": ["Co-Authored-By: Claude", "Claude-Session"],
+    "max_branches": 40,
+    "max_age_days": 90
+  },
+
+  "projects": [
+    {
+      "id": 123,
+      "name": "dlp-core",
+      "chart": "./helm/dlp-core",
+      "repo_path": "/home/du/work/dlp-core",
+      "tag_template": "{sha8}",
+      "extra_args": ["--set", "image.repository=harbor.example.com/dlp/dlp-core"]
+    }
+  ],
+
+  "jira": {
+    "url": "https://jira.example.com",
+    "auth": "bearer",
+    "username": "",
+    "project_keys": ["DLP"],
+    "story_limit": 2,
+    "wip_issue_types": ["Story"],
+    "jql_in_progress": "assignee = currentUser() AND statusCategory = \"In Progress\" ORDER BY updated DESC",
+    "create_pid": "",
+    "create_issuetype": ""
+  },
+
+  "wip_limit": 2,
+  "stale_days": 7,
+
+  "kube_context": "test-cluster",
+  "namespace_prefix": "test",
+
+  "agent_command": [],
+
+  "bind": "127.0.0.1",
+  "port": 8765,
+  "allowed_hosts": []
+}
