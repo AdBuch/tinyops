@@ -76,6 +76,7 @@
   <span id="demo" class="pill" style="display:none;background:var(--warnbg);color:var(--warn)">Demo-Daten</span>
   <span class="spacer"></span>
   <span id="fetched" class="quiet"></span>
+  <button id="logBtn">Log</button>
   <button id="refresh">Neu laden</button>
 </header>
 <main>
@@ -99,6 +100,18 @@
   <div class="row" style="justify-content:space-between"><strong id="dlgTitle">Prompt</strong><button id="dlgClose">Schließen</button></div>
   <textarea id="dlgText" readonly></textarea>
   <div class="row" style="margin-top:8px"><button class="primary" id="dlgCopy">Kopieren</button></div>
+</dialog>
+
+<dialog id="logDlg" style="width:min(1000px,96vw)">
+  <div class="row" style="justify-content:space-between">
+    <strong>Log <span id="logFile" class="quiet" style="font-weight:400"></span></strong>
+    <span class="row">
+      <select id="logLevel"><option value="debug">alles</option><option value="info" selected>ab Info</option><option value="warning">nur Warnungen/Fehler</option></select>
+      <button id="logReload">Neu laden</button><button id="logClose">Schließen</button>
+    </span>
+  </div>
+  <pre class="log" id="logText" style="max-height:60vh"></pre>
+  <div class="quiet" style="margin-top:6px">Alles Genauere (jede Anfrage, jede Branch-Entscheidung) steht nur im Log, wenn der Server mit <code>-v</code> oder <code>log_level: debug</code> läuft.</div>
 </dialog>
 
 <script>
@@ -339,6 +352,21 @@ document.getElementById('jobs').addEventListener('click', ev => {
 });
 
 // Dialog
+async function showLog() {
+  const dlg = document.getElementById('logDlg');
+  try {
+    const r = await api('GET', '/api/log?n=400&level=' + document.getElementById('logLevel').value);
+    document.getElementById('logFile').textContent = r.file + ' (Stufe: ' + r.level + ')';
+    const pre = document.getElementById('logText');
+    pre.textContent = r.lines.length ? r.lines.join('\n') : '(noch keine Einträge in dieser Stufe)';
+    if (!dlg.open) dlg.showModal();
+    pre.scrollTop = pre.scrollHeight;
+  } catch (e) { toast(e.message); }
+}
+document.getElementById('logBtn').onclick = showLog;
+document.getElementById('logReload').onclick = showLog;
+document.getElementById('logLevel').onchange = showLog;
+document.getElementById('logClose').onclick = () => document.getElementById('logDlg').close();
 document.getElementById('dlgClose').onclick = () => document.getElementById('dlg').close();
 document.getElementById('dlgCopy').onclick = () => {
   const t = document.getElementById('dlgText'); t.select();

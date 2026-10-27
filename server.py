@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tinyops 1.2: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
+"""tinyops 1.3: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
 
 Zeigt deine Branches/MRs mit Pipeline-Status, verknüpft sie mit Jira-Tickets, überwacht
 das Story-Limit, die Review-Queue, dir zugeteilte MRs und eine Helpdesk-Zahl. Dazu eine
@@ -30,8 +30,17 @@ from pathlib import Path
 
 import secretstore as store
 from secretstore import scrub
+import tlog
 
+VERSION = "1.3"
 BASE = Path(__file__).resolve().parent
+log = tlog.get("app")
+hlog = tlog.get("http")
+glog = tlog.get("gitlab")
+jlog = tlog.get("jira")
+rlog = tlog.get("refresh")
+joblog = tlog.get("job")
+alog = tlog.get("access")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 DEFAULTS = {
@@ -40,6 +49,10 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
+    "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
+    "log_dir": "",                # leer = ~/.config/tinyops/logs
+    "log_max_mb": 2,
+    "log_backups": 5,
     "projects": [],
     "wip_limit": 2,
     "stale_days": 7,
@@ -237,10 +250,18 @@ class Http:
         if params:
             url += "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=self.headers)
+        lg = glog if self.label == "GitLab" else jlog
+        t0 = time.time()
+        shown = path + (("?" + urllib.parse.urlencode(params)) if params else "")
         try:
             with self.opener.open(req, timeout=15) as r:
-                return json.loads(r.read().decode("utf-8"))
+                data = json.loads(r.read().decode("utf-8"))
+                ms = int((time.time() - t0) * 1000)
+                (lg.info if ms > 3000 else lg.debug)("GET %s → %s in %d ms%s", shown, r.status, ms,
+                                                    " (langsam)" if ms > 3000 else "")
+                return data
         except urllib.error.HTTPError as e:
+            lg.warning("GET %s → HTTP %s in %d ms", shown, e.code, int((time.time() - t0) * 1000))
             hint = ""
             if e.code == 401:
                 hint = " (Zugangsdaten falsch oder abgelaufen)"
@@ -249,9 +270,11 @@ class Http:
             raise HttpStatus("%s %s: HTTP %s%s" % (self.label, path, e.code, hint), e.code)
         except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
             msg = scrub(getattr(e, "reason", e))
+            lg.warning("GET %s → nicht erreichbar nach %d ms: %s", shown, int((time.time() - t0) * 1000), msg)
             hint = " Tipp: ca_bundle in der config.json auf die Firmen-CA setzen." if "CERTIFICATE_VERIFY_FAILED" in msg else ""
             raise UserError("%s nicht erreichbar (%s).%s" % (self.label, msg, hint))
         except ValueError:
+            lg.warning("GET %s → Antwort ist kein JSON", shown)
             raise UserError("%s %s: Antwort ist kein JSON (falsche URL?)" % (self.label, path))
 
 
@@ -422,6 +445,8 @@ class GitLabClient:
         me = self.http.get("/user")
         username = me["username"]
         ident = self._identity(me)
+        glog.debug("Angemeldet als %s, %d E-Mails und %d Namen für die Branch-Erkennung", username,
+                   len(ident["emails"]), len(ident["names"]))
         bf = branch_cfg(self.cfg)
         mine, review, assigned = [], [], []
         for p in self.cfg["projects"]:
@@ -438,23 +463,36 @@ class GitLabClient:
                 branches = self.http.get("/projects/%s/repository/branches" % pid, {"per_page": 100})
                 branches.sort(key=lambda b: _age_key((b.get("commit") or {}).get("committed_date")))
                 checked = 0
+                shown_b = skipped = 0
                 for b in branches:
-                    if b["name"] == default or b.get("protected") or b.get("merged") or b["name"] in with_mr:
+                    bn = b["name"]
+                    reason = ("Default-Branch" if bn == default else "geschützt" if b.get("protected")
+                              else "schon gemergt" if b.get("merged") else "hat einen MR" if bn in with_mr else "")
+                    if reason:
+                        glog.debug("%s: Branch %s übersprungen (%s)", name, bn, reason)
                         continue
                     commit = b.get("commit") or {}
                     ts = commit.get("committed_date", "")
                     if int(bf["max_age_days"]) and age_days(ts) > int(bf["max_age_days"]):
+                        glog.debug("%s: Branch %s übersprungen (%d Tage alt, Limit %s)", name, bn, age_days(ts), bf["max_age_days"])
+                        skipped += 1
                         continue
                     if checked >= int(bf["max_branches"]):
+                        glog.info("%s: max_branches=%s erreicht, weitere Branches werden nicht geprüft", name, bf["max_branches"])
                         break
                     checked += 1
                     info = self._classify(pid, default, b, ident)
                     if info is None:   # Vergleich fehlgeschlagen: dann zählt nur der letzte Commit
+                        glog.warning("%s: Vergleich für Branch %s fehlgeschlagen, es zählt nur der letzte Commit", name, bn)
                         if (commit.get("author_email") or "").lower() not in ident["emails"]:
                             continue
                         info = {"ahead": 0, "by_me": True, "by_agent": False, "include": True}
                     if not info["include"]:
+                        glog.debug("%s: Branch %s ausgeblendet (%d Commits, keiner von dir oder dem Agenten)", name, bn, info["ahead"])
                         continue
+                    shown_b += 1
+                    glog.debug("%s: Branch %s angezeigt (%d Commits, von mir=%s, Agent=%s)", name, bn, info["ahead"],
+                               info["by_me"], info["by_agent"])
                     mine.append({
                         "kind": "branch", "project_id": pid, "project": name,
                         "title": commit.get("title", b["name"]), "branch": b["name"], "iid": None,
@@ -465,7 +503,9 @@ class GitLabClient:
                         "ahead": info["ahead"], "by_me": info["by_me"], "by_agent": info["by_agent"],
                         "last_author": commit.get("author_name", ""),
                     })
+                glog.info("%s: %d eigene MRs, %d Branches geprüft, %d angezeigt, %d zu alt", name, len(mrs), checked, shown_b, skipped)
             except UserError as e:
+                glog.error("%s: %s", name, e)
                 errors.append("%s: %s" % (name, e))
         try:
             rmrs = self.http.get("/merge_requests", {"state": "opened", "scope": "all",
@@ -675,6 +715,7 @@ class Jobs:
             job = {"id": jid, "title": scrub(title), "status": "läuft", "started": time.time(),
                    "log": [scrub(head)], "returncode": None}
             self.items[jid] = job
+        joblog.info("Job #%d gestartet: %s (%s)", jid, job["title"], scrub(head))
         threading.Thread(target=self._run, args=(job, argv, cwd), daemon=True).start()
         return jid
 
@@ -683,6 +724,7 @@ class Jobs:
             proc = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     text=True, errors="replace", env=self._env(), stdin=subprocess.DEVNULL)
         except (OSError, ValueError) as e:
+            joblog.error("Job #%d: Start fehlgeschlagen: %s", job["id"], e)
             job["log"].append(scrub("Start fehlgeschlagen: %s" % e))
             job["status"], job["returncode"] = "fehler", -1
             return
@@ -691,6 +733,7 @@ class Jobs:
         try:
             for line in proc.stdout:
                 job["log"].append(scrub(line.rstrip()))
+                joblog.debug("job#%d | %s", job["id"], line.rstrip())
                 if len(job["log"]) > 2000:
                     del job["log"][:500]
             proc.wait()
@@ -698,6 +741,13 @@ class Jobs:
             timer.cancel()
         job["returncode"] = proc.returncode
         job["status"] = "ok" if proc.returncode == 0 else "fehler"
+        secs = time.time() - job["started"]
+        if proc.returncode == 0:
+            joblog.info("Job #%d fertig in %.0f s: ok", job["id"], secs)
+        else:
+            tail_lines = " | ".join(job["log"][-5:])
+            joblog.error("Job #%d fehlgeschlagen nach %.0f s (Exit %s). Letzte Zeilen: %s", job["id"], secs,
+                         proc.returncode, tail_lines)
 
     def summary(self):
         with self.lock:
@@ -758,6 +808,7 @@ class App:
             wanted = sorted({k for it in items for k in it["keys"]} - progress_keys)
             known = j.lookup(wanted) if wanted else {}
         except UserError as e:
+            jlog.error("Jira-Abfrage fehlgeschlagen: %s", e)
             out["error"] = str(e)
             data["errors"].append("Jira: %s" % e)
             return out
@@ -778,15 +829,29 @@ class App:
             s["items"] = linked
             s["no_mr"] = not any(x["kind"] in ("mr", "assigned") for x in linked)
         out.update({"ok": True, "count": len(inprog), "over": over, "stories": inprog})
+        linked_n = sum(1 for it in items if it.get("ticket"))
+        jlog.info("%d Stories in Arbeit (Limit %d)%s; %d von %d Einträgen mit Ticket verknüpft, %d ohne Key, %d Key unbekannt",
+                  len(inprog), limit, " → ÜBER DEM LIMIT" if over else "", linked_n, len(items),
+                  sum(1 for it in items if it.get("no_ticket")), sum(1 for it in items if it.get("ticket_unknown")))
+        for it in items:
+            if it.get("ticket_unknown"):
+                jlog.debug("Key %s aus %s/%s nicht in Jira gefunden", it["ticket_unknown"], it["project"], it["branch"])
         self.over_limit, self.inprogress_keys = over, progress_keys
         return out
 
     def _refresh(self):
+        t0 = time.time()
+        self.refresh_no = getattr(self, "refresh_no", 0) + 1
+        rlog.info("Auffrischen #%d beginnt", self.refresh_no)
         try:
             data = self.client.fetch()
         except UserError as e:
+            rlog.error("GitLab-Abfrage fehlgeschlagen: %s", e)
             data = {"me": "", "mine": [], "review": [], "assigned": [], "errors": [str(e)]}
         data["jira"] = self._jira_data(data)
+        rlog.info("Auffrischen #%d fertig in %.1f s: %d eigene Einträge, %d Review, %d zugeteilt, %d Fehler",
+                  self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
+                  len(data["errors"]))
         return data
 
     def helpdesk(self):
@@ -928,8 +993,18 @@ def make_handler(app):
         server_version = "tinyops"
 
         def log_message(self, fmt, *args):
-            # nur der Pfad, nie die Query: dort kann ?token=... stehen
-            sys.stderr.write("%s %s\n" % (self.command, scrub(urllib.parse.urlparse(self.path).path)))
+            pass   # ersetzt durch log_request / Fehler-Logs unten
+
+        def log_request(self, code="-", size="-"):
+            # nur der Pfad, nie die Query: dort kann ?token=... stehen. Lesen im Takt (GET) nur im DEBUG-Log.
+            path = scrub(urllib.parse.urlparse(self.path).path)
+            ms = int((time.time() - getattr(self, "_t0", time.time())) * 1000)
+            try:
+                c = int(code)
+            except (TypeError, ValueError):
+                c = 0
+            lvl = tlog.logging.WARNING if c >= 400 else (tlog.logging.DEBUG if self.command == "GET" else tlog.logging.INFO)
+            hlog.log(lvl, "%s %s → %s (%d ms)", self.command, path, code, ms)
 
         # -- Antworten
         def _send(self, code, body, ctype="application/json", extra=None):
@@ -956,6 +1031,7 @@ def make_handler(app):
             host = host.rsplit(":", 1)[0] if not host.endswith("]") else host
             allowed = {"localhost", "127.0.0.1", "[::1]"} | {h.lower() for h in cfg["allowed_hosts"]}
             if host not in allowed:
+                alog.warning("Abgelehnt: Host %r von %s nicht in allowed_hosts", host, self.client_address[0])
                 self._err(403, "Host nicht erlaubt (allowed_hosts in der config.json).")
                 return None
             if token:
@@ -974,9 +1050,11 @@ def make_handler(app):
                     if k == "tinyops":
                         cookie_val = v
                 if not cookie_val or not _eq(cookie_val, session):
+                    alog.warning("Abgelehnt: kein gültiger Zugriffstoken von %s (%s)", self.client_address[0], self.command)
                     self._err(401, "Zugriffstoken fehlt: Seite einmal mit ?token=... öffnen.")
                     return None
             if self.command != "GET" and self.headers.get("X-Requested-With") != "tinyops":
+                alog.warning("Abgelehnt: %s ohne X-Requested-With von %s", self.command, self.client_address[0])
                 self._err(403, "Header X-Requested-With fehlt.")
                 return None
             return {}
@@ -993,6 +1071,7 @@ def make_handler(app):
                 raise UserError("Ungültiges JSON.")
 
         def _route(self, method):
+            self._t0 = time.time()
             parsed = urllib.parse.urlparse(self.path)
             extra = self._gate(parsed)
             if extra is None:
@@ -1007,6 +1086,12 @@ def make_handler(app):
                     data["idea_cap"] = cfg["idea_cap"]
                     data["jobs"] = app.jobs.summary()
                     return self._send(200, data)
+                if method == "GET" and path == "/api/log":
+                    q = urllib.parse.parse_qs(parsed.query)
+                    n = int((q.get("n") or ["200"])[0])
+                    lvl = (q.get("level") or ["debug"])[0]
+                    return self._send(200, {"file": str(tlog.log_file(cfg)), "level": cfg["log_level"],
+                                            "lines": tlog.tail(cfg, n, lvl)})
                 if method == "GET" and path == "/api/jobs":
                     return self._send(200, app.jobs.summary())
                 m = re.fullmatch(r"/api/jobs/(\d+)", path)
@@ -1041,11 +1126,13 @@ def make_handler(app):
                     return self._send(200, {"job": app.run_agent(b.get("name"), int(b["project_id"]), int(b["iid"]))})
                 return self._err(404, "Nicht gefunden.")
             except UserError as e:
+                hlog.warning("%s %s abgelehnt: %s", method, scrub(path), e)
                 return self._err(400, str(e))
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError) as e:
+                hlog.warning("%s %s: ungültige Anfrage (%s)", method, scrub(path), repr(e))
                 return self._err(400, "Ungültige Anfrage.")
             except Exception as e:  # nie den Server abstürzen lassen
-                sys.stderr.write("Fehler: %s\n" % scrub(repr(e)))
+                hlog.exception("Unbehandelter Fehler bei %s %s", method, scrub(path))
                 return self._err(500, "Interner Fehler, siehe Konsole.")
 
         def do_GET(self):
@@ -1081,6 +1168,7 @@ def resolve_all(cfg, demo):
             val, src = store.require(name, spec.get(name), _env_hints(cfg).get(name, ()))
             out[name] = val
             print("  %-14s ← %s" % (name, src))
+            log.info("Secret %s ← %s", name, src)
         val, src = store.resolve("access_token", spec.get("access_token"))
         if val:
             out["access_token"] = val
@@ -1097,16 +1185,32 @@ def main():
     ap.add_argument("--set-secret", metavar="NAME", help="Secret sicher speichern (%s)" % ", ".join(store.NAMES))
     ap.add_argument("--delete-secret", metavar="NAME", help="Secret löschen")
     ap.add_argument("--list-secrets", action="store_true", help="zeigt, woher welches Secret kommt (nie den Wert)")
+    ap.add_argument("-v", "--verbose", action="store_true", help="Log auf DEBUG: jede Anfrage, jede Branch-Entscheidung")
+    ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
+    ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
     args = ap.parse_args()
     path = args.config if Path(args.config).exists() else None
+    level = "debug" if args.verbose else args.log_level
+
+    if args.show_log is not None:
+        cfg0 = load_config(path)
+        lines = tlog.tail(cfg0, args.show_log)
+        print("Log: %s" % tlog.log_file(cfg0))
+        print("\n".join(lines) if lines else "(noch leer)")
+        return
 
     try:
         if args.set_secret:
+            tlog.setup(load_config(path), level, console=False)
             value = store.read_secret_interactive(args.set_secret)
-            print("%s gespeichert in: %s" % (args.set_secret, store.set_secret(args.set_secret, value)))
+            where = store.set_secret(args.set_secret, value)
+            log.info("Secret %s gespeichert in: %s", args.set_secret, where)
+            print("%s gespeichert in: %s" % (args.set_secret, where))
             return
         if args.delete_secret:
+            tlog.setup(load_config(path), level, console=False)
             removed = store.delete_secret(args.delete_secret)
+            log.info("Secret %s gelöscht aus: %s", args.delete_secret, ", ".join(removed) or "nirgends")
             print("gelöscht aus: %s" % (", ".join(removed) if removed else "nirgends gefunden"))
             return
         if args.list_secrets:
@@ -1120,6 +1224,9 @@ def main():
     if not path and not args.demo:
         raise SystemExit("config.json fehlt. Kopiere config.example.json oder starte mit --demo.")
     cfg = load_config(path)
+    logfile = tlog.setup(cfg, level)
+    log.info("tinyops %s startet (Python %s, %s)", VERSION, sys.version.split()[0], "Demo" if args.demo else "Echtbetrieb")
+    log.info("Config: %s, %d Projekt(e), Log: %s", path or "(keine, Demo)", len(cfg["projects"]), logfile or "nur Konsole")
     print("Secrets:")
     secrets = resolve_all(cfg, args.demo)
     if cfg["bind"] not in LOOPBACK and not secrets.get("access_token"):
@@ -1129,11 +1236,13 @@ def main():
     warn_plain_http(jira_cfg(cfg)["url"], "Jira")
     app = App(cfg, args.demo, secrets, make_ssl(cfg))
     srv = ThreadingHTTPServer((cfg["bind"], cfg["port"]), make_handler(app))
+    log.info("Lauscht auf http://%s:%d (Zugriffstoken: %s, erlaubte Hosts: %s)", cfg["bind"], cfg["port"],
+             "ja" if secrets.get("access_token") else "nein", ", ".join(cfg["allowed_hosts"]) or "nur lokal")
     print("tinyops läuft auf http://%s:%d %s" % (cfg["bind"], cfg["port"], "(Demo)" if args.demo else ""))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        pass
+        log.info("Beendet (Ctrl+C)")
 
 
 if __name__ == "__main__":

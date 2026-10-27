@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import secretstore as store  # noqa: E402
 import server  # noqa: E402
+import tlog  # noqa: E402
 
 
 class KeyExtraction(unittest.TestCase):
@@ -188,6 +189,31 @@ class BranchClassification(unittest.TestCase):
     def test_name_match_and_empty(self):
         self.assertTrue(server.classify_commits([self.c("z@z", name="Ich")], self.IDENT)["include"])
         self.assertFalse(server.classify_commits([], self.IDENT)["include"])
+
+
+class LogFile(unittest.TestCase):
+    def test_scrubbed_private_and_levels(self):
+        with tempfile.TemporaryDirectory() as d:
+            store.register("topsecret-value")
+            tlog.setup({"log_dir": d}, "debug", console=False)
+            lg = tlog.get("test")
+            lg.info("Token topsecret-value im Text")
+            lg.debug("nur debug")
+            try:
+                raise ValueError("topsecret-value")
+            except ValueError:
+                lg.exception("kaputt")
+            for h in tlog.logging.getLogger("tinyops").handlers:
+                h.flush()
+            text = Path(d, "tinyops.log").read_text()
+            self.assertNotIn("topsecret-value", text)
+            self.assertIn("nur debug", text)
+            self.assertEqual(stat.S_IMODE(os.stat(Path(d, "tinyops.log")).st_mode), 0o600)
+            warn = tlog.tail({"log_dir": d}, 50, "warning")
+            self.assertTrue(any("kaputt" in x for x in warn))
+            self.assertTrue(any("Traceback" in x for x in warn))   # Traceback bleibt beim Eintrag
+            self.assertFalse(any("nur debug" in x for x in warn))
+            tlog.setup({"log_dir": d}, "info", console=False)   # Handler lösen, bevor das Verzeichnis verschwindet
 
 
 if __name__ == "__main__":
