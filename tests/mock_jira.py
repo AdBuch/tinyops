@@ -42,6 +42,12 @@ class H(BaseHTTPRequestHandler):
             return self._json(401, {"errorMessages": ["Unauthorized"]})
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        if u.path == "/rest/api/2/project":
+            return self._json(200, [{"key": "DLP"}, {"key": "OPS"}])
+        if u.path == "/rest/api/2/issuetype":
+            return self._json(200, [{"name": "Story"}, {"name": "Bug"}, {"name": "Task"}])
+        if u.path == "/rest/api/2/status":
+            return self._json(200, [{"name": "To Do"}, {"name": "In Progress"}, {"name": "Done"}])
         if u.path == "/rest/api/2/myself":
             return self._json(200, {"name": "jira-user", "displayName": "Jira User"})
         if u.path.startswith("/rest/api/2/issue/"):

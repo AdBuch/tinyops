@@ -1,4 +1,4 @@
-# tinyops 1.2: Arbeitspanel
+# tinyops 1.3: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -14,10 +14,28 @@ führen, pro MR eine Testumgebung im Cluster starten und fertige Prompts füllen
 
 ## 2. Mit deinem GitLab und Jira
 
-**Am einfachsten:** `python3 setup.py` fragt alles ab (URLs, Projekte, Jira, Branch-Filter, Cluster), schreibt die
-`config.json` (Rechte 600, ohne Secrets), speichert die Tokens im Schlüsselbund und testet die Verbindungen (nur lesend).
-Erneut ausführbar: Die bestehende Config liefert die Vorgaben, die alte kommt nach `config.json.bak`.
-`python3 setup.py --check` prüft nur den Schlüsselbund, `--secrets` gibt nur die Tokens neu ein.
+**Am einfachsten: `python3 setup.py`.** Der Assistent geht in 8 Schritten vor. Jeder Schritt erklärt, was er braucht,
+fragt ab, **prüft das Ergebnis sofort gegen dein System** und speichert die `config.json`. Bricht du ab, bleibt der
+Fortschritt erhalten.
+
+| Schritt | Was passiert | Was dabei geprüft wird |
+| --- | --- | --- |
+| 1 Voraussetzungen | Python, git, Schlüsselbund, kubectl, helm | Schreib-/Lesetest im Schlüsselbund |
+| 2 GitLab | URL, Firmen-CA, Token (unsichtbar) | Anmeldung, Token-Scopes (warnt bei mehr als `read_api`), Ablaufdatum |
+| 3 Projekte | Suche nach Name oder Eingabe der ID | Projekt existiert, Default-Branch; optional Helm-Angaben |
+| 4 Commits | Zeigt die Autoren der letzten Commits zur Auswahl: «ich» und «Agenten-Konto»; erkennt `Co-Authored-By`-Zeilen | **Vorschau**: Welche Branches würde das Panel jetzt zeigen? |
+| 5 Jira | URL, Anmeldeart, Token, Projekt-Keys aus deiner Liste, Vorgangstypen, Status | Anmeldung, **JQL-Testlauf mit den ersten Treffern** |
+| 6 Cluster | Wählt den kubectl-Kontext aus der Liste | Cluster erreichbar (nur lesend), warnt bei «prod» |
+| 7 Zugriff | Adresse, Port, auf Wunsch zufälliger Zugriffstoken | – |
+| 8 Abschlusstest | Alles nochmal gegen das echte System | Secrets, GitLab, Projekte, Jira, Vorschau |
+
+    python3 setup.py --list           # Schritte anzeigen
+    python3 setup.py --step jira      # nur einen Schritt wiederholen
+    python3 setup.py --from identity  # ab einem Schritt weitermachen
+    python3 setup.py --doctor         # nur prüfen, nichts ändern (Exit-Code 1 bei Problemen)
+
+Die bestehende Config liefert die Vorgaben, die alte kommt nach `config.json.bak`. Eigene `secrets`-Einträge
+(Passwortmanager-Befehle) bleiben erhalten. Alles, was der Assistent tut, steht im Log.
 
 Von Hand:
 
@@ -31,6 +49,34 @@ Tokens besorgen:
   deines Kontos, man kann es nicht auf «nur lesen» beschränken. Frag, ob ihr ein Lesekonto nehmen könnt.
 - Benutzername und Passwort (`"auth": "basic"`, Benutzername in `jira.username`) gehen auch, sind aber schlechter:
   Mehrfach falsche Passwörter können in Jira eine CAPTCHA-Sperre auslösen.
+
+## 2b. Logs
+
+Das Panel schreibt ein Logbuch nach `~/.config/tinyops/logs/tinyops.log` (Rechte 600, 2 MB pro Datei, 5 Dateien
+Rotation, ausserhalb des Projektordners). Secrets werden in jeder Zeile geschwärzt, auch in Tracebacks.
+
+| Wie | Was |
+| --- | --- |
+| `./run.sh` | Stufe `info`: Start, Auffrischen mit Dauer und Zahlen pro Projekt, Jira-Verknüpfung, Jobs, Warnungen, abgelehnte Zugriffe |
+| `./run.sh -v` | Stufe `debug`: zusätzlich jeder API-Aufruf mit Dauer und **die Begründung für jede Branch-Entscheidung** («Branch X ausgeblendet: keiner der 3 Commits von dir») sowie die Ausgabe jedes Jobs |
+| `python3 server.py --show-log 100` | letzte 100 Zeilen |
+| Knopf «Log» im Panel | letzte 400 Zeilen, filterbar nach Stufe |
+| `log_level`, `log_dir`, `log_max_mb`, `log_backups` | in der `config.json` |
+
+Der Assistent `setup.py` schreibt immer auf `debug` in dasselbe Log. Zugriffs-Log: GET-Abfragen im Takt nur bei `debug`,
+Aktionen (POST) und alle Fehler (ab HTTP 400) immer. Die Adresse mit `?token=` taucht nie auf, nur der Pfad.
+
+## 2c. Mit Git installieren und aktualisieren
+
+    git clone <adresse-deines-gitlab-repos> tinyops && cd tinyops
+    python3 setup.py                 # einmal einrichten
+    ./run.sh
+    # später: Neues holen, Einstellungen bleiben
+    git pull && ./run.sh
+
+`config.json`, `config.json.bak`, `data/` (Ideenbox) und Logs sind in `.gitignore` und werden **nie** eingecheckt oder
+überschrieben. Secrets liegen sowieso ausserhalb des Ordners. Neues Repo bei dir anlegen: `git remote add origin <url>`
+und `git push -u origin main`.
 
 ## 3. Zugangsdaten sicher speichern
 
@@ -163,7 +209,8 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 ## 10. Dateien
 
     server.py            Server, GitLab- und Jira-Client, Jobs, Ideen (SQLite in data/)
-    setup.py             Einrichtung: fragt alles ab, schreibt config.json, speichert Secrets
+    setup.py             Einrichtung in 8 Schritten mit Prüfung, --doctor, --step
+    tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher
     static/index.html    Oberfläche
     prompts/*.md         Prompt-Vorlagen
@@ -171,7 +218,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 
 ## 11. Ehrliche Grenzen
 
-- Getestet: 26 Unit-Tests, Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
+- Getestet: 28 Tests (darunter der komplette Einrichtungsassistent gegen Fake-GitLab und Fake-Jira), Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
   Zugriffsschutz, Secret-Rechte, Schwärzung, Oberfläche im Headless-Browser.
   **Nicht getestet:** dein echtes Jira 9.4 und GitLab 19.2, `helm`/`kubectl` gegen dein Cluster, der Schlüsselbund,
   Windows, Python unter 3.13.

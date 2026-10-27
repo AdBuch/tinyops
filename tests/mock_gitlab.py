@@ -22,7 +22,16 @@ MR_Z = mr(11, "Zugeteilt D", "feature/DLP-102-d", "0011223344556677", False, NOW
 
 ROUTES = {
     "/api/v4/user": {"username": "me", "email": "me@x.ch"},
-    "/api/v4/projects/1": {"id": 1, "name": "dlp-core", "default_branch": "main", "web_url": "https://g/x"},
+    "/api/v4/personal_access_tokens/self": {"scopes": ["read_api"], "expires_at": "2027-01-01"},
+    "/api/v4/projects": [{"id": 1, "name": "dlp-core", "path": "dlp-core", "path_with_namespace": "dlp/dlp-core"}],
+    "/api/v4/projects/1/repository/commits": [
+        {"author_name": "Me Myself", "author_email": "me@x.ch", "message": "a"},
+        {"author_name": "Me Myself", "author_email": "me@x.ch", "message": "b\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"},
+        {"author_name": "Me Myself", "author_email": "me@x.ch", "message": "c\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"},
+        {"author_name": "Bot", "author_email": "bot@x.ch", "message": "d"},
+        {"author_name": "Kollege", "author_email": "k@x.ch", "message": "e"},
+    ],
+    "/api/v4/projects/1": {"id": 1, "name": "dlp-core", "path": "dlp-core", "path_with_namespace": "dlp/dlp-core", "default_branch": "main", "web_url": "https://g/x"},
     "/api/v4/projects/1/merge_requests": [MR_A, MR_B],
     "/api/v4/projects/1/merge_requests/7": MR_A,
     "/api/v4/projects/1/merge_requests/8": MR_B,
