@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import fnmatch
+import llm
 import net
 import secretstore as store
 import settings
@@ -117,7 +118,17 @@ DEFAULTS = {
     "idea_cap": 25,
     "idea_expire_days": 30,
     "jira": {},
+    "llm": {},
     "secrets": {},
+}
+
+LLM_DEFAULTS = {
+    "enabled": False,
+    "provider": "ollama",          # ollama oder openai (llama.cpp, LM Studio, vLLM ...), siehe llm.py
+    "url": "http://127.0.0.1:11434",
+    "model": "",
+    "timeout": 120,
+    "allow_remote": False,         # nur das eigene Netz, solange das nicht ausdrücklich an ist (DLP)
 }
 
 JIRA_DEFAULTS = {
@@ -129,6 +140,8 @@ JIRA_DEFAULTS = {
     "wip_issue_types": [],
     "only_active_sprints": True,   # nur Tickets aus aktiven Sprints (Jira Software, JQL sprint in openSprints())
     "jql_in_progress": 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC',
+    "allow_create": False,         # Tickets aus dem Panel anlegen (Schreibzugriff auf Jira!). Aus, bis du es einschaltest.
+    "create_type": "Story",        # Vorgangstyp, der im Dialog vorgewählt ist
     "create_pid": "",
     "create_issuetype": "",
     "helpdesk": {},
@@ -183,6 +196,12 @@ def jira_cfg(cfg):
     j = dict(JIRA_DEFAULTS)
     j.update(cfg.get("jira") or {})
     return j
+
+
+def llm_cfg(cfg):
+    c = dict(LLM_DEFAULTS)
+    c.update(cfg.get("llm") or {})
+    return c
 
 
 def branch_cfg(cfg):
@@ -286,6 +305,33 @@ class Http:
     def __init__(self, label, base, headers, ctx):
         self.label, self.base, self.headers = label, base, headers
         self.opener = urllib.request.build_opener(NoRedirect, urllib.request.HTTPSHandler(context=ctx))
+
+    def post_json(self, path, body):
+        """Schreibender Aufruf. Wird nur für ausdrücklich ausgelöste Aktionen benutzt (Ticket anlegen)."""
+        lg = glog if self.label == "GitLab" else jlog
+        req = urllib.request.Request(self.base + path, data=json.dumps(body).encode("utf-8"), method="POST",
+                                     headers=dict(self.headers, **{"Content-Type": "application/json"}))
+        t0 = time.time()
+        try:
+            with self.opener.open(req, timeout=20) as r:
+                data = json.loads(r.read().decode("utf-8") or "{}")
+                lg.info("SCHREIBEN POST %s → %s in %d ms", path, r.status, int((time.time() - t0) * 1000))
+                return data
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                j = json.loads(e.read(4000).decode("utf-8"))
+                errs = list((j.get("errors") or {}).values()) + list(j.get("errorMessages") or [])
+                detail = "; ".join(str(x) for x in errs)
+            except Exception:
+                pass
+            lg.warning("SCHREIBEN POST %s → HTTP %s: %s", path, e.code, scrub(detail))
+            hint = {401: " (Zugangsdaten falsch oder abgelaufen)", 403: " (keine Berechtigung zum Anlegen in diesem Projekt)"}.get(e.code, "")
+            raise HttpStatus("%s: HTTP %s%s%s" % (self.label, e.code, hint, (": " + scrub(detail)) if detail else ""), e.code)
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
+            raise UserError("%s nicht erreichbar (%s)." % (self.label, scrub(getattr(e, "reason", e))))
+        except ValueError:
+            raise UserError("%s: Antwort ist kein JSON." % self.label)
 
     def get(self, path, params=None):
         url = self.base + path
@@ -478,6 +524,24 @@ class GitLabClient:
         if sha:
             self._bcache[key] = info
         return info
+
+    def ticket_context(self, project_id, iid, branch):
+        """Das, was ein Ticket-Entwurf braucht: Titel, MR-Beschreibung, Commit-Titel. Keine Diffs, keine Dateiinhalte."""
+        ctx = {"project_id": project_id, "iid": iid, "branch": branch, "project": self._pname(project_id),
+               "title": branch, "mr_description": "", "commits": [], "url": ""}
+        if iid:
+            mr = self.http.get("/projects/%s/merge_requests/%s" % (project_id, iid))
+            ctx.update(title=mr.get("title", ""), mr_description=mr.get("description") or "", url=mr.get("web_url", ""))
+            commits = self.http.get("/projects/%s/merge_requests/%s/commits" % (project_id, iid), {"per_page": 20})
+        else:
+            proj = self.http.get("/projects/%s" % project_id)
+            default = proj.get("default_branch") or "main"
+            ctx["url"] = proj.get("web_url", "") + "/-/tree/" + urllib.parse.quote(branch)
+            res = self.http.get("/projects/%s/repository/compare" % project_id, {"from": default, "to": branch, "straight": "false"})
+            commits = res.get("commits") or []
+            ctx["title"] = (commits[-1].get("title") if commits else "") or branch
+        ctx["commits"] = [(c.get("title") or "").strip() for c in commits if c.get("title")][:20]
+        return ctx
 
     def _pname(self, project_id):
         return self.proj_cfg.get(project_id, {}).get("name", "Projekt %s" % project_id)
@@ -672,6 +736,17 @@ class JiraClient:
             "url": self.base + "/issues/?jql=" + urllib.parse.quote(h["jql"]),
         }
 
+    def issue_types(self, project_key):
+        """Erlaubte Vorgangstypen des Projekts (ohne Unteraufgaben)."""
+        res = self.http.get("/project/" + urllib.parse.quote(project_key))
+        return [t["name"] for t in res.get("issueTypes", []) if not t.get("subtask")]
+
+    def create_issue(self, project_key, issue_type, summary, description):
+        res = self.http.post_json("/issue", {"fields": {
+            "project": {"key": project_key}, "issuetype": {"name": issue_type},
+            "summary": summary, "description": description}})
+        return {"key": res["key"], "url": "%s/browse/%s" % (self.base, res["key"])}
+
     def create_url(self, summary):
         pid, it = self.jc.get("create_pid"), self.jc.get("create_issuetype")
         if pid and it:
@@ -700,6 +775,11 @@ class DemoClient:
 
     def __init__(self, cfg):
         self.cfg = cfg
+
+    def ticket_context(self, project_id, iid, branch):
+        return {"project_id": project_id, "iid": iid, "branch": branch, "project": "dlp-core", "url": "https://gitlab.example/demo/" + branch,
+                "title": "Findings Welle 1" if iid else "WIP " + branch, "mr_description": "Sonar-Findings der ersten Welle beheben." if iid else "",
+                "commits": ["Sonar: Null-Checks ergänzen", "Sonar: ungenutzte Imports entfernen"]}
 
     @staticmethod
     def _ago(days):
@@ -781,6 +861,14 @@ class DemoJira:
 
     def create_url(self, summary):
         return self.base + "/secure/CreateIssue!default.jspa"
+
+    def issue_types(self, project_key):
+        return ["Story", "Bug", "Task"]
+
+    def create_issue(self, project_key, issue_type, summary, description):
+        DemoJira._n = getattr(DemoJira, "_n", 200) + 1
+        key = "%s-%d" % (project_key, DemoJira._n)
+        return {"key": key, "url": "%s/browse/%s" % (self.base, key)}
 
 
 # ---------------------------------------------------------------- Jobs
@@ -865,6 +953,9 @@ class App:
         Fehlende oder falsche Angaben stoppen nichts: Sie erscheinen als «problems», damit man sie in den Einstellungen beheben kann."""
         self.cfg = cfg
         self.jc = jira_cfg(cfg)
+        self.lc = llm_cfg(cfg)
+        self.llm_key = secrets.get("llm_key", "")
+        self._types_cache = {}
         self.problems = []
         self.client, self.jira = None, None
         self.cache, self.cache_t = None, 0.0
@@ -1011,6 +1102,77 @@ class App:
                 self.hd_t = time.time()
             return self.hd_cache
 
+    # -- Tickets anlegen (Schreibzugriff: nur auf ausdrückliche Aktion, nur mit jira.allow_create)
+    def ticket_meta(self):
+        return {"can_create": bool(self.jira and self.jc.get("allow_create")), "jira": bool(self.jira),
+                "llm": llm.ready(self.lc), "llm_label": llm.PROVIDERS[self.lc["provider"]].label if self.lc.get("provider") in llm.PROVIDERS else "",
+                "projects": list(self.jc.get("project_keys") or []), "default_type": self.jc.get("create_type") or "Story"}
+
+    def _types(self, project_key):
+        if project_key not in self._types_cache:
+            try:
+                self._types_cache[project_key] = self.jira.issue_types(project_key) if self.jira else []
+            except UserError as e:
+                jlog.warning("Vorgangstypen für %s nicht lesbar: %s", project_key, e)
+                return [self.jc.get("create_type") or "Story"]
+        return self._types_cache[project_key] or [self.jc.get("create_type") or "Story"]
+
+    def ticket_draft(self, body):
+        if not self.client:
+            raise UserError("GitLab ist nicht verbunden.")
+        try:
+            pid = int(body.get("project_id"))
+            iid = int(body["iid"]) if body.get("iid") not in (None, "") else None
+        except (TypeError, ValueError):
+            raise UserError("project_id und iid müssen Zahlen sein.")
+        branch = str(body.get("branch") or "")[:250]
+        meta = self.ticket_meta()
+        project = str(body.get("project") or (meta["projects"][0] if meta["projects"] else "")).upper()
+        ctx = self.client.ticket_context(pid, iid, branch)
+        ctx["issue_types"] = self._types(project) if project else [meta["default_type"]]
+        out = {"meta": meta, "project": project, "issue_types": ctx["issue_types"], "source": "vorlage", "warning": "",
+               "draft": llm.template_draft(ctx)}
+        if body.get("use_llm"):
+            if not llm.ready(self.lc):
+                raise UserError("Die KI ist nicht eingerichtet (Einstellungen → KI-Entwurf).")
+            t0 = time.time()
+            try:
+                out["draft"] = llm.draft_ticket(self.lc, self.llm_key, ctx, str(body.get("hint") or ""))
+                out["source"] = "ki"
+                log.info("KI-Entwurf von %s (%s) in %.1f s, %d Commit-Titel gesendet", self.lc["provider"], self.lc.get("model") or "-",
+                         time.time() - t0, len(ctx["commits"]))
+            except llm.LlmError as e:
+                log.warning("KI-Entwurf fehlgeschlagen: %s", e)
+                out["warning"] = "Die KI hat nicht geliefert (%s). Hier die Vorlage." % e
+        if not out["draft"]["issue_type"] or out["draft"]["issue_type"] not in ctx["issue_types"]:
+            dt = meta["default_type"]
+            out["draft"]["issue_type"] = dt if dt in ctx["issue_types"] else ctx["issue_types"][0]
+        return out
+
+    def ticket_create(self, body):
+        if not self.jira:
+            raise UserError("Jira ist nicht verbunden.")
+        if not self.jc.get("allow_create"):
+            raise UserError("Das Anlegen von Tickets ist ausgeschaltet (Einstellungen → Jira → «Tickets aus dem Panel anlegen»).")
+        keys = self.jc.get("project_keys") or []
+        project = str(body.get("project") or "").strip().upper()
+        if not project or (keys and project not in keys) or not settings.KEY_RE.match(project):
+            raise UserError("Projekt-Key «%s» ist nicht erlaubt (erlaubt: %s)." % (project, ", ".join(keys) or "gültiger Key"))
+        summary = " ".join(str(body.get("summary") or "").split())
+        description = str(body.get("description") or "").strip()
+        if not summary or len(summary) > 255:
+            raise UserError("Der Titel fehlt oder ist länger als 255 Zeichen.")
+        if len(description) > 30000:
+            raise UserError("Die Beschreibung ist zu lang.")
+        itype = str(body.get("issue_type") or "").strip()
+        types = self._types(project)
+        if itype not in types:
+            raise UserError("Vorgangstyp «%s» gibt es in %s nicht (vorhanden: %s)." % (itype, project, ", ".join(types)))
+        res = self.jira.create_issue(project, itype, summary, description)
+        jlog.info("Ticket %s angelegt (%s, %d Zeichen Beschreibung)", res["key"], itype, len(description))
+        self.cache_t = 0.0   # beim nächsten Abruf neu lesen
+        return res
+
     # -- Übersicht
     def overview(self):
         if not self.configured:
@@ -1033,6 +1195,7 @@ class App:
             "helpdesk": self.helpdesk(), "configured": True, "problems": list(self.problems),
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
+            "ticket": self.ticket_meta(),
         })
         return data
 
@@ -1269,6 +1432,10 @@ def make_handler(app):
                          "testenv" if path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/agent", "/api/prompt")) else "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
+                if method == "POST" and path == "/api/ticket/draft":
+                    return self._send(200, app.ticket_draft(self._body()))
+                if method == "POST" and path == "/api/ticket/create":
+                    return self._send(200, app.ticket_create(self._body()))
                 if method == "GET" and path == "/api/overview":
                     data = app.overview()
                     data["ideas"] = app.ideas.list() if app.has("ideas") and app.ideas else []
@@ -1340,6 +1507,10 @@ def make_handler(app):
                 res = settings.test_jira(body, stored)
                 hlog.info("Test Jira: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
+            if path == "/api/settings/test/llm":
+                res = settings.test_llm(body, stored)
+                hlog.info("Test KI: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
             if path == "/api/settings/projects":
                 return self._send(200, settings.search_projects(body, stored))
             if path == "/api/settings/identity":
@@ -1394,6 +1565,8 @@ def resolve_secrets(cfg, demo, show=False):
     if not demo and jc["url"]:
         names.append("jira_token" if jc["auth"] == "bearer" else "jira_password")
     names.append("access_token")
+    if llm_cfg(cfg).get("enabled"):
+        names.append("llm_key")
     out = {}
     for name in names:
         try:
@@ -1408,7 +1581,7 @@ def resolve_secrets(cfg, demo, show=False):
             log.info("Secret %s ← %s", name, src)
             if show:
                 print("  %-14s ← %s" % (name, src))
-        elif show and name != "access_token":
+        elif show and name not in ("access_token", "llm_key"):
             print("  %-14s nicht gesetzt (Einstellungen im Browser)" % name)
     return out
 

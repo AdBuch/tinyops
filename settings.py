@@ -12,6 +12,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
+import llm
 import net
 import secretstore as store
 import sprint
@@ -22,7 +23,7 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password")
+SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv")
 
@@ -397,6 +398,20 @@ def _jira_headers(form, stored):
     return {"Authorization": "Basic " + raw, "Accept": "application/json"}, src, ""
 
 
+def test_llm(form, stored):
+    """Prüft den lokalen Sprachmodell-Server: Adresse (nur eigenes Netz), Antwort, Modell, Testentwurf."""
+    cfg = {"provider": form.get("provider") or "ollama", "url": (form.get("url") or "").strip(), "model": (form.get("model") or "").strip(),
+           "allow_remote": bool(form.get("allow_remote")), "timeout": 120}
+    key = (form.get("secret") or "").strip() or (stored("llm_key")[0] or "")
+    if key:
+        store.register(key)
+    steps, models = llm.test(cfg, key)
+    r = Report()
+    for status, title, detail, hint in steps:
+        r.add(title.lower(), title, status, detail, hint)
+    return r.result(models=models[:40])
+
+
 def test_jira(form, stored):
     """form: url, auth, username, secret, ca_bundle, project_keys, issue_types, jql, story_limit."""
     r = Report()
@@ -676,7 +691,12 @@ def view(cfg, config_path, features_default=None):
         "jira": {"url": jc.get("url", ""), "auth": jc.get("auth", "bearer"), "username": jc.get("username", ""),
                  "project_keys": jc.get("project_keys", []), "story_limit": jc.get("story_limit", 2),
                  "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT,
-                 "only_active_sprints": bool(jc.get("only_active_sprints", True))},
+                 "only_active_sprints": bool(jc.get("only_active_sprints", True)),
+                 "allow_create": bool(jc.get("allow_create", False)), "create_type": jc.get("create_type", "Story")},
+        "llm": {"enabled": bool((cfg.get("llm") or {}).get("enabled", False)), "provider": (cfg.get("llm") or {}).get("provider", "ollama"),
+                "url": (cfg.get("llm") or {}).get("url", "http://127.0.0.1:11434"), "model": (cfg.get("llm") or {}).get("model", ""),
+                "allow_remote": bool((cfg.get("llm") or {}).get("allow_remote", False)),
+                "providers": [{"id": k, "label": v.label, "url": v.default_url} for k, v in llm.PROVIDERS.items()]},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
         "storage": {"keyring": bool(kr), "file": str(store.secrets_file()),
@@ -752,12 +772,31 @@ def build_config(current, p):
         jc["story_limit"] = _int(j.get("story_limit"), "jira.story_limit", 1, 20, errors, 2)
         jc["wip_issue_types"] = _lst(j.get("wip_issue_types"), "jira.wip_issue_types", errors)
         jc["only_active_sprints"] = bool(j.get("only_active_sprints", True))
+        jc["allow_create"] = bool(j.get("allow_create", False))
+        jc["create_type"] = (j.get("create_type") or "Story").strip()[:60] or "Story"
         jql = (j.get("jql_in_progress") or "").strip() or JQL_DEFAULT
         if len(jql) > 2000:
             errors["jira.jql_in_progress"] = "Zu lang."
         jc["jql_in_progress"] = jql
         jc.pop("helpdesk", None)
         cfg["jira"] = jc
+
+    m = p.get("llm")
+    if m is not None:
+        lc = dict(cfg.get("llm") or {})
+        lc["enabled"] = bool(m.get("enabled", False))
+        lc["provider"] = m.get("provider") or "ollama"
+        if lc["provider"] not in llm.PROVIDERS:
+            errors["llm.provider"] = "Unbekannt. Erlaubt: %s." % ", ".join(llm.PROVIDERS)
+        lc["url"] = (m.get("url") or "").strip().rstrip("/")
+        lc["model"] = (m.get("model") or "").strip()[:100]
+        lc["allow_remote"] = bool(m.get("allow_remote", False))
+        if lc["enabled"]:
+            try:
+                llm.check_url(lc)
+            except llm.LlmError as e:
+                errors["llm.url"] = str(e)
+        cfg["llm"] = lc
 
     f = p.get("features") or {}
     cfg["features"] = {k: bool(f.get(k, False)) for k in CONFIG_KEYS_FEATURES}

@@ -366,6 +366,12 @@
   <div class="row" style="margin-top:8px"><button class="primary" id="dlgCopy">Kopieren</button></div>
 </dialog>
 
+<dialog id="tkDlg" style="width:min(760px,96vw)">
+  <div class="row" style="justify-content:space-between"><strong>Ticket anlegen <span class="src jira">Jira</span></strong><button id="tkClose" class="quiet-btn">Schließen</button></div>
+  <div class="quiet small" id="tkSrc" style="margin:4px 0 10px"></div>
+  <div id="tkBody"></div>
+</dialog>
+
 <dialog id="ideaDlg" style="width:min(520px,94vw)">
   <strong>Idee festhalten</strong>
   <div class="quiet small" style="margin:4px 0 8px">Nur erfassen, gestartet wird nichts. Enter speichert, Esc bricht ab.</div>
@@ -469,7 +475,7 @@ function row(it) {
   const pipe = it.kind === 'branch' ? '' : `<span class="pd ${esc(it.pipeline)}" title="${esc(pipelineLabel[it.pipeline] || it.pipeline)}"></span>`;
   const acts = [];
   if (it.pipeline_url) acts.push(`<a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>`);
-  if (it.no_ticket && it.create_url) acts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>`);
+  if (it.no_ticket) acts.push(`<button data-tk="1" data-p="${it.project_id}" data-i="${it.iid ?? ''}" data-b="${esc(it.branch)}" data-cu="${esc(it.create_url || '')}">Ticket anlegen</button>`);
   acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Öffnen</a>`);
   const parts = [];
   if (F().testenv && it.iid && it.can_deploy) {
@@ -717,6 +723,81 @@ document.getElementById('board').addEventListener('click', async ev => {
   } catch (e) { toast(e.message); }
 });
 
+
+// ---------------------------------------------------------------- Ticket anlegen (inline)
+let TK = null;   // {item, meta, project, types}
+function tkMsg(html, cls) { $('tkMsg').innerHTML = html ? `<div class="banner ${cls || 'warn'}" style="margin:10px 0 0">${html}</div>` : ''; }
+function tkTypes(types, sel) { return types.map(t => `<option ${t === sel ? 'selected' : ''}>${esc(t)}</option>`).join(''); }
+
+async function openTicket(btn) {
+  const item = { project_id: +btn.dataset.p, iid: btn.dataset.i ? +btn.dataset.i : null, branch: btn.dataset.b, create_url: btn.dataset.cu };
+  $('tkSrc').innerHTML = `<span class="src gl">${item.iid ? 'MR !' + item.iid : 'Branch'}</span> <code>${esc(item.branch)}</code>`;
+  $('tkBody').innerHTML = '<div class="quiet">Lade Entwurf …</div>';
+  if (!$('tkDlg').open) $('tkDlg').showModal();
+  try {
+    const r = await api('POST', '/api/ticket/draft', item);
+    TK = { item, meta: r.meta, project: r.project, types: r.issue_types };
+    renderTicket(r);
+  } catch (e) { $('tkBody').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+}
+
+function renderTicket(r) {
+  const m = r.meta, d = r.draft;
+  const projects = m.projects.length ? m.projects : [r.project || ''];
+  $('tkBody').innerHTML = `
+    <div class="grid2">
+      <div class="field"><label for="tk-proj">Jira-Projekt</label><select class="full" id="tk-proj">${projects.map(p => `<option ${p === r.project ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+      <div class="field"><label for="tk-type">Vorgangstyp</label><select class="full" id="tk-type">${tkTypes(r.issue_types, d.issue_type)}</select></div>
+    </div>
+    <div class="field"><label for="tk-sum">Titel</label><input type="text" id="tk-sum" value="${esc(d.summary)}" maxlength="255"></div>
+    <div class="field"><label for="tk-desc">Beschreibung <span class="quiet small" style="font-weight:400">(Jira-Wiki-Format)</span></label>
+      <textarea class="full" id="tk-desc" rows="12" spellcheck="false">${esc(d.description)}</textarea></div>
+    <div class="small quiet" id="tkSource">Entwurf: ${r.source === 'ki' ? 'vom lokalen Modell, bitte prüfen' : 'Vorlage aus Branch, MR und Commit-Titeln'}</div>
+    <div id="tkMsg">${r.warning ? `<div class="banner warn" style="margin:10px 0 0">${esc(r.warning)}</div>` : ''}</div>
+    ${m.llm ? `<div class="row" style="margin-top:10px"><input type="text" id="tk-hint" style="flex:1;min-width:200px" placeholder="Hinweis an das Modell (optional), z. B. «Fokus auf Tests»">
+      <button id="tk-ai">Entwurf mit KI</button></div><div class="quiet small">Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel an ${esc(m.llm_label || 'das lokale Modell')}. Keine Diffs, kein Code.</div>` : ''}
+    <div class="row" style="margin-top:14px">
+      ${m.can_create ? '<button class="primary" id="tk-create">In Jira anlegen</button>'
+        : `<a class="btn" id="tk-open" href="${esc(TK.item.create_url || '#')}" target="_blank" rel="noopener">In Jira öffnen</a>`}
+      <button id="tk-copy">Text kopieren</button>
+    </div>
+    ${m.can_create ? '' : '<div class="quiet small" style="margin-top:6px">Direktes Anlegen ist aus. Einschalten: Einstellungen → Jira → «Tickets aus dem Panel anlegen». Bis dahin: Text kopieren und in Jira einfügen.</div>'}`;
+  $('tk-proj').onchange = async () => {
+    try {
+      const x = await api('POST', '/api/ticket/draft', { ...TK.item, project: $('tk-proj').value });
+      TK.types = x.issue_types; $('tk-type').innerHTML = tkTypes(x.issue_types, $('tk-type').value);
+    } catch (e) { tkMsg(esc(e.message), 'bad'); }
+  };
+  $('tk-copy').onclick = () => copyText(`${$('tk-sum').value}\n\n${$('tk-desc').value}`, 'Ticket-Text');
+  if ($('tk-ai')) $('tk-ai').onclick = () => busy($('tk-ai'), 'Das Modell schreibt …', async () => {
+    try {
+      const x = await api('POST', '/api/ticket/draft', { ...TK.item, project: $('tk-proj').value, use_llm: true, hint: $('tk-hint').value });
+      if ((($('tk-desc').value.trim() && !confirm('Titel und Beschreibung durch den KI-Entwurf ersetzen?'))) && x.source === 'ki') return;
+      $('tk-sum').value = x.draft.summary; $('tk-desc').value = x.draft.description; $('tk-type').innerHTML = tkTypes(x.issue_types, x.draft.issue_type);
+      $('tkSource').textContent = x.source === 'ki' ? 'Entwurf: vom lokalen Modell, bitte prüfen' : 'Entwurf: Vorlage';
+      tkMsg(x.warning ? esc(x.warning) : '');
+    } catch (e) { tkMsg(esc(e.message), 'bad'); }
+  });
+  if ($('tk-create')) $('tk-create').onclick = async () => {
+    const body = { project: $('tk-proj').value, issue_type: $('tk-type').value, summary: $('tk-sum').value, description: $('tk-desc').value };
+    if (!body.summary.trim()) { tkMsg('Der Titel fehlt.', 'bad'); return; }
+    if (!confirm(`In Jira ${body.project} als «${body.issue_type}» anlegen?\n\n${body.summary}`)) return;
+    await busy($('tk-create'), 'Lege an …', async () => {
+      try {
+        const x = await api('POST', '/api/ticket/create', body);
+        $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a></div>
+          <div class="small" style="margin:10px 0">Nimm den Key in den Branch-Namen auf (zum Beispiel <code>feature/${esc(x.key)}-…</code>), dann verknüpft das Panel Ticket und Branch von selbst.</div>
+          <div class="row"><button id="tk-ck">Key kopieren</button><button class="primary" id="tk-done">Fertig</button></div>`;
+        $('tk-ck').onclick = () => copyText(x.key, 'Ticket-Key');
+        $('tk-done').onclick = () => $('tkDlg').close();
+        load();
+      } catch (e) { tkMsg(esc(e.message), 'bad'); }
+    });
+  };
+}
+$('tkClose').onclick = () => $('tkDlg').close();
+$('board').addEventListener('click', ev => { const b = ev.target.closest('button[data-tk]'); if (b) openTicket(b); });
+
 // Ideen-Drop: überall ein Tastendruck oder Klick entfernt
 function openIdeaDrop() { const d = $('ideaDlg'); if (!d.open) d.showModal(); $('ideaQuick').focus(); }
 async function saveIdeaDrop() {
@@ -842,7 +923,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -903,11 +984,30 @@ async function loadSettings() {
     ${field('ji-types', 'Vorgangstypen, die beim Limit zählen', j.wip_issue_types.join(', '), { err: 'jira.wip_issue_types', help: 'Deutsche Instanzen: oft «Aufgabe», «Fehler». Leer = alle Typen zählen.' })}
     <label class="check"><input type="checkbox" id="ji-sprint" ${j.only_active_sprints !== false ? 'checked' : ''}>
       <span><strong>Nur Tickets aus aktiven Sprints</strong><br><span class="quiet small">Ergänzt die JQL um <code>sprint in openSprints()</code> und markiert verknüpfte Tickets ausserhalb eines Sprints. Braucht Jira Software. Der Test unten sagt, ob es funktioniert.</span></span></label>
+    <label class="check"><input type="checkbox" id="ji-create" ${j.allow_create ? 'checked' : ''}>
+      <span><strong>Tickets aus dem Panel anlegen</strong><br><span class="quiet small">Das ist der einzige Schreibzugriff auf Jira. Er läuft nur, wenn du im Dialog «In Jira anlegen» drückst und bestätigst. Das Konto braucht dort die Berechtigung «Vorgänge erstellen». Aus = das Panel bleibt rein lesend.</span></span></label>
+    ${field('ji-ctype', 'Vorgangstyp, der im Dialog vorgewählt ist', j.create_type || 'Story', { err: 'jira.create_type' })}
     ${field('ji-jql', 'JQL für «in Arbeit»', j.jql_in_progress, { area: true, rows: 2, err: 'jira.jql_in_progress',
       help: 'Zuerst im Jira-Suchfeld (Erweitert) probieren. Der Test unten zeigt die ersten Treffer.' })}
     <div class="row"><button class="primary" id="ji-test">Verbindung testen</button>
       ${(S.secrets.jira_token.set || S.secrets.jira_password.set) ? '<button id="ji-del">Gespeicherte Zugangsdaten löschen</button>' : ''}</div>
     <div id="ji-result"></div>`)}
+
+  ${sect('llm', 'KI-Entwurf (lokal)', 'Ein Sprachmodell auf deinem Rechner oder im Büro-Netz schreibt den ersten Entwurf eines Tickets. Ohne Modell nimmt der Dialog eine Vorlage.', `
+    <label class="check"><input type="checkbox" id="lm-on" ${S.llm.enabled ? 'checked' : ''}><span><strong>KI-Entwurf einschalten</strong></span></label>
+    <div class="grid2">
+      <div class="field"><label for="lm-prov">Dialekt des Servers</label>
+        <select class="full" id="lm-prov">${S.llm.providers.map(p => `<option value="${esc(p.id)}" ${p.id === S.llm.provider ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}</select>
+        <div class="help">Ollama: <code>ollama serve</code>. llama.cpp: <code>llama-server -m modell.gguf</code> (OpenAI-kompatibel). Weitere Anbieter lassen sich in <code>llm.py</code> ergänzen.</div>
+        <div class="ferr" data-err="llm.provider"></div></div>
+      ${field('lm-url', 'Adresse', S.llm.url, { err: 'llm.url', ph: 'http://127.0.0.1:11434', help: 'Nur Adressen im eigenen Netz werden angenommen (localhost, private Adressen, Namen im Büro-Netz).' })}
+    </div>
+    ${field('lm-model', 'Modell', S.llm.model, { ph: 'llama3.2:3b', err: 'llm.model', help: 'Bei Ollama der Name aus «ollama list». Bei llama.cpp meist leer lassen.' })}
+    <label class="check"><input type="checkbox" id="lm-remote" ${S.llm.allow_remote ? 'checked' : ''}>
+      <span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(nicht empfohlen: Titel, Branch-Namen und Commit-Titel verlassen dann das Netz, bei Kundenprojekten ein DLP-Verstoss)</span></span></label>
+    <div id="lm-keybox"></div>
+    <div class="row"><button class="primary" id="lm-test">Verbindung testen</button></div>
+    <div id="lm-result"></div>`)}
 
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
@@ -923,6 +1023,12 @@ async function loadSettings() {
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
     <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
   renderJiraSecret(); renderProjects();
+  renderLlmKey();
+  $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
+    const p = S.llm.providers.find(x => x.id === $('lm-prov').value), cur = val('lm-url');
+    if (p && (!cur || S.llm.providers.some(x => x.url === cur))) $('lm-url').value = p.url;
+    renderLlmKey();
+  };
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
   $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
@@ -944,6 +1050,26 @@ function renderJiraSecret() {
     help: secretHelp(name, basic ? 'Passwort' : 'Token') + (basic ? ' Achtung: Mehrere falsche Passwörter in Folge können das Konto in Jira sperren; tinyops pausiert deshalb nach einem Fehlversuch 30 Sekunden.'
       : ` Anlegen in Jira: Profil → Personal Access Tokens. Ein Jira-Token hat die Rechte deines Kontos.`) });
 }
+
+
+function renderLlmKey() {
+  const show = $('lm-prov').value === 'openai';
+  const old = $('lm-secret') ? $('lm-secret').value : '';
+  $('lm-keybox').innerHTML = show ? field('lm-secret', 'Zugangsschlüssel (optional)', old, { type: 'password', err: 'llm_key', ph: S.secrets.llm_key.set ? '•••••••• gespeichert' : '',
+    help: secretHelp('llm_key', 'Schlüssel') + ' Lokale Server brauchen meist keinen.' }) : '';
+}
+function llmForm() { return { provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, secret: $('lm-secret') ? $('lm-secret').value : '' }; }
+async function testLlm() {
+  const out = $('lm-result');
+  await busy($('lm-test'), 'Teste …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/test/llm', llmForm());
+      const models = (r.models || []).length ? `<div style="margin-top:8px" class="quiet">Gefundene Modelle (Klick = übernehmen):</div><div>${r.models.map(m => `<button class="pchip" data-setmodel="${esc(m)}">${esc(m)}</button>`).join('')}</div>` : '';
+      out.innerHTML = stepsHtml(r).replace('Verbindung in Ordnung.', 'Das Modell antwortet.') + models;
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+$('viewSettings').addEventListener('click', ev => { const b = ev.target.closest('[data-setmodel]'); if (b) $('lm-model').value = b.dataset.setmodel; });
 
 function clearErrors() { document.querySelectorAll('.ferr').forEach(e => e.textContent = ''); }
 function showErrors(errs) {
@@ -1050,13 +1176,16 @@ function collect() {
   const secrets = {};
   if ($('gl-token').value.trim()) secrets.gitlab_token = $('gl-token').value;
   if ($('ji-secret').value.trim()) secrets[val('ji-auth') === 'basic' ? 'jira_password' : 'jira_token'] = $('ji-secret').value;
+  if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P,
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
-      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked },
+      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
+      allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
+    llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked },
     secrets,
   };

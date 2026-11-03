@@ -1,4 +1,4 @@
-# tinyops 1.8: Arbeitspanel
+# tinyops 1.9: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -195,6 +195,23 @@ Die Ansicht «Kacheln» oder «Liste» (wie in 1.5) schaltest du über den Umsch
 - **Farben:** Jira ist violett (Raute), GitLab orange (Punkt). Kachel «Stories in Arbeit» trägt das Jira-Zeichen, die anderen das GitLab-Zeichen.
   In den Zeilen steht «MR !52» oder «Branch» in Orange (GitLab) und das Ticket als «Jira DLP-140 · In Review» in Violett.
 - **Ideen-Drop:** Taste `i` oder Knopf «+ Idee» oben öffnet ein kleines Fenster, Enter speichert. Die Ideenbox rechts (am Handy: Tab «Ideen») zeigt alles.
+
+## 4f. Tickets direkt anlegen und KI-Entwurf (neu in 1.9)
+
+**Ticket anlegen, ohne das Panel zu verlassen.** Bei Einträgen ohne Ticket öffnet «Ticket anlegen» einen Dialog: Jira-Projekt, Vorgangstyp, Titel und Beschreibung
+sind schon aus Branch, MR-Titel, MR-Beschreibung und Commit-Titeln vorbereitet (Jira-Wiki-Format mit Ausgangslage, Ziel, Akzeptanzkriterien).
+- **Schreibzugriff ist standardmäßig aus.** Einschalten: Einstellungen → Jira → «Tickets aus dem Panel anlegen» (`jira.allow_create`). Danach legt das Panel
+  ein Ticket nur an, wenn du «In Jira anlegen» drückst und die Rückfrage bestätigst. Das Konto braucht die Jira-Berechtigung «Vorgänge erstellen».
+  Es ist der einzige schreibende Aufruf; er steht im Log als «SCHREIBEN POST /issue». Approve, Merge und Push bleiben ausgeschlossen.
+- Ist es aus, bleibt der Dialog nützlich: «Text kopieren» oder «In Jira öffnen».
+- Erlaubt sind nur die Projekt-Keys aus den Einstellungen und Vorgangstypen, die das Jira-Projekt wirklich hat.
+
+**KI-Entwurf mit lokalem Modell** (Einstellungen → KI-Entwurf). Zwei Dialekte: **Ollama** (`ollama serve`, Adresse `http://127.0.0.1:11434`) und **OpenAI-kompatibel**
+(llama.cpp `llama-server`, LM Studio, vLLM; Adresse z. B. `http://127.0.0.1:8080`). Der Verbindungstest prüft Adresse, Server, Modell und einen Testentwurf.
+- **DLP:** Es werden nur Adressen im eigenen Netz angenommen (localhost, private Adressen, Namen im Büro-Netz). Eine externe Adresse braucht ein ausdrückliches Häkchen.
+  Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel, nie Diffs oder Code. Antwortet das Modell nicht brauchbar, bleibt die Vorlage.
+- **Weitere APIs:** In `llm.py` eine Klasse mit `models()` und `chat()` schreiben und mit `register()` eintragen; sie erscheint dann in der Auswahl.
+  Ein optionaler Zugangsschlüssel liegt wie alle Secrets im Schlüsselbund (`llm_key`).
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

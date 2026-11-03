@@ -17,6 +17,7 @@ ISSUES = {
 }
 ACTIVE_SPRINT = ["com.atlassian.greenhopper.service.sprint.Sprint@1[id=11,rapidViewId=3,state=CLOSED,name=Sprint 11,endDate=2026-10-01T09:00:00.000+0000]",
                  "com.atlassian.greenhopper.service.sprint.Sprint@2[id=12,rapidViewId=3,state=ACTIVE,name=Sprint 12,endDate=2099-11-13T09:00:00.000+0000]"]
+LAST = {}
 NO_SPRINT = {"DLP-120"}
 BASIC = "Basic " + base64.b64encode(b"jira-user:jpass").decode()
 
@@ -45,6 +46,8 @@ class H(BaseHTTPRequestHandler):
         auth = self.headers.get("Authorization", "")
         if self.path.startswith("/rest/api/2/serverInfo"):
             return self._json(200, {"version": "9.4.14", "serverTitle": "Mock Jira"})
+        if self.path == "/_last":
+            return self._json(200, LAST)
         if auth not in ("Bearer jtoken", BASIC):
             return self._json(401, {"errorMessages": ["Unauthorized"]})
         u = urlparse(self.path)
@@ -54,6 +57,9 @@ class H(BaseHTTPRequestHandler):
                                     {"id": "customfield_10020", "name": "Sprint", "schema": {"custom": "com.pyxis.greenhopper.jira:gh-sprint"}}])
         if u.path == "/rest/api/2/project":
             return self._json(200, [{"key": "DLP"}, {"key": "OPS"}])
+        if u.path == "/rest/api/2/project/DLP":
+            return self._json(200, {"key": "DLP", "issueTypes": [{"name": "Story"}, {"name": "Bug"}, {"name": "Sub-task", "subtask": True}]})
+
         if u.path == "/rest/api/2/issuetype":
             return self._json(200, [{"name": "Story"}, {"name": "Bug"}, {"name": "Task"}])
         if u.path == "/rest/api/2/status":
@@ -78,6 +84,22 @@ class H(BaseHTTPRequestHandler):
                 return self._json(200, {"issues": [issue(k) for k in keys], "total": len(keys)})
             return self._json(400, {"errorMessages": ["unbekannte JQL im Mock"]})
         return self._json(404, {})
+
+    def do_POST(self):
+        if self.headers.get("Authorization", "") not in ("Bearer jtoken", BASIC):
+            return self._json(401, {"errorMessages": ["Unauthorized"]})
+        n = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(n) or b"{}")
+        if urlparse(self.path).path != "/rest/api/2/issue":
+            return self._json(404, {})
+        f = body.get("fields", {})
+        if (f.get("project") or {}).get("key") == "OPS":
+            return self._json(403, {"errorMessages": ["You do not have permission to create issues in this project."]})
+        if not f.get("summary"):
+            return self._json(400, {"errors": {"summary": "You must specify a summary of the issue."}})
+        LAST.clear()
+        LAST.update(body)
+        return self._json(201, {"id": "10500", "key": "DLP-201", "self": "x"})
 
     def log_message(self, *a):
         pass
