@@ -1343,6 +1343,19 @@ class App:
             return {"removed": self._local(st.remove_item, body.get("id"), kind, value)}
         raise UserError("Unbekannte Aktion.")
 
+    def ai_action(self, action, body):
+        st = self.store
+        if action == "save":
+            return {"id": self._local(st.ai_save, body.get("id"), body.get("name"), body.get("kind"), body.get("window_hours"),
+                                      body.get("budget"), body.get("unit"))}
+        if action == "delete":
+            self._local(st.ai_delete, body.get("id"))
+            return {}
+        if action == "set":
+            self._local(st.ai_set, body.get("id"), body.get("used"), body.get("resets_in_min"), body.get("delta"))
+            return {}
+        raise UserError("Unbekannte Aktion.")
+
     def pools_view(self, data):
         items = {it["ref"]: it for it in data["mine"] + data["review"] + data["assigned"] if it.get("ref")}
         out = []
@@ -1401,6 +1414,10 @@ class App:
             try:
                 out["draft"] = llm.draft_ticket(self.lc, self.llm_key, ctx, str(body.get("hint") or ""))
                 out["source"] = "ki"
+                try:
+                    self.store.ai_bump("local")   # Zähler der eigenen Anfragen an das lokale Modell
+                except Exception as e:
+                    log.debug("Zähler nicht aktualisiert: %s", e)
                 log.info("KI-Entwurf von %s (%s) in %.1f s, %d Commit-Titel gesendet", self.lc["provider"], self.lc.get("model") or "-",
                          time.time() - t0, len(ctx["commits"]))
             except llm.LlmError as e:
@@ -1469,6 +1486,7 @@ class App:
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
             "pools": self.pools_view(data),
+            "ai": self.store.ai_accounts(),
         })
         return data
 
@@ -1711,6 +1729,8 @@ def make_handler(app):
                     return self._send(200, app.unlink_ticket(self._body()))
                 if method == "POST" and path.startswith("/api/pools"):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
+                if method == "POST" and path.startswith("/api/ai/"):
+                    return self._send(200, app.ai_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path == "/api/ticket/draft":
                     return self._send(200, app.ticket_draft(self._body()))
                 if method == "POST" and path == "/api/ticket/create":

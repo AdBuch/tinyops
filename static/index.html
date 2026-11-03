@@ -330,6 +330,18 @@
   .item[draggable=true], .slot[draggable=true] { cursor: grab; }
   .dragging { opacity: .45; }
   .dropok { outline: 2px dashed var(--focus); outline-offset: -3px; background: var(--focus-bg) !important; }
+  .aiacc { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+  .aiacc .aihead { display: flex; gap: 8px; align-items: baseline; }
+  .aiacc .aihead b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .aibar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--quiet) 22%, transparent); overflow: hidden; }
+  .aibar i { display: block; height: 100%; background: var(--ok, #2a8); }
+  .aibar.s-low i { background: #d8960c; } .aibar.s-empty i { background: var(--bad); }
+  .aiacc .aimeta { font-size: 13px; color: var(--quiet); display: flex; gap: 12px; flex-wrap: wrap; }
+  .aiacc .aiact { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .aiacc .aiact input { width: 104px; flex: 0 0 auto; }
+  details.aiadd summary { cursor: pointer; padding: 12px 14px; color: var(--quiet); }
+  .aiadd .aiform { padding: 0 14px 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .aiadd input[data-aiin="name"] { flex: 1 1 140px; min-width: 0; } .aiadd input[type=number] { width: 78px; flex: 0 0 auto; } .aiadd input[data-aiin="unit"] { width: 88px; flex: 0 0 auto; }
   .poolbar { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .poolbar input { flex: 1; min-width: 0; }
   .poolcard { margin: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
@@ -600,7 +612,7 @@ function applyLayout(l) {
 applyLayout(LS.get('layout', 'tiles'));
 $('layoutSeg').addEventListener('click', ev => { const b = ev.target.closest('button[data-layout]'); if (b) { LS.set('layout', b.dataset.layout); applyLayout(b.dataset.layout); } });
 function tileHtml(id, t, open, mini) {
-  const src = id === 'stories' ? 'jira' : id === 'pools' ? 'local' : 'gl';
+  const src = id === 'stories' ? 'jira' : (id === 'pools' || id === 'ai') ? 'local' : 'gl';
   const body = t.body;
   return `<section class="tile t-${src} ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
     <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
@@ -671,11 +683,12 @@ function renderLeft() {
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
   tiles.pools = { title: 'Pools', count: (state.pools || []).length, hint: 'ausserhalb von Sprint und Story-Limit', body: poolsBody() };
+  tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
   const board = $('board');
-  const keep = [...document.querySelectorAll('#poolName, [data-pkey]')].map(e => ({ sel: e.id ? '#' + e.id : `[data-pkey="${e.dataset.pkey}"]`, v: e.value, f: e === document.activeElement }));
+  const keep = [...document.querySelectorAll('#poolName, [data-pkey], [data-aiin]')].map(e => ({ sel: e.id ? '#' + e.id : e.dataset.pkey ? `[data-pkey="${e.dataset.pkey}"]` : `[data-aiin="${e.dataset.aiin}"]`, v: e.value, f: e === document.activeElement }));
   board.className = 'board o' + open.length;
   if (open.length === 2) {
     const closed = ids.filter(id => !open.includes(id));
@@ -888,6 +901,42 @@ $('board').addEventListener('click', ev => { const b = ev.target.closest('button
 
 // ---------------------------------------------------------------- Verknüpfen (Drag and drop) und Pools
 const MIME = 'application/x-tinyops';
+const AI_PRESETS = { claude: ['Claude.ai', 5, 100, '%'], chatgpt: ['ChatGPT', 5, 100, '%'], mistral: ['Mistral Vibe', 5, 100, '%'], local: ['Lokales Modell', 24, 0, 'Anfragen'], other: ['Anderes Konto', 5, 100, '%'] };
+const AI_LABEL = { claude: 'Claude', chatgpt: 'ChatGPT', mistral: 'Mistral', local: 'Lokal', other: 'Konto' };
+function fmtLeft(secs) { const m = Math.max(0, Math.round(secs / 60)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; }
+function aiBody() {
+  const acc = state.ai || [];
+  const rows = acc.map(a => {
+    const bud = a.budget > 0;
+    const stateTxt = !a.running ? 'Fenster frei' : `Reset in ${fmtLeft(a.secs_left)}`;
+    const main = bud ? `<b>${esc(a.left)} ${esc(a.unit)}</b> übrig von ${esc(a.budget)}` : `<b>${esc(a.used)} ${esc(a.unit)}</b> im Fenster, kein Limit`;
+    return `<div class="aiacc" data-ai="${a.id}">
+      <div class="aihead"><b title="${esc(a.name)}">${esc(a.name)}</b><span class="chip">${esc(AI_LABEL[a.kind] || a.kind)}</span><button class="x" data-aidel="${a.id}" data-name="${esc(a.name)}" title="Konto entfernen">×</button></div>
+      ${bud ? `<div class="aibar s-${a.state}"><i style="width:${a.pct}%"></i></div>` : ''}
+      <div class="aimeta"><span>${main}</span><span>${stateTxt} (${esc(a.window_hours)} h)</span></div>
+      ${a.kind === 'local' ? '<div class="aimeta">Zählt Anfragen des Panels an dein lokales Modell, automatisch.</div>' : `<div class="aiact">
+        <button data-aidelta="${a.id}" data-d="-10" title="Verbrauch um 10 senken">−10</button><button data-aidelta="${a.id}" data-d="10" title="Verbrauch um 10 erhöhen">+10</button>
+        <input type="number" min="0" step="any" data-aiin="u${a.id}" placeholder="Verbraucht" title="Verbraucht, in ${esc(a.unit)}">
+        <input type="number" min="0" step="1" data-aiin="r${a.id}" placeholder="Reset in min" title="«Zurücksetzung in» laut Anbieter, in Minuten">
+        <button data-aiset="${a.id}">Stand setzen</button></div>`}
+    </div>`;
+  }).join('');
+  const kinds = Object.keys(AI_PRESETS).map(k => `<option value="${k}">${esc(AI_LABEL[k])}</option>`).join('');
+  const add = `<details class="aiadd" ${acc.length ? '' : 'open'}><summary>Konto hinzufügen</summary><div class="aiform"><select data-aiin="kind">${kinds}</select><input type="text" data-aiin="name" placeholder="Name" maxlength="40" value="Claude.ai">
+    <input type="number" data-aiin="win" min="0.1" step="any" value="5" title="Fenster in Stunden"><span class="quiet small">h</span>
+    <input type="number" data-aiin="bud" min="0" step="any" value="100" title="Budget (0 = kein Limit)"><input type="text" data-aiin="unit" value="%" size="6" maxlength="12" title="Einheit">
+    <button data-aiadd>Anlegen</button></div></details>`;
+  const note = acc.length ? '' : '<div class="empty">Abos wie Claude.ai, ChatGPT oder Mistral Vibe bieten keine Abfrage für das Restlimit. Lege ein Konto an, trage den Stand aus der Anzeige des Anbieters ein (verbraucht und «Reset in»), das Panel rechnet das Fenster weiter.</div>';
+  return rows + note + add;
+}
+
+document.addEventListener('change', ev => {
+  if (ev.target.dataset && ev.target.dataset.aiin === 'kind') {
+    const p = AI_PRESETS[ev.target.value], g = n => document.querySelector(`[data-aiin="${n}"]`);
+    g('name').value = p[0]; g('win').value = p[1]; g('bud').value = p[2]; g('unit').value = p[3];
+  }
+});
+
 function poolsBody() {
   const pools = state.pools || [];
   const bar = `<div class="poolbar"><input type="text" id="poolName" placeholder="Neuer Pool, z. B. Agenten-VM" maxlength="60" autocomplete="off"><button id="poolAdd">Anlegen</button></div>`;
@@ -950,6 +999,22 @@ document.addEventListener('click', async ev => {
   if (un) { ev.preventDefault(); ev.stopPropagation(); await act(() => post('/api/links/delete', { project_id: +un.dataset.p, branch: un.dataset.b }), 'Verknüpfung gelöst'); return; }
   const as = ev.target.closest('[data-assign]');
   if (as) { openLink(as); return; }
+  const ab = ev.target.closest('button');
+  if (ab && (ab.dataset.aiadd !== undefined || ab.dataset.aidel || ab.dataset.aidelta || ab.dataset.aiset)) {
+    const g = n => document.querySelector(`[data-aiin="${n}"]`);
+    if (ab.dataset.aiadd !== undefined) {
+      const body = { name: g('name').value, kind: g('kind').value, window_hours: g('win').value, budget: g('bud').value, unit: g('unit').value };
+      await act(() => post('/api/ai/save', body), 'Konto angelegt'); return;
+    }
+    if (ab.dataset.aidel) { if (confirm(ab.dataset.name + ' entfernen?')) await act(() => post('/api/ai/delete', { id: +ab.dataset.aidel }), 'Entfernt'); return; }
+    if (ab.dataset.aidelta) { await act(() => post('/api/ai/set', { id: +ab.dataset.aidelta, delta: +ab.dataset.d })); return; }
+    const id = +ab.dataset.aiset, u = g('u' + id).value, r = g('r' + id).value, body = { id };
+    if (u === '' && r === '') { toast('Verbraucht oder «Reset in» eintragen'); return; }
+    if (u !== '') body.used = u;
+    if (r !== '') body.resets_in_min = r;
+    g('u' + id).value = ''; g('r' + id).value = '';
+    await act(() => post('/api/ai/set', body), 'Stand gesetzt'); return;
+  }
   if (ev.target.id === 'poolAdd') { const i = $('poolName'); if (i.value.trim()) { const v = i.value; i.value = ''; await act(() => post('/api/pools', { name: v }), 'Pool angelegt'); } return; }
   const prem = ev.target.closest('[data-prem]');
   if (prem) { await act(() => post('/api/pools/remove', prem.dataset.prem === 'ticket' ? { id: +prem.dataset.pid, kind: 'ticket', value: prem.dataset.v } : { id: +prem.dataset.pid, kind: 'ref', project_id: +prem.dataset.p, branch: prem.dataset.b })); return; }

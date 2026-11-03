@@ -31,7 +31,106 @@ def norm_ticket(key):
     return k
 
 
-class Store:
+# ---- KI-Konten: Abo-Limits mit Zeitfenster (z. B. 5 Stunden). Die Anbieter bieten dafür keine offizielle Abfrage; du trägst den Stand ein
+AI_KINDS = ("claude", "chatgpt", "mistral", "local", "other")
+
+
+def _num(v, name, lo=0.0, hi=1e9):
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        raise LinkError("«%s» muss eine Zahl sein." % name)
+    if not lo <= x <= hi:
+        raise LinkError("«%s» muss zwischen %g und %g liegen." % (name, lo, hi))
+    return x
+
+
+def ai_view(row, now=None):
+    now = now or time.time()
+    win = row["window_hours"] * 3600
+    running = row["window_start"] > 0 and now < row["window_start"] + win
+    used = row["used"] if running else 0.0
+    budget = row["budget"]
+    left = max(budget - used, 0.0) if budget else None
+    pct = min(100.0, 100.0 * used / budget) if budget else None
+    state = "free" if not running else "ok"
+    if budget and running:
+        state = "empty" if used >= budget else ("low" if left <= 0.2 * budget else "ok")
+    return {"id": row["id"], "name": row["name"], "kind": row["kind"], "window_hours": row["window_hours"], "budget": budget, "unit": row["unit"],
+            "used": round(used, 2), "left": None if left is None else round(left, 2), "pct": None if pct is None else round(pct, 1),
+            "running": running, "resets_at": row["window_start"] + win if running else 0, "secs_left": int(row["window_start"] + win - now) if running else 0,
+            "state": state}
+
+
+def _ai_roll(row, now):
+    """Fenster abgelaufen: Zähler beginnt bei null."""
+    if row["window_start"] > 0 and now >= row["window_start"] + row["window_hours"] * 3600:
+        return 0.0, 0.0
+    return row["used"], row["window_start"]
+
+
+class _AiMixin:
+    def ai_accounts(self):
+        with self._conn() as c:
+            return [] if c is None else [ai_view(r) for r in c.execute("select * from ai_accounts order by id")]
+
+    def ai_save(self, ident, name, kind, window_hours, budget, unit):
+        name = " ".join(str(name or "").split())
+        if not name or len(name) > 40:
+            raise LinkError("Der Name fehlt oder ist länger als 40 Zeichen.")
+        if kind not in AI_KINDS:
+            raise LinkError("Unbekannte Art.")
+        wh = _num(window_hours, "Fenster (Stunden)", 0.1, 24 * 31)
+        bud = _num(budget, "Budget", 0, 1e9)
+        unit = " ".join(str(unit or "%").split())[:12] or "%"
+        with self._conn(True) as c:
+            try:
+                if ident:
+                    n = c.execute("update ai_accounts set name=?, kind=?, window_hours=?, budget=?, unit=? where id=?", (name, kind, wh, bud, unit, int(ident))).rowcount
+                    if not n:
+                        raise LinkError("Konto nicht gefunden.")
+                    return int(ident)
+                if c.execute("select count(*) from ai_accounts").fetchone()[0] >= 20:
+                    raise LinkError("Höchstens 20 Konten.")
+                return c.execute("insert into ai_accounts(name, kind, window_hours, budget, unit) values(?,?,?,?,?)", (name, kind, wh, bud, unit)).lastrowid
+            except sqlite3.IntegrityError:
+                raise LinkError("Ein Konto «%s» gibt es schon." % name)
+
+    def ai_delete(self, ident):
+        with self._conn(True) as c:
+            if not c.execute("delete from ai_accounts where id=?", (int(ident),)).rowcount:
+                raise LinkError("Konto nicht gefunden.")
+
+    def ai_set(self, ident, used=None, resets_in_min=None, delta=None):
+        """Stand eintragen: `used` (absolut) oder `delta` (dazu), `resets_in_min` = «Zurücksetzung in …» wie in der Anzeige des Anbieters."""
+        now = time.time()
+        with self._conn(True) as c:
+            row = c.execute("select * from ai_accounts where id=?", (int(ident),)).fetchone()
+            if not row:
+                raise LinkError("Konto nicht gefunden.")
+            cur, start = _ai_roll(row, now)
+            if used is not None:
+                cur = _num(used, "Verbraucht", 0, 1e9)
+            if delta is not None:
+                cur += _num(delta, "Schritt", -1e9, 1e9)
+                cur = max(cur, 0.0)
+            if resets_in_min is not None:
+                m = _num(resets_in_min, "Zurücksetzung in (Minuten)", 0, row["window_hours"] * 60)
+                start = now - (row["window_hours"] * 3600 - m * 60)
+            elif start == 0:
+                start = now   # das Fenster beginnt mit der ersten Nutzung
+            c.execute("update ai_accounts set used=?, window_start=? where id=?", (cur, start, int(ident)))
+
+    def ai_bump(self, kind="local", n=1):
+        """Automatischer Zähler (lokales Modell): eigene Anfragen des Panels."""
+        now = time.time()
+        with self._conn(True) as c:
+            for row in c.execute("select * from ai_accounts where kind=?", (kind,)).fetchall():
+                cur, start = _ai_roll(row, now)
+                c.execute("update ai_accounts set used=?, window_start=? where id=?", (cur + n, start or now, row["id"]))
+
+
+class Store(_AiMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -49,6 +148,8 @@ class Store:
                 conn.execute("create table if not exists pools(id integer primary key autoincrement, name text not null unique, created text not null)")
                 conn.execute("create table if not exists pool_items(pool_id integer not null, kind text not null, value text not null, created text not null,"
                              " primary key(pool_id, kind, value))")
+                conn.execute("create table if not exists ai_accounts(id integer primary key autoincrement, name text not null unique, kind text not null,"
+                             " window_hours real not null, budget real not null, unit text not null, used real not null default 0, window_start real not null default 0)")
                 yield conn
         finally:
             conn.close()
