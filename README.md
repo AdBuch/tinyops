@@ -1,4 +1,4 @@
-# tinyops 2.4: Arbeitspanel
+# tinyops 2.5: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -216,7 +216,7 @@ sind schon aus Branch, MR-Titel, MR-Beschreibung und Commit-Titeln vorbereitet (
 - **Weitere APIs:** In `llm.py` eine Klasse mit `models()` und `chat()` schreiben und mit `register()` eintragen; sie erscheint dann in der Auswahl.
   Ein optionaler Zugangsschlüssel liegt wie alle Secrets im Schlüsselbund (`llm_key`).
 
-## 4g. Verknüpfen per Drag and drop und Pools (neu in 2.0)
+## 4g. Verknüpfen per Drag and drop und Pools (neu in 2.0; Pools heissen ab 2.5 «Kategorien» und leben im Board, siehe 4k)
 
 - **Ticket und Branch passen nicht zusammen** (zum Beispiel Sammel-Tickets für Bugs): Ziehe die Zeile eines Branches oder MRs auf eine Story in der Kachel
   «Stories in Arbeit». Oder drücke bei der Zeile «Zuordnen» bzw. «Ticket ändern» und gib einen Key ein; das geht auch am Handy.
@@ -258,6 +258,15 @@ Zweite Seite «Board» mit den Spalten **Ideenpool → Geplant → Umsetzung →
 * **Verbinden:** einen MR-/Branch-Chip auf eine andere Karte ziehen, dann gehört er zu deren Ticket (wie das Verknüpfen aus 4g, auch mit `LOC-…`-Aufgaben).
 * **Jira-Panel:** Umsetzung, Review und Test zählen als «in Arbeit». Solche Aufgaben erscheinen zusätzlich zu den Jira-Stories im Panel «Stories in Arbeit», zählen für das Limit und tragen dort ihre Stufe. Jira-Stories in Arbeit bleiben immer sichtbar, auch wenn du sie im Board woandershin schiebst (sonst würde das Limit etwas verstecken).
 * «Fertig» zeigt die 12 neuesten Karten. API: `POST /api/board/stage|add|remove|plan_idea`, `board` im `/api/overview`.
+
+## 4k. Kategorien statt Pools-Kachel, Ideen mit Kategorie (neu in 2.5)
+
+* Die Kachel «Pools» ist weg. Pools sind jetzt **Kategorien im Board**: Projekte oder Aufgabengruppen ohne Jira (z. B. «Agenten-VM», «Produkt X»). Die Leiste über den Spalten filtert nach Kategorie («Alle» zeigt alles), legt neue an, benennt um und löscht (Aufgaben, Tickets und Branches bleiben bestehen). Bestehende Pools und ihre Zuordnungen bleiben erhalten.
+* Karte auf eine Kategorie ziehen ordnet sie zu (Jira-Tickets, lokale Aufgaben, Branches). Eine Karte kann in mehreren Kategorien stehen; das × am Kategorie-Chip nimmt sie wieder heraus.
+* **Regel:** Ideen und lokale Aufgaben ohne Kategorie bleiben im Ideenpool. Ab «Geplant» (und beim Übernehmen einer Idee mit «Planen») braucht eine Aufgabe ohne Jira eine Kategorie. Jira-Tickets brauchen keine. Die letzte Kategorie einer geplanten Aufgabe lässt sich nicht entfernen, solange sie nicht zurück im Ideenpool ist.
+* Ideen ohne Kategorie sieht man nur unter «Alle», nicht innerhalb einer Kategorie.
+* API: `POST /api/board/assign|unassign` (`key` oder `ref`, `pool_id`), `add` und `plan_idea` nehmen `pool_id`.
+* Layout: höchstens 4 Kacheln nebeneinander; in schmalen Kacheln rutschen die Knöpfe unter den Titel, statt ihn zu überdecken.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

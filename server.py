@@ -1216,10 +1216,10 @@ class App:
         known = dict(self._by_key)
         for t in self.store.tasks():
             known[t["key"]] = self._local_ticket(t)
-        pools = {}
+        pools, pool_list = {}, []
         for p in self.store.pools():
             for i in p["items"]:
-                pools.setdefault(i["value"], []).append(p["name"])
+                pools.setdefault(i["value"], []).append({"id": p["id"], "name": p["name"]})
         jira_prog = {st["key"] for st in (j or {}).get("stories", [])}
         keys = set(jira_prog) | set(known) | {k for k in stages if not links.is_ref_key(k)} | set(self.store.pool_tickets())
 
@@ -1257,7 +1257,10 @@ class App:
                                   "idea_id": i["id"]})
         done = sorted((c for c in cards if c["stage"] == "done"), key=lambda c: -c["updated"])
         hide = {c["id"] for c in done[12:]}
-        board = {"cards": [c for c in cards if c["id"] not in hide], "done_hidden": len(hide), "stages": list(links.STAGES)}
+        shown = [c for c in cards if c["id"] not in hide]
+        for p in self.store.pools():
+            pool_list.append({"id": p["id"], "name": p["name"], "count": sum(1 for c in cards if any(x["id"] == p["id"] for x in c["pools"]))})
+        board = {"cards": shown, "done_hidden": len(hide), "stages": list(links.STAGES), "pools": pool_list}
         if j and j.get("ok") is not None and "stories" in j:
             j = dict(j)
             stories = [dict(st) for st in j["stories"]]
@@ -1307,7 +1310,7 @@ class App:
                 self._learn(key)
                 return {"key": self._local(st.stage_set, key, stage)}
             self.cache_t = 0.0
-            return {"key": self._local(st.task_add, title, stage)}
+            return {"key": self._local(st.task_add, title, stage, self._pool_id(body.get("pool_id")))}
         if action == "remove":
             key = str(body.get("key") or "")
             if links.is_local_key(key):
@@ -1323,11 +1326,40 @@ class App:
             idea = next((i for i in self.ideas.list() if i["id"] == iid), None)
             if not idea:
                 raise UserError("Idee nicht gefunden.")
-            key = self._local(st.task_add, idea["text"].split("\n")[0][:200], body.get("stage") or "planned")
+            if not self._pool_id(body.get("pool_id")):
+                raise UserError("Eine Idee braucht eine Kategorie (Pool), bevor sie geplant wird.")
+            key = self._local(st.task_add, idea["text"].split("\n")[0][:200], body.get("stage") or "planned", self._pool_id(body.get("pool_id")))
             self.ideas.set_status(iid, "erledigt")
             self.cache_t = 0.0
             return {"key": key}
+        if action in ("assign", "unassign"):
+            key = body.get("key") or body.get("ref")
+            pid = self._pool_id(body.get("pool_id"))
+            if not pid:
+                raise UserError("Kategorie fehlt.")
+            kind = "ref" if links.is_ref_key(key) else "ticket"
+            if kind == "ticket":
+                key = self._local(links.norm_ticket, key)
+                self._check_ticket_exists(key)
+                if not links.is_local_key(key):
+                    self._learn(key)
+            if action == "assign":
+                self._local(st.add_item, pid, kind, key)
+            else:
+                stage = (st.stages().get(key) or {}).get("stage", "")
+                if kind == "ticket" and links.is_local_key(key) and stage not in ("", "idea") and len(st.pools_of(key)) <= 1:
+                    raise UserError("%s braucht eine Kategorie. Erst in eine andere Kategorie legen oder zurück in den Ideenpool schieben." % key)
+                st.remove_item(pid, kind, key)
+            self.cache_t = 0.0
+            return {}
         raise UserError("Unbekannte Aktion.")
+
+    @staticmethod
+    def _pool_id(v):
+        try:
+            return int(v) if v not in (None, "", 0, "0") else None
+        except (TypeError, ValueError):
+            raise UserError("Ungültige Kategorie.")
 
     def _learn(self, key):
         """Ein frisch aufs Board geholtes Jira-Ticket sofort bekannt machen, ohne auf den nächsten Abgleich zu warten."""

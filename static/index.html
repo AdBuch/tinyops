@@ -219,6 +219,13 @@
   }
   /* Kacheln */
   .board { display: grid; gap: 16px; }
+  .tile { container-type: inline-size; }
+  @container (max-width: 560px) {
+    .item { grid-template-columns: 5px minmax(0, 1fr); }
+    .item .acts { grid-column: 2; justify-content: flex-start; margin-top: 8px; }
+    .l3 { grid-column: 2; }
+    .l2 code { max-width: 220px; }
+  }
   .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
   .thead { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 10px; cursor: pointer; user-select: none; border-bottom: 1px solid transparent; }
   .thead h2, .thead .count { white-space: nowrap; }
@@ -246,7 +253,7 @@
     html, body { height: 100%; }
     #viewOverview { height: calc(100vh - 52px); overflow: hidden; }
     #viewOverview > * { min-height: 0; }
-    #left .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+    #left .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-columns: repeat(auto-fit, minmax(max(380px, calc((100% - 3 * 16px) / 4)), 1fr)); }
     #left .board.o1 { grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); }
     #left .board.o1 .tile.open { grid-column: 1; grid-row: 1 / span 3; }
     #left .board.o1 .tile:not(.open) { grid-column: 2; grid-row: auto; }
@@ -262,7 +269,7 @@
     body { font-size: 15.5px; }
     .l1 .t { font-size: 15.5px; }
     .slot .sum { font-size: 18px; }
-    #left .board { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
+    #left .board { grid-template-columns: repeat(auto-fit, minmax(max(380px, calc((100% - 3 * 20px) / 4)), 1fr)); gap: 20px; }
   }
   @media (max-width: 960px) {
     .tile .expand { display: none; }
@@ -334,6 +341,16 @@
   #viewBoard[hidden] { display: none; }
   .btool { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .btool input[type=text] { flex: 1 1 260px; min-width: 0; max-width: 520px; }
+  .bpools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+  .bpool { display: inline-flex; gap: 6px; align-items: center; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .bpool .count { color: var(--quiet); font-weight: 700; }
+  .bpool.on { background: #7a55d8; border-color: #7a55d8; color: #fff; } .bpool.on .count { color: #fff; }
+  .bpool.dropok { outline: 2px dashed #7a55d8; outline-offset: 2px; background: var(--focus-bg); }
+  .bpools input { width: 150px; padding: 4px 10px; }
+  .bpools .quiet-btn { font-size: 12.5px; }
+  .bcard .btop .chip button.x { margin-left: 2px; }
+  .bcard .bplan { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .bcard .bplan select { max-width: 150px; }
   .bnote { color: var(--quiet); font-size: 13px; margin: 0 0 10px; }
   .bcols { display: grid; grid-template-columns: repeat(7, minmax(230px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 10px; align-items: start; }
   .bgroup { grid-column: 3 / 6; grid-row: 1; font-size: 13px; color: var(--quiet); border-bottom: 2px solid #7a55d8; padding: 0 2px 4px; }
@@ -367,19 +384,6 @@
   details.aiadd summary { cursor: pointer; padding: 12px 14px; color: var(--quiet); }
   .aiadd .aiform { padding: 0 14px 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .aiadd input[data-aiin="name"] { flex: 1 1 140px; min-width: 0; } .aiadd input[type=number] { width: 78px; flex: 0 0 auto; } .aiadd input[data-aiin="unit"] { width: 88px; flex: 0 0 auto; }
-  .poolbar { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  .poolbar input { flex: 1; min-width: 0; }
-  .poolcard { margin: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .poolhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
-  .poolhead h3 { margin: 0; font-size: 14.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .poolhead .count { color: var(--quiet); font-weight: 700; font-size: 13px; }
-  .pitems { padding: 0 12px 8px; display: grid; gap: 6px; }
-  .pitem { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 6px 8px; border-radius: 8px; background: var(--raised); font-size: 13.5px; }
-  .pitem .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pitem.missing { opacity: .6; }
-  .pempty { color: var(--quiet); padding: 6px 12px 12px; font-size: 13px; }
-  .padd { display: flex; gap: 6px; padding: 0 12px 12px; }
-  .padd input { flex: 1; min-width: 0; padding: 4px 8px; font-size: 13px; }
   .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
   .pick button { display: inline-flex; gap: 6px; align-items: center; }
 </style>
@@ -436,10 +440,12 @@
   <div class="btool">
     <input type="text" id="bAddText" placeholder="Neue Aufgabe oder Jira-Key, z. B. DLP-123" maxlength="200" autocomplete="off">
     <select id="bAddStage" title="In welche Spalte"></select>
+    <select id="bAddPool" title="Kategorie (Pool). Aufgaben ohne Jira brauchen ab «Geplant» eine."></select>
     <button id="bAdd" class="primary">Hinzufügen</button>
     <label class="check"><input type="checkbox" id="bOrph"><span>MRs und Branches ohne Ticket zeigen</span></label>
   </div>
-  <p class="bnote">Umsetzung, Review und Test zählen als «in Arbeit» und erscheinen im Jira-Panel. Die Spalten gelten nur hier im Panel: In Jira wird nichts verändert.</p>
+  <div class="bpools" id="bpools"></div>
+  <p class="bnote">Kategorien (Pools) sind Projekte oder Aufgabengruppen ohne Jira. Ideen ohne Kategorie bleiben im Ideenpool; ab «Geplant» braucht eine Aufgabe ohne Jira eine Kategorie. Umsetzung, Review und Test zählen als «in Arbeit» und erscheinen im Jira-Panel. Die Spalten gelten nur hier im Panel: In Jira wird nichts verändert.</p>
   <div class="bcols" id="bcols"></div>
 </div>
 <div id="viewSettings" hidden></div>
@@ -718,13 +724,12 @@ function renderLeft() {
   tiles.mrs = { title: 'Meine MRs', count: mrs.length, body: listBody(mrs, 'Keine weiteren offenen MRs.') };
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
-  tiles.pools = { title: 'Pools', count: (state.pools || []).length, hint: 'ausserhalb von Sprint und Story-Limit', body: poolsBody() };
   if (F().ai) tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
   const board = $('board');
-  const keep = [...document.querySelectorAll('#poolName, [data-pkey], [data-aiin]')].map(e => ({ sel: e.id ? '#' + e.id : e.dataset.pkey ? `[data-pkey="${e.dataset.pkey}"]` : `[data-aiin="${e.dataset.aiin}"]`, v: e.value, f: e === document.activeElement }));
+  const keep = [...document.querySelectorAll('[data-aiin]')].map(e => ({ sel: `[data-aiin="${e.dataset.aiin}"]`, v: e.value, f: e === document.activeElement }));
   board.className = 'board o' + open.length;
   if (open.length === 2) {
     const closed = ids.filter(id => !open.includes(id));
@@ -977,22 +982,27 @@ document.addEventListener('change', ev => {
 const STAGES = ['idea', 'planned', 'impl', 'review', 'test', 'tested', 'done'];
 const STAGE_LABEL = { idea: 'Ideenpool', planned: 'Geplant', impl: 'Umsetzung', review: 'Review', test: 'Test', tested: 'Getestet', done: 'Fertig' };
 $('bAddStage').innerHTML = STAGES.filter(x => x !== 'idea' || true).map(x => `<option value="${x}" ${x === 'planned' ? 'selected' : ''}>${STAGE_LABEL[x]}</option>`).join('');
+let selPool = LS.get('bPool', 0);    // 0 = alle
 let showOrph = LS.get('bOrph', true);
 $('bOrph').checked = showOrph;
 $('bOrph').addEventListener('change', ev => { showOrph = ev.target.checked; LS.set('bOrph', showOrph); renderBoard(); });
 
+function poolOptions(sel, placeholder) {
+  const ps = (state.board && state.board.pools) || [];
+  return (placeholder ? '<option value="">Kategorie wählen …</option>' : '<option value="">ohne Kategorie</option>') + ps.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+}
 function boardCard(c) {
   const i = STAGES.indexOf(c.stage);
   const isIdea = !!c.idea_id;
   const key = c.key ? `<span class="bkey ${c.local ? 'loc' : 'jira'}">${esc(c.key)}</span>` : `<span class="bkey loc">${c.orphan ? 'ohne Ticket' : 'Idee'}</span>`;
   const chips = [c.local && c.key ? '<span class="chip">Lokal</span>' : '', c.status && !c.local ? `<span class="chip" title="Status in Jira">${esc(c.status)}</span>` : '',
     c.jira_in_progress && c.stage !== 'impl' && c.stage !== 'review' && c.stage !== 'test' ? '<span class="chip warn" title="In Jira noch in Arbeit">Jira: in Arbeit</span>' : '',
-    ...c.pools.map(p => `<span class="chip" title="Pool">${esc(p)}</span>`)].join('');
+    ...c.pools.map(p => `<span class="chip tk" title="Kategorie">${esc(p.name)}${c.idea_id ? '' : `<button class="x" data-bpoolrem="${esc(c.id)}" data-pool="${p.id}" title="Aus der Kategorie nehmen" aria-label="Aus der Kategorie nehmen">×</button>`}</span>`)].join('');
   const title = c.title || (c.known === false ? '(Ticket nicht lesbar)' : '');
   const sum = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
   const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}</a>`).join('');
   const act = isIdea
-    ? `<button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen">Planen</button>`
+    ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>`
     : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
   return `<div class="bcard" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''}>
     <div class="btop">${key}${chips}</div><div class="bsum">${sum}</div>${mrs ? `<div class="links">${mrs}</div>` : ''}<div class="bact">${act}</div></div>`;
@@ -1000,7 +1010,9 @@ function boardCard(c) {
 function renderBoard() {
   const b = state && state.board, el = $('bcols');
   if (!b || !state.configured) { el.innerHTML = '<div class="bempty">Noch nicht verbunden.</div>'; return; }
-  const cards = b.cards.filter(c => showOrph || !c.orphan);
+  if (selPool && !b.pools.some(p => p.id === selPool)) { selPool = 0; LS.set('bPool', 0); }
+  renderPoolBar(b);
+  const cards = b.cards.filter(c => (showOrph || !c.orphan) && (!selPool || c.pools.some(p => p.id === selPool)));
   const col = st => cards.filter(c => c.stage === st).sort((a, z) => (a.key || a.title).localeCompare(z.key || z.title, 'de', { numeric: true }));
   const wip = state.jira ? ` · ${state.jira.count} von ${state.jira.limit} im Jira-Panel` : '';
   el.innerHTML = `<div class="bgroup">In Arbeit${esc(wip)}</div>` + STAGES.map((st, n) => {
@@ -1009,23 +1021,61 @@ function renderBoard() {
       ${cs.map(boardCard).join('') || '<div class="bempty">Leer</div>'}${st === 'done' && b.done_hidden ? `<div class="bempty">+ ${b.done_hidden} ältere nicht angezeigt</div>` : ''}</div>`;
   }).join('');
 }
+function renderPoolBar(b) {
+  const total = b.cards.length;
+  const old = $('poolNew'), oldV = old ? old.value : '', hadFocus = old && old === document.activeElement;
+  $('bpools').innerHTML = `<span class="bpool ${selPool ? '' : 'on'}" data-poolsel="0">Alle <span class="count">${total}</span></span>` +
+    b.pools.map(p => `<span class="bpool ${selPool === p.id ? 'on' : ''}" data-poolsel="${p.id}" data-pool="${p.id}" title="Karten hierher ziehen, um sie dieser Kategorie zuzuordnen">${esc(p.name)} <span class="count">${p.count}</span></span>`).join('') +
+    `<input type="text" id="poolNew" placeholder="Neue Kategorie, z. B. Agenten-VM" maxlength="60" autocomplete="off"><button id="poolNewBtn">Anlegen</button>` +
+    (selPool ? `<button class="quiet-btn" data-poolren="${selPool}">Umbenennen</button><button class="quiet-btn" data-pooldel="${selPool}">Löschen</button>` : '');
+  if (oldV) { $('poolNew').value = oldV; if (hadFocus) $('poolNew').focus(); }
+  const sel = $('bAddPool'), cur = sel.value;
+  sel.innerHTML = poolOptions(selPool || (+cur || 0), false);
+}
 async function boardAdd() {
   const i = $('bAddText'), v = i.value.trim();
   if (!v) return;
+  const stage = $('bAddStage').value, pool = $('bAddPool').value;
+  if (!pool && stage !== 'idea' && !/^[A-Za-z][A-Za-z0-9_]{1,19}-\d{1,9}$/.test(v)) { toast('Ab «Geplant» braucht eine Aufgabe ohne Jira eine Kategorie. Wähle eine oder lege sie im Ideenpool ab.'); return; }
   i.value = '';
-  await act(() => post('/api/board/add', { title: v, stage: $('bAddStage').value }), 'Hinzugefügt');
+  await act(() => post('/api/board/add', { title: v, stage, pool_id: pool ? +pool : null }), 'Hinzugefügt');
 }
 $('bAdd').onclick = boardAdd;
 $('bAddText').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); boardAdd(); } });
+$('viewBoard').addEventListener('click', ev => {
+  const ps = ev.target.closest('[data-poolsel]');
+  if (ps) { selPool = +ps.dataset.poolsel; LS.set('bPool', selPool); renderBoard(); }
+});
+$('viewBoard').addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.id === 'poolNew') { ev.preventDefault(); $('poolNewBtn').click(); } });
 $('viewBoard').addEventListener('click', async ev => {
   const b = ev.target.closest('button');
   if (!b) return;
   const find = id => (state.board.cards.find(c => c.id === id) || {});
+  if (b.id === 'poolNewBtn') {
+    const i = $('poolNew'); if (!i.value.trim()) return;
+    const v = i.value; i.value = '';
+    const r = await act(() => post('/api/pools', { name: v }), 'Kategorie angelegt');
+    if (r && r.id) { selPool = r.id; LS.set('bPool', selPool); renderBoard(); }
+    return;
+  }
+  if (b.dataset.poolren) { const n = prompt('Neuer Name', ((state.board.pools.find(p => p.id === +b.dataset.poolren) || {}).name) || ''); if (n && n.trim()) await act(() => post('/api/pools/rename', { id: +b.dataset.poolren, name: n })); return; }
+  if (b.dataset.pooldel) {
+    const p = state.board.pools.find(x => x.id === +b.dataset.pooldel) || {};
+    if (confirm(`Kategorie «${p.name}» löschen? Aufgaben, Tickets und Branches bleiben bestehen, verlieren nur die Zuordnung.`)) { selPool = 0; LS.set('bPool', 0); await act(() => post('/api/pools/delete', { id: +b.dataset.pooldel }), 'Kategorie gelöscht'); }
+    return;
+  }
+  if (b.dataset.bpoolrem) {
+    const c = find(b.dataset.bpoolrem);
+    await act(() => post('/api/board/unassign', c.key ? { key: c.key, pool_id: +b.dataset.pool } : { ref: c.id, pool_id: +b.dataset.pool }), 'Aus der Kategorie genommen');
+    return;
+  }
   if (b.dataset.bmove) {
     const c = find(b.dataset.bmove), to = STAGES[STAGES.indexOf(c.stage) + (+b.dataset.dir)];
     if (to) await moveCard(c, to);
   } else if (b.dataset.bplan) {
-    await act(() => post('/api/board/plan_idea', { id: +b.dataset.bplan }), 'Geplant');
+    const sel = document.querySelector(`[data-bplansel="${b.dataset.bplan}"]`);
+    if (!sel.value) { toast('Wähle zuerst eine Kategorie. Ohne Kategorie bleibt die Idee im Ideenpool.'); return; }
+    await act(() => post('/api/board/plan_idea', { id: +b.dataset.bplan, pool_id: +sel.value }), 'Geplant');
   } else if (b.dataset.brem) {
     if (b.dataset.local === '1' && !confirm('Aufgabe «' + b.dataset.t + '» löschen?')) return;
     await act(() => post('/api/board/remove', { key: b.dataset.brem }), b.dataset.local === '1' ? 'Gelöscht' : 'Zurückgesetzt');
@@ -1037,19 +1087,6 @@ function moveCard(c, stage) {
   return act(() => post('/api/board/stage', body), STAGE_LABEL[stage]);
 }
 
-function poolsBody() {
-  const pools = state.pools || [];
-  const bar = `<div class="poolbar"><input type="text" id="poolName" placeholder="Neuer Pool, z. B. Agenten-VM" maxlength="60" autocomplete="off"><button id="poolAdd">Anlegen</button></div>`;
-  if (!pools.length) return bar + '<div class="empty">Ein Pool sammelt Tickets und Branches, die nicht zum Sprint gehören, etwa für ein Produkt oder deine Agenten-VM. Ziehe danach Zeilen oder Stories hinein.</div>';
-  return bar + pools.map(p => {
-    const t = p.tickets.map(x => `<div class="pitem"><span class="src jira">Jira</span><a class="grow" href="${esc(x.url || '#')}" target="_blank" rel="noopener" title="${esc(x.summary)}"><b>${esc(x.key)}</b> ${x.known ? esc(x.summary) : '<span class="quiet">(nicht lesbar)</span>'}</a>${x.status ? `<span class="chip">${esc(x.status)}</span>` : ''}<button class="x" data-prem="ticket" data-pid="${p.id}" data-v="${esc(x.key)}" title="Aus dem Pool nehmen">×</button></div>`).join('');
-    const r = p.refs.map(x => `<div class="pitem ${x.missing ? 'missing' : ''}"><span class="src gl">${x.iid ? 'MR !' + esc(x.iid) : 'Branch'}</span><${x.missing ? 'span' : 'a'} class="grow" ${x.missing ? '' : `href="${esc(x.url)}" target="_blank" rel="noopener"`} title="${esc(x.branch)}">${esc(x.title)}${x.missing ? ' <span class="quiet">(nicht mehr offen)</span>' : ''}</${x.missing ? 'span' : 'a'}><button class="x" data-prem="ref" data-pid="${p.id}" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Aus dem Pool nehmen">×</button></div>`).join('');
-    return `<div class="poolcard" data-pool="${p.id}"><div class="poolhead"><h3 title="${esc(p.name)}">${esc(p.name)}</h3><span class="count">${p.tickets.length + p.refs.length}</span>
-      <button class="quiet-btn" data-pren="${p.id}" data-name="${esc(p.name)}" title="Umbenennen">Umbenennen</button><button class="quiet-btn" data-pdel="${p.id}" data-name="${esc(p.name)}" title="Pool löschen">Löschen</button></div>
-      <div class="pitems">${t}${r}</div>${p.tickets.length + p.refs.length ? '' : '<div class="pempty">Leer. Zeile, Story oder Ticket hierher ziehen.</div>'}
-      <div class="padd"><input type="text" data-pkey="${p.id}" placeholder="Ticket-Key hinzufügen, z. B. OPS-7" autocomplete="off" spellcheck="false"><button data-padd="${p.id}">Hinzufügen</button></div></div>`;
-  }).join('');
-}
 
 async function act(fn, ok) {
   try { const r = await fn(); if (ok) toast(ok); await load(); return r; } catch (e) { toast(e.message); }
@@ -1083,8 +1120,8 @@ document.addEventListener('dragend', () => { dragKind = ''; document.querySelect
 let dragKind = '';
 function target(ev) {
   const c = x => ev.target.closest && ev.target.closest(x);
-  if (dragKind === 'card') return c('.bcol[data-stage]');
-  return c('.bcard[data-bkey]') || c('.slot[data-skey]') || c('.poolcard[data-pool]');
+  if (dragKind === 'card') return c('.bpool[data-pool]') || c('.bcol[data-stage]');
+  return c('.bcard[data-bkey]') || c('.slot[data-skey]');
 }
 document.addEventListener('dragover', ev => {
   if (!ev.dataTransfer || !ev.dataTransfer.types.includes(MIME)) return;
@@ -1098,6 +1135,12 @@ document.addEventListener('drop', async ev => {
   ev.preventDefault();
   document.querySelectorAll('.dropok, .dragging').forEach(e => e.classList.remove('dropok', 'dragging'));
   const d = JSON.parse(ev.dataTransfer.getData(MIME));
+  if (t.classList.contains('bpool')) {                    // Karte in eine Kategorie ziehen
+    const c = state.board.cards.find(x => x.id === d.id);
+    if (c && !c.idea_id) await act(() => post('/api/board/assign', c.key ? { key: c.key, pool_id: +t.dataset.pool } : { ref: c.id, pool_id: +t.dataset.pool }), 'Kategorie gesetzt');
+    else toast('Ideen werden mit «Planen» einer Kategorie zugeordnet.');
+    return;
+  }
   if (t.dataset.bkey || t.dataset.stage) {                // Board
     if (d.t === 'card' && t.dataset.stage) { await moveCard(state.board.cards.find(c => c.id === d.id), t.dataset.stage); return; }
     if (d.t === 'ref' && t.dataset.bkey) { await act(() => post('/api/links', { project_id: d.p, branch: d.b, ticket: t.dataset.bkey }), `Mit ${t.dataset.bkey} verknüpft`); return; }
@@ -1107,9 +1150,6 @@ document.addEventListener('drop', async ev => {
   if (t.dataset.skey) {                                  // auf eine Story: Branch/MR verknüpfen
     if (d.t !== 'ref') { toast('Auf eine Story lassen sich nur Branches und MRs ziehen.'); return; }
     await act(() => post('/api/links', { project_id: d.p, branch: d.b, ticket: t.dataset.skey }), `Mit ${t.dataset.skey} verknüpft`);
-  } else {                                               // in einen Pool
-    const id = +t.dataset.pool;
-    await act(() => post('/api/pools/add', d.t === 'ticket' ? { id, kind: 'ticket', value: d.key } : { id, kind: 'ref', project_id: d.p, branch: d.b }), 'Im Pool');
   }
 });
 
@@ -1135,20 +1175,6 @@ document.addEventListener('click', async ev => {
     g('u' + id).value = ''; g('r' + id).value = '';
     await act(() => post('/api/ai/set', body), 'Stand gesetzt'); return;
   }
-  if (ev.target.id === 'poolAdd') { const i = $('poolName'); if (i.value.trim()) { const v = i.value; i.value = ''; await act(() => post('/api/pools', { name: v }), 'Pool angelegt'); } return; }
-  const prem = ev.target.closest('[data-prem]');
-  if (prem) { await act(() => post('/api/pools/remove', prem.dataset.prem === 'ticket' ? { id: +prem.dataset.pid, kind: 'ticket', value: prem.dataset.v } : { id: +prem.dataset.pid, kind: 'ref', project_id: +prem.dataset.p, branch: prem.dataset.b })); return; }
-  const pd = ev.target.closest('[data-pdel]');
-  if (pd) { if (confirm(`Pool «${pd.dataset.name}» löschen? Die Tickets und Branches selbst bleiben unberührt.`)) await act(() => post('/api/pools/delete', { id: +pd.dataset.pdel }), 'Pool gelöscht'); return; }
-  const pr = ev.target.closest('[data-pren]');
-  if (pr) { const n = prompt('Neuer Name', pr.dataset.name); if (n && n.trim()) await act(() => post('/api/pools/rename', { id: +pr.dataset.pren, name: n })); return; }
-  const pa = ev.target.closest('[data-padd]');
-  if (pa) { const i = document.querySelector(`[data-pkey="${pa.dataset.padd}"]`); if (i.value.trim()) { const v = i.value; i.value = ''; await act(() => post('/api/pools/add', { id: +pa.dataset.padd, kind: 'ticket', value: v }), 'Im Pool'); } }
-});
-document.addEventListener('keydown', ev => {
-  if (ev.key !== 'Enter') return;
-  if (ev.target.id === 'poolName') { ev.preventDefault(); $('poolAdd').click(); }
-  if (ev.target.dataset && ev.target.dataset.pkey) { ev.preventDefault(); document.querySelector(`[data-padd="${ev.target.dataset.pkey}"]`).click(); }
 });
 
 // Dialog «Ticket zuordnen» (auch für Touch-Geräte, wo Ziehen nicht geht)
@@ -1159,7 +1185,7 @@ function openLink(btn) {
   $('lkSrc').innerHTML = `<span class="src gl">${btn.dataset.iid ? 'MR !' + esc(btn.dataset.iid) : 'Branch'}</span> ${esc(btn.dataset.t)} <code>${esc(btn.dataset.b)}</code>`;
   const stories = (state.jira && state.jira.stories) || [];
   $('lkPick').innerHTML = stories.map(s => `<button data-lkpick="${esc(s.key)}" title="${esc(s.summary)}"><b>${esc(s.key)}</b> ${esc(s.summary.slice(0, 34))}</button>`).join('') || '<span class="quiet small">Keine Story in Arbeit.</span>';
-  $('lkPools').innerHTML = (state.pools || []).length ? `<div class="small quiet" style="margin-top:12px">Oder in einen Pool legen:</div><div class="pick">${state.pools.map(p => `<button data-lkpool="${p.id}">${esc(p.name)}</button>`).join('')}</div>` : '';
+  $('lkPools').innerHTML = (state.pools || []).length ? `<div class="small quiet" style="margin-top:12px">Oder einer Kategorie zuordnen:</div><div class="pick">${state.pools.map(p => `<button data-lkpool="${p.id}">${esc(p.name)}</button>`).join('')}</div>` : '';
   $('lkKey').value = (item && item.manual_link) || '';
   $('lkUnlink').hidden = !(item && item.manual_link);
   $('lkMsg').innerHTML = '';

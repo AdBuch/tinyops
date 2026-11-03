@@ -174,10 +174,19 @@ class _BoardMixin:
             raise LinkError("Unbekannte Stufe.")
         return stage
 
+    def pools_of(self, key):
+        """Kategorien (Pools) einer Aufgabe oder eines Branches."""
+        with self._conn() as c:
+            if c is None:
+                return []
+            return [r["pool_id"] for r in c.execute("select pool_id from pool_items where value=? and kind in ('ticket','ref')", (str(key),))]
+
     def stage_set(self, key, stage):
         self._check_stage(stage)
         with self._conn(True) as c:
             key = self._stage_key(c, key)
+            if is_local_key(key) and stage != "idea" and not c.execute("select 1 from pool_items where kind='ticket' and value=?", (key,)).fetchone():
+                raise LinkError("%s braucht zuerst eine Kategorie (Pool), sonst bleibt die Aufgabe im Ideenpool." % key)
             c.execute("insert into task_stage(key, stage, updated) values(?,?,?) on conflict(key) do update set stage=excluded.stage, updated=excluded.updated",
                       (key, stage, time.time()))
         return key
@@ -186,17 +195,23 @@ class _BoardMixin:
         with self._conn(True) as c:
             return c.execute("delete from task_stage where key=?", (str(key),)).rowcount > 0
 
-    def task_add(self, title, stage="planned"):
+    def task_add(self, title, stage="idea", pool_id=None):
         title = " ".join(str(title or "").split())
         if not title or len(title) > 200:
             raise LinkError("Der Titel fehlt oder ist länger als 200 Zeichen.")
         self._check_stage(stage)
+        if stage != "idea" and not pool_id:
+            raise LinkError("Ab «Geplant» braucht eine Aufgabe ohne Jira eine Kategorie (Pool). Ohne Kategorie bleibt sie im Ideenpool.")
         with self._conn(True) as c:
+            if pool_id:
+                self._check_pool(c, pool_id)
             if c.execute("select count(*) from tasks").fetchone()[0] >= 500:
                 raise LinkError("Höchstens 500 lokale Aufgaben.")
             tid = c.execute("insert into tasks(title, created) values(?,?)", (title, self._now())).lastrowid
             key = "%s-%d" % (LOCAL_PREFIX, tid)
             c.execute("insert into task_stage(key, stage, updated) values(?,?,?)", (key, stage, time.time()))
+            if pool_id:
+                c.execute("insert or ignore into pool_items(pool_id, kind, value, created) values(?,?,?,?)", (int(pool_id), "ticket", key, self._now()))
         return key
 
     def task_delete(self, key):
