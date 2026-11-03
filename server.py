@@ -128,7 +128,7 @@ LLM_DEFAULTS = {
     "provider": "ollama",          # ollama oder openai (llama.cpp, LM Studio, vLLM ...), siehe llm.py
     "url": "http://127.0.0.1:11434",
     "model": "",
-    "timeout": 120,
+    "timeout": 120,                # Sekunden ohne ein Byte Antwort, bis abgebrochen wird (grosse Modelle laden beim ersten Aufruf lange)
     "allow_remote": False,         # nur das eigene Netz, solange das nicht ausdrücklich an ist (DLP)
 }
 
@@ -1614,6 +1614,9 @@ def make_handler(app):
             if path == "/api/settings/test/llm":
                 res = settings.test_llm(body, stored)
                 hlog.info("Test KI: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                for x in res["steps"]:
+                    if x["status"] == "warn":
+                        hlog.warning("Test KI, Warnung bei «%s»: %s", x["title"], x["detail"])
                 return self._send(200, res)
             if path == "/api/settings/projects":
                 return self._send(200, settings.search_projects(body, stored))

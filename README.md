@@ -1,4 +1,4 @@
-# tinyops 2.0: Arbeitspanel
+# tinyops 2.1: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -210,6 +210,9 @@ sind schon aus Branch, MR-Titel, MR-Beschreibung und Commit-Titeln vorbereitet (
 (llama.cpp `llama-server`, LM Studio, vLLM; Adresse z. B. `http://127.0.0.1:8080`). Der Verbindungstest prüft Adresse, Server, Modell und einen Testentwurf.
 - **DLP:** Es werden nur Adressen im eigenen Netz angenommen (localhost, private Adressen, Namen im Büro-Netz). Eine externe Adresse braucht ein ausdrückliches Häkchen.
   Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel, nie Diffs oder Code. Antwortet das Modell nicht brauchbar, bleibt die Vorlage.
+- **Langsame oder grosse Modelle:** Die Antwort wird gestreamt; der Timeout (Standard 120 s, einstellbar) gilt nur für Pausen ohne Lebenszeichen, nicht für die ganze Antwort.
+  Das erste Zeichen kommt bei grossen Modellen erst nach dem Laden. Der Testentwurf ist auf 400 Token begrenzt und zeigt die Dauer.
+- **Log:** Jede Anfrage, Dauer, «erstes Zeichen nach …», Fehler und alle Testschritte stehen im Log (Knopf «Log» oben, Logger `tinyops.llm`). Mit `-v` zusätzlich Prompt und Antwort.
 - **Weitere APIs:** In `llm.py` eine Klasse mit `models()` und `chat()` schreiben und mit `register()` eintragen; sie erscheint dann in der Auswahl.
   Ein optionaler Zugangsschlüssel liegt wie alle Secrets im Schlüsselbund (`llm_key`).
 

@@ -14,11 +14,15 @@ import ipaddress
 import json
 import re
 import socket
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
+import tlog
 from net import NoRedirect, classify
+
+log = tlog.get("llm")
 
 LOCAL_SUFFIXES = (".local", ".lan", ".internal", ".intranet", ".home.arpa")
 
@@ -55,6 +59,62 @@ def check_url(cfg):
     return url
 
 
+def _chat_stream(url, body, key, idle, deadline, ctx=None):
+    """POST mit Streaming. `idle` = längste Pause ohne ein Byte (die erste Antwort braucht bei grossen Modellen oft lange,
+    weil das Modell erst geladen wird), `deadline` = Obergrenze für alles. Gibt (Text, Sekunden bis zum ersten Zeichen) zurück."""
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    req = urllib.request.Request(url, data=json.dumps(dict(body, stream=True)).encode("utf-8"), headers=headers)
+    opener = urllib.request.build_opener(NoRedirect, *([urllib.request.HTTPSHandler(context=ctx)] if ctx else []))
+    t0 = time.time()
+    first, parts = None, []
+    try:
+        with opener.open(req, timeout=idle) as r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if not line or line == "[DONE]":
+                    continue
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                piece = ""
+                if isinstance(d.get("message"), dict):                       # Ollama
+                    piece = d["message"].get("content") or ""
+                elif d.get("choices"):                                       # OpenAI: Strom (delta) oder fertige Antwort (message)
+                    c0 = d["choices"][0]
+                    piece = ((c0.get("delta") or c0.get("message") or {}).get("content")) or ""
+                if piece and first is None:
+                    first = time.time() - t0
+                parts.append(piece)
+                if time.time() - t0 > deadline:
+                    raise LlmError("Das Modell war nach %d s noch nicht fertig (Obergrenze). Kleineres oder schnelleres Modell nehmen." % deadline)
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read(500).decode("utf-8", "replace")
+        except Exception:
+            pass
+        hint = " (Zugangsschlüssel falsch?)" if e.code in (401, 403) else " (Modellname falsch?)" if e.code == 404 else ""
+        raise LlmError("HTTP %s%s %s" % (e.code, hint, detail.strip()[:200]))
+    except (socket.timeout, TimeoutError):
+        raise LlmError("Seit %d s kam keine Antwort, nach %.0f s abgebrochen. Ein grosses Modell wird beim ersten Aufruf erst geladen; "
+                       "dann hilft ein höherer Timeout in den Einstellungen oder ein erster Aufruf direkt am Server." % (idle, time.time() - t0))
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, (socket.timeout, TimeoutError)):
+            raise LlmError("Keine Verbindung innerhalb von %d s zustande gekommen." % idle)
+        raise LlmError(classify(e)[1])
+    except OSError as e:
+        raise LlmError(classify(e)[1])
+    text = "".join(parts).strip()
+    if not text:
+        raise LlmError("Das Modell hat nichts geantwortet (leere Antwort). Läuft es mit einem Chat-Format? Modellname prüfen.")
+    return text, first
+
+
 def _request(url, body=None, key="", timeout=120, ctx=None):
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -86,15 +146,15 @@ class Ollama:
     default_url = "http://127.0.0.1:11434"
 
     def models(self, cfg, key, ctx=None):
-        d = _request(cfg["url"].rstrip("/") + "/api/tags", key=key, timeout=10, ctx=ctx)
+        d = _request(cfg["url"].rstrip("/") + "/api/tags", key=key, timeout=15, ctx=ctx)
         return [m.get("name", "") for m in d.get("models", [])]
 
     def chat(self, cfg, key, system, user, ctx=None):
-        d = _request(cfg["url"].rstrip("/") + "/api/chat", {
-            "model": cfg["model"], "stream": False, "format": "json",
+        return _chat_stream(cfg["url"].rstrip("/") + "/api/chat", {
+            "model": cfg["model"], "format": "json",
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "options": {"temperature": 0.2}}, key, int(cfg.get("timeout", 120)), ctx)
-        return ((d.get("message") or {}).get("content") or "").strip()
+            "options": {"temperature": 0.2, "num_predict": int(cfg.get("max_tokens", 1500))}},
+            key, int(cfg.get("timeout", 120)), int(cfg.get("deadline", 600)), ctx)
 
 
 class OpenAICompat:
@@ -109,14 +169,10 @@ class OpenAICompat:
 
     def chat(self, cfg, key, system, user, ctx=None):
         base = cfg["url"].rstrip("/")
-        d = _request(base + ("/chat/completions" if base.endswith("/v1") else "/v1/chat/completions"), {
-            "model": cfg.get("model") or "local", "temperature": 0.2,
+        return _chat_stream(base + ("/chat/completions" if base.endswith("/v1") else "/v1/chat/completions"), {
+            "model": cfg.get("model") or "local", "temperature": 0.2, "max_tokens": int(cfg.get("max_tokens", 1500)),
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
-            key, int(cfg.get("timeout", 120)), ctx)
-        try:
-            return (d["choices"][0]["message"]["content"] or "").strip()
-        except (KeyError, IndexError, TypeError):
-            raise LlmError("Antwort hat nicht das erwartete Format (choices[0].message.content).")
+            key, int(cfg.get("timeout", 120)), int(cfg.get("deadline", 600)), ctx)
 
 
 PROVIDERS = {}
@@ -189,8 +245,23 @@ def parse_draft(text, allowed_types):
 def draft_ticket(cfg, key, ctx, hint="", ssl_ctx=None):
     url = check_url(cfg)
     c = dict(cfg, url=url)
-    text = provider_for(c).chat(c, key, SYSTEM, build_prompt(ctx, hint), ssl_ctx)
-    return parse_draft(text, ctx.get("issue_types"))
+    prompt = build_prompt(ctx, hint)
+    host = urllib.parse.urlparse(url).netloc
+    log.info("Anfrage an %s (%s, Modell %s): %d Zeichen Prompt, Idle-Timeout %s s", host, c.get("provider"), c.get("model") or "-", len(prompt), c.get("timeout", 120))
+    log.debug("Prompt:\n%s", prompt)
+    t0 = time.time()
+    try:
+        text, first = provider_for(c).chat(c, key, SYSTEM, prompt, ssl_ctx)
+    except LlmError as e:
+        log.warning("Anfrage an %s fehlgeschlagen nach %.1f s: %s", host, time.time() - t0, e)
+        raise
+    log.info("Antwort von %s nach %.1f s (erstes Zeichen nach %.1f s), %d Zeichen", host, time.time() - t0, first or 0, len(text))
+    log.debug("Antwort:\n%s", text)
+    try:
+        return parse_draft(text, ctx.get("issue_types"))
+    except LlmError as e:
+        log.warning("Antwort nicht auswertbar: %s", e)
+        raise
 
 
 def template_draft(ctx):
@@ -209,6 +280,7 @@ def template_draft(ctx):
 def test(cfg, key, ssl_ctx=None):
     """Prüft Schritt für Schritt. Gibt (Schritte, Modelle) zurück; jeder Schritt (status, Titel, Detail, Hinweis)."""
     steps, models = [], []
+    log.info("Test: Anbieter %s, Adresse %s, Modell %s", cfg.get("provider"), cfg.get("url"), cfg.get("model") or "-")
     try:
         url = check_url(cfg)
         steps.append(("ok", "Adresse", "%s (%s)" % (url, "eigenes Netz" if is_local(url) else "extern erlaubt"), ""))
@@ -217,8 +289,9 @@ def test(cfg, key, ssl_ctx=None):
     try:
         p = provider_for(cfg)
         c = dict(cfg, url=url)
+        t1 = time.time()
         models = p.models(c, key, ssl_ctx)
-        steps.append(("ok", "Server antwortet", "%s, %d Modell(e) gefunden" % (p.label, len(models)), ""))
+        steps.append(("ok", "Server antwortet", "%s, %d Modell(e) gefunden (%.1f s)" % (p.label, len(models), time.time() - t1), ""))
     except LlmError as e:
         hint = "Läuft der Server? Ollama: «ollama serve». llama.cpp: «llama-server -m modell.gguf». Falscher Dialekt? Dann den anderen Anbieter wählen."
         steps.append(("fail", "Server antwortet", str(e), hint))
@@ -234,8 +307,11 @@ def test(cfg, key, ssl_ctx=None):
     try:
         sample = {"title": "Retry bei HTTP 429 im Adapter", "branch": "feature/retry-429", "project": "demo", "commits": ["Retry mit Backoff"],
                   "issue_types": ["Story", "Bug"]}
-        d = draft_ticket(cfg, key, sample, ssl_ctx=ssl_ctx)
-        steps.append(("ok", "Testentwurf", "Titel: %s" % d["summary"], ""))
+        t2 = time.time()
+        d = draft_ticket(dict(cfg, max_tokens=min(int(cfg.get("max_tokens", 1500)), 400)), key, sample, ssl_ctx=ssl_ctx)
+        steps.append(("ok", "Testentwurf", "Titel: «%s» (%.1f s)" % (d["summary"], time.time() - t2), ""))
     except LlmError as e:
-        steps.append(("warn", "Testentwurf", str(e), "Verbindung steht, aber das Modell antwortet nicht brauchbar. Anderes Modell probieren."))
+        steps.append(("warn", "Testentwurf", str(e), "Verbindung steht, aber der Testentwurf hat nicht geklappt. Meist: das Modell wird erst geladen (Timeout erhöhen und noch einmal testen) oder es antwortet nicht als JSON (anderes Modell)."))
+    for st, title, detail, _ in steps:
+        (log.info if st == "ok" else log.warning)("Test %s: %s – %s", title, st, detail)
     return steps, models

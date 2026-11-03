@@ -401,7 +401,7 @@ def _jira_headers(form, stored):
 def test_llm(form, stored):
     """Prüft den lokalen Sprachmodell-Server: Adresse (nur eigenes Netz), Antwort, Modell, Testentwurf."""
     cfg = {"provider": form.get("provider") or "ollama", "url": (form.get("url") or "").strip(), "model": (form.get("model") or "").strip(),
-           "allow_remote": bool(form.get("allow_remote")), "timeout": 120}
+           "allow_remote": bool(form.get("allow_remote")), "timeout": _int(form.get("timeout"), "timeout", 10, 900, {}, 120)}
     key = (form.get("secret") or "").strip() or (stored("llm_key")[0] or "")
     if key:
         store.register(key)
@@ -696,6 +696,7 @@ def view(cfg, config_path, features_default=None):
         "llm": {"enabled": bool((cfg.get("llm") or {}).get("enabled", False)), "provider": (cfg.get("llm") or {}).get("provider", "ollama"),
                 "url": (cfg.get("llm") or {}).get("url", "http://127.0.0.1:11434"), "model": (cfg.get("llm") or {}).get("model", ""),
                 "allow_remote": bool((cfg.get("llm") or {}).get("allow_remote", False)),
+                "timeout": (cfg.get("llm") or {}).get("timeout", 120),
                 "providers": [{"id": k, "label": v.label, "url": v.default_url} for k, v in llm.PROVIDERS.items()]},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
@@ -791,6 +792,7 @@ def build_config(current, p):
         lc["url"] = (m.get("url") or "").strip().rstrip("/")
         lc["model"] = (m.get("model") or "").strip()[:100]
         lc["allow_remote"] = bool(m.get("allow_remote", False))
+        lc["timeout"] = _int(m.get("timeout"), "llm.timeout", 10, 900, errors, 120)
         if lc["enabled"]:
             try:
                 llm.check_url(lc)

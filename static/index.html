@@ -1148,7 +1148,10 @@ async function loadSettings() {
         <div class="ferr" data-err="llm.provider"></div></div>
       ${field('lm-url', 'Adresse', S.llm.url, { err: 'llm.url', ph: 'http://127.0.0.1:11434', help: 'Nur Adressen im eigenen Netz werden angenommen (localhost, private Adressen, Namen im Büro-Netz).' })}
     </div>
-    ${field('lm-model', 'Modell', S.llm.model, { ph: 'llama3.2:3b', err: 'llm.model', help: 'Bei Ollama der Name aus «ollama list». Bei llama.cpp meist leer lassen.' })}
+    <div class="grid2">
+      ${field('lm-model', 'Modell', S.llm.model, { ph: 'llama3.2:3b', err: 'llm.model', help: 'Bei Ollama der Name aus «ollama list». Bei llama.cpp meist leer lassen; bei einem Router (mehrere Modelle) den genauen Namen eintragen.' })}
+      ${field('lm-timeout', 'Timeout in Sekunden', S.llm.timeout || 120, { type: 'number', err: 'llm.timeout', help: 'So lange wartet das Panel auf ein Lebenszeichen. Grosse Modelle brauchen beim ersten Aufruf oft mehrere Minuten, weil sie erst geladen werden.' })}
+    </div>
     <label class="check"><input type="checkbox" id="lm-remote" ${S.llm.allow_remote ? 'checked' : ''}>
       <span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(nicht empfohlen: Titel, Branch-Namen und Commit-Titel verlassen dann das Netz, bei Kundenprojekten ein DLP-Verstoss)</span></span></label>
     <div id="lm-keybox"></div>
@@ -1204,14 +1207,15 @@ function renderLlmKey() {
   $('lm-keybox').innerHTML = show ? field('lm-secret', 'Zugangsschlüssel (optional)', old, { type: 'password', err: 'llm_key', ph: S.secrets.llm_key.set ? '•••••••• gespeichert' : '',
     help: secretHelp('llm_key', 'Schlüssel') + ' Lokale Server brauchen meist keinen.' }) : '';
 }
-function llmForm() { return { provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, secret: $('lm-secret') ? $('lm-secret').value : '' }; }
+function llmForm() { return { provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout'), secret: $('lm-secret') ? $('lm-secret').value : '' }; }
 async function testLlm() {
   const out = $('lm-result');
   await busy($('lm-test'), 'Teste …', async () => {
     try {
       const r = await api('POST', '/api/settings/test/llm', llmForm());
       const models = (r.models || []).length ? `<div style="margin-top:8px" class="quiet">Gefundene Modelle (Klick = übernehmen):</div><div>${r.models.map(m => `<button class="pchip" data-setmodel="${esc(m)}">${esc(m)}</button>`).join('')}</div>` : '';
-      out.innerHTML = stepsHtml(r).replace('Verbindung in Ordnung.', 'Das Modell antwortet.') + models;
+      const warn = r.steps.some(x => x.status === 'warn');
+      out.innerHTML = stepsHtml(r).replace('Verbindung in Ordnung.', warn ? 'Server und Modell sind erreichbar, aber der Testentwurf hat nicht geklappt (siehe oben und das Log).' : 'Das Modell antwortet.').replace('class="verdict ok"', warn ? 'class="verdict" style="background:var(--warn-bg);color:var(--warn)"' : 'class="verdict ok"') + models;
     } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
   });
 }
@@ -1331,7 +1335,7 @@ function collect() {
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
       wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
-    llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked },
+    llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked },
     secrets,
   };

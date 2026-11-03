@@ -119,6 +119,25 @@ class OllamaAndOpenAI(unittest.TestCase):
         with self.assertRaises(llm.LlmError):
             llm.draft_ticket(self.cfg(model="broken"), "", ctx)
 
+    def test_timeout_and_empty_answer_are_explained_and_logged(self):
+        ctx = {"title": "t", "branch": "b", "project": "p", "commits": [], "issue_types": ["Story"]}
+        with self.assertLogs("tinyops.llm", level="INFO") as cm:
+            with self.assertRaises(llm.LlmError) as c:
+                llm.draft_ticket(self.cfg(model="slow", timeout=1), "", ctx)
+        self.assertIn("kam keine Antwort", str(c.exception))
+        self.assertTrue(any("Anfrage an" in m for m in cm.output) and any("fehlgeschlagen" in m for m in cm.output), cm.output)
+        with self.assertRaises(llm.LlmError) as c:
+            llm.draft_ticket(self.cfg(model="empty"), "", ctx)
+        self.assertIn("leere Antwort", str(c.exception))
+
+    def test_success_is_logged_with_timing_and_streaming_works(self):
+        ctx = {"title": "t", "branch": "b", "project": "p", "commits": [], "issue_types": ["Story"]}
+        for cfg in (self.cfg(), self.cfg(provider="openai", url="http://127.0.0.1:%d" % self.kport, model="m")):
+            with self.assertLogs("tinyops.llm", level="INFO") as cm:
+                d = llm.draft_ticket(cfg, "lkey", ctx)
+            self.assertEqual(d["summary"], "Retry bei HTTP 429 ergänzen")
+            self.assertTrue(any("Antwort von" in m and "erstes Zeichen" in m for m in cm.output), cm.output)
+
     def test_custom_provider_can_be_registered(self):
         class Fake:
             name, label, default_url = "fake", "Fake", "http://127.0.0.1:1"
@@ -127,7 +146,7 @@ class OllamaAndOpenAI(unittest.TestCase):
                 return ["m"]
 
             def chat(self, cfg, key, system, user, ctx=None):
-                return '{"summary": "aus fake", "description": "d", "issue_type": "Story"}'
+                return '{"summary": "aus fake", "description": "d", "issue_type": "Story"}', 0.1
         llm.register(Fake())
         try:
             d = llm.draft_ticket({"provider": "fake", "url": "http://127.0.0.1:1"}, "", {"issue_types": ["Story"]})

@@ -41,6 +41,26 @@ class H(BaseHTTPRequestHandler):
         LAST.clear()
         LAST.update(body)
         text = "Das ist leider kein JSON." if body.get("model") == "broken" else "Hier der Entwurf:\n```json\n" + json.dumps(DRAFT) + "\n```"
+        if body.get("model") == "slow":
+            import time
+            time.sleep(3)
+        if body.get("model") == "empty":
+            text = ""
+        if body.get("stream"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream" if self.path.startswith("/v1") else "application/x-ndjson")
+            self.end_headers()
+            third = max(1, len(text) // 3)
+            for piece in (text[:third], text[third:2 * third], text[2 * third:]):
+                if self.path == "/api/chat":
+                    line = json.dumps({"message": {"role": "assistant", "content": piece}, "done": False}) + "\n"
+                else:
+                    line = "data: " + json.dumps({"choices": [{"delta": {"content": piece}}]}) + "\n\n"
+                self.wfile.write(line.encode())
+                self.wfile.flush()
+            if self.path.startswith("/v1"):
+                self.wfile.write(b"data: [DONE]\n\n")
+            return
         if self.path == "/api/chat":
             return self._json(200, {"message": {"role": "assistant", "content": text}})
         if self.path == "/v1/chat/completions":
