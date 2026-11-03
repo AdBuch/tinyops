@@ -54,7 +54,7 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
-    "features": {"ideas": False, "testenv": False},   # vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
+    "features": {"ideas": True, "testenv": False},   # Testumgebung vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
     "data_dir": "",               # leer = ./data (Ideenbox)
     "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
     "log_dir": "",                # leer = ~/.config/tinyops/logs

@@ -1,4 +1,4 @@
-# tinyops 1.5: Arbeitspanel
+# tinyops 1.6: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -175,6 +175,13 @@ Eigene Firmen-CA: `"ca_bundle": "/pfad/zur/firmen-ca.pem"`. Das Prüfen der Zert
   Gilt für Branches ohne MR und für deine eigenen MRs. Review-Anfragen und dir zugeteilte MRs bleiben immer sichtbar.
   Im Debug-Log (`-v`) steht, welcher Branch warum ignoriert wurde.
 - **Filterleiste** auf der Übersicht: Suche (Taste `/`), Projekt, nur Agent, ohne Ticket, liegt schon lange. Die Auswahl merkt sich der Browser.
+
+## 4c. Layout (neu in 1.6)
+
+- **Großer Bildschirm (z. B. 2560 × 1440):** vier Kacheln nebeneinander (Stories in Arbeit, Braucht dich, Meine MRs, Offene Branches), rechts die Ideenbox. Jede Kachel scrollt für sich.
+- **Kachel anklicken:** sie nimmt die halbe Breite ein. Zwei Kacheln gleichzeitig (z. B. Jira-Stories links, Branches rechts); die übrigen schrumpfen zu einer Leiste. Nochmal klicken schließt. Der Browser merkt sich die Wahl.
+- **Handy:** eine Spalte und unten ein Menü wie in einer App: Übersicht, Ideen, Einstellungen.
+- Die Ideenbox ist jetzt standardmäßig an (`features.ideas`), Testumgebungen bleiben aus.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

@@ -52,9 +52,9 @@
   #fetched { font-size: 12.5px; color: var(--quiet); }
 
   /* Übersicht */
-  #viewOverview { max-width: 1180px; margin: 0 auto; padding: 22px 20px 64px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 28px; }
-  #viewOverview.withaside { grid-template-columns: minmax(0, 1fr) 300px; }
-  @media (max-width: 960px) { #viewOverview.withaside { grid-template-columns: minmax(0, 1fr); } }
+  #viewOverview { padding: 18px 24px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 24px; }
+  #viewOverview.withaside { grid-template-columns: minmax(0, 1fr) 340px; }
+  #left { min-width: 0; display: flex; flex-direction: column; }
   .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; }
   .banner.bad { background: var(--bad-bg); color: var(--bad); }
   .banner.warn { background: var(--warn-bg); color: var(--warn); }
@@ -197,6 +197,73 @@
     .l2 code { max-width: 200px; }
     .savebar { padding: 8px 16px; }
   }
+  /* Kacheln */
+  .board { display: grid; gap: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+  .thead { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 10px; cursor: pointer; user-select: none; border-bottom: 1px solid transparent; }
+  .thead h2, .thead .count { white-space: nowrap; }
+  .thead h2 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+  .thead .count { font-weight: 700; color: var(--quiet); }
+  .thead .thint { margin-left: auto; font-size: 12.5px; color: var(--quiet); text-align: right; }
+  .thead .expand { margin-left: 4px; padding: 2px 8px; align-self: center; line-height: 1.2; }
+  .tile.open { border-color: var(--focus); }
+  .tbody { overflow: auto; min-height: 0; flex: 1; }
+  .tbody .list { border: 0; border-radius: 0; }
+  .tbody .item:first-child { border-top: 1px solid var(--line); }
+  .tbody .slots { padding: 12px 14px 14px; margin: 0; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .tbody .slot { min-height: 0; }
+  .tbody .overnote { margin: 0 16px 14px; }
+  .tbody .empty { padding: 14px 16px; }
+  .strip { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
+  .tile.mini .tbody { display: none; }
+  .tile.mini { flex-direction: row; }
+  .tile.mini .thead { padding: 8px 14px; border: 0; }
+  .tile.mini .thint { display: none; }
+  .nomatch { padding: 28px 8px; text-align: center; color: var(--quiet); }
+  #bottomnav { display: none; }
+
+  @media (min-width: 961px) {
+    html, body { height: 100%; }
+    #viewOverview { height: calc(100vh - 52px); overflow: hidden; }
+    #viewOverview > * { min-height: 0; }
+    #left .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+    #left .board.o1 { grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    #left .board.o1 .tile.open { grid-column: 1; grid-row: 1 / span 3; }
+    #left .board.o1 .tile:not(.open) { grid-column: 2; grid-row: auto; }
+    #left .board.o2 { grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    #left .board.o2 .tile.open:nth-of-type(1) { grid-row: 2; }
+    aside { overflow: auto; min-height: 0; padding-right: 2px; }
+    .tile .expand { display: inline-block; }
+  }
+  @media (min-width: 1900px) {
+    header { padding: 0 32px; }
+    #viewOverview { padding: 22px 32px 32px; gap: 0 32px; }
+    #viewOverview.withaside { grid-template-columns: minmax(0, 1fr) 400px; }
+    body { font-size: 15.5px; }
+    .l1 .t { font-size: 15.5px; }
+    .slot .sum { font-size: 18px; }
+    #left .board { grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 20px; }
+  }
+  @media (max-width: 960px) {
+    .tile .expand { display: none; }
+    .thead { cursor: default; }
+    .board { grid-template-columns: minmax(0, 1fr); }
+    .tabs { display: none; }
+    #viewOverview.withaside #aside { display: none; }
+    #viewOverview.showideas #left { display: none; }
+    #viewOverview.showideas #aside { display: block; }
+    #viewOverview { padding-bottom: 90px; grid-template-columns: minmax(0, 1fr) !important; }
+    #viewSettings { padding-bottom: 150px; }
+    .savebar { bottom: 58px; }
+    #bottomnav { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; height: 58px;
+                 background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+    #bottomnav button { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+                        font-size: 12px; font-weight: 650; color: var(--quiet); }
+    #bottomnav button.on { color: var(--focus); box-shadow: inset 0 2px 0 var(--focus); }
+    #bottomnav svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    #bottomnav .nb { position: relative; }
+    #bottomnav .nb b { position: absolute; top: -4px; right: -12px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--focus); color: var(--ground); font-size: 11px; text-align: center; }
+  }
 </style>
 </head>
 <body>
@@ -215,8 +282,7 @@
 <div id="viewOverview">
   <section id="left">
     <div id="banners"></div>
-    <div id="focusBox"></div>
-    <div class="toolbar" id="toolbar" hidden>
+        <div class="toolbar" id="toolbar" hidden>
       <input type="search" id="fq" placeholder="Suchen: Titel, Branch, Ticket   ( / )" aria-label="Suchen" autocomplete="off">
       <select id="fproj" aria-label="Projekt"></select>
       <label class="tog"><input type="checkbox" id="fagent"> Nur Agent</label>
@@ -224,7 +290,7 @@
       <label class="tog"><input type="checkbox" id="fstale"> Liegt schon lange</label>
       <span id="fcount"></span>
     </div>
-    <div id="list"></div>
+    <div class="board" id="board"></div>
   </section>
   <aside id="aside" hidden>
    <div id="ideasBox" hidden>
@@ -245,6 +311,12 @@
   </aside>
 </div>
 <div id="viewSettings" hidden></div>
+
+<nav id="bottomnav" aria-label="Hauptmenü">
+  <button class="bn on" data-view="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Übersicht</button>
+  <button class="bn" data-view="ideas"><span class="nb"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg><b id="ideaBadge" hidden></b></span>Ideen</button>
+  <button class="bn" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
+</nav>
 
 <dialog id="dlg">
   <div class="row" style="justify-content:space-between"><strong id="dlgTitle">Prompt</strong><button id="dlgClose">Schließen</button></div>
@@ -387,34 +459,38 @@ function group(title, items, empty, hint) {
   return `<div class="group"><div class="secthead"><h2>${esc(title)}</h2><span class="count">${items.length}</span>${hint ? `<span class="right">${hint}</span>` : ''}</div>${body}</div>`;
 }
 
-function focusHtml() {
+function storiesTile() {
   const j = state.jira;
-  if (!j || !j.ok) {
-    if (!state.configured) return '';
-    return `<div class="secthead"><h2>Fokus</h2><span class="right">Ohne Jira zählt das Panel nur MRs und Branches: ${state.wip} von ${state.wip_limit}.</span></div>`;
-  }
+  if (!j) return null;
+  if (!j.ok) return { title: 'Stories in Arbeit', count: '', hint: 'Jira antwortet nicht', body: '<div class="empty">Jira ist eingerichtet, antwortet aber nicht. Details im Banner und unter Einstellungen.</div>' };
   const slots = [];
   const n = Math.max(j.limit, j.stories.length);
   for (let i = 0; i < n; i++) {
     const s = j.stories[i];
-    if (!s) {
-      slots.push(`<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>`);
-      continue;
-    }
-    const over = i >= j.limit;
+    if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
     const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span>${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join('');
-    slots.push(`<div class="slot ${over ? 'over' : ''}">
+    slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}">
       <div class="top"><span class="key">${esc(s.key)}</span><span class="chip">${esc(s.status)}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       <a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>
       <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
     </div>`);
   }
   const sp = (j.sprints || []).map(s => `${esc(s.name)}${s.days_left !== null && s.days_left !== undefined ? (s.days_left >= 0 ? ` · noch ${s.days_left} Tage` : ' · überfällig') : ''}`).join(', ');
-  const scope = j.only_active ? 'nur aktive Sprints' : 'alle Sprints';
-  return `<div class="secthead"><h2>Stories in Arbeit</h2><span class="count">${j.count} von ${j.limit}</span>
-      <span class="right">${sp ? esc(scope) + ': ' + sp : esc(scope)}</span></div>
-    <div class="slots" style="--slots:${Math.min(n, 3)}">${slots.join('')}</div>
-    ${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}`;
+  return { title: 'Stories in Arbeit', count: `${j.count} von ${j.limit}`, bad: j.over, hint: (j.only_active ? 'nur aktive Sprints' : 'alle Sprints') + (sp ? ': ' + sp : ''),
+    body: `<div class="slots">${slots.join('')}</div>${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}` };
+}
+
+let openTiles = LS.get('open', []);
+function tileHtml(id, t, open, mini) {
+  const body = t.body;
+  return `<section class="tile ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
+    <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
+      <h2>${esc(t.title)}</h2><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
+      <span class="thint">${t.hint || ''}</span><button class="expand quiet-btn" tabindex="-1" aria-hidden="true">${open ? '⤡' : '⤢'}</button></div>
+    <div class="tbody">${body}</div></section>`;
+}
+function listBody(items, empty) {
+  return items.length ? `<div class="list">${items.map(row).join('')}</div>` : `<div class="empty">${esc(empty)}</div>`;
 }
 
 function renderLeft() {
@@ -426,8 +502,7 @@ function renderLeft() {
   if (state.errors.length) banners += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
   $('banners').innerHTML = banners;
   const tb = $('toolbar');
-  if (!state.configured) { $('focusBox').innerHTML = ''; $('list').innerHTML = ''; tb.hidden = true; return; }
-  $('focusBox').innerHTML = focusHtml();
+  if (!state.configured) { $('board').innerHTML = ''; tb.hidden = true; return; }
 
   const all = state.review.concat(state.assigned, state.mine);
   const projs = [...new Set(all.map(i => i.project))].sort();
@@ -444,21 +519,33 @@ function renderLeft() {
   const mrs = mine.filter(i => i.kind === 'mr' && matches(i) && !needSet.has(i));
   const branches = mine.filter(i => i.kind === 'branch' && matches(i));
   const shown = needs.length + mrs.length + branches.length;
-  const total = all.length;
-  $('fcount').textContent = shown === total ? `${total} Einträge` : `${shown} von ${total}`;
+  $('fcount').textContent = shown === all.length ? `${all.length} Einträge` : `${shown} von ${all.length}`;
 
-  const ign = state.ignored_branches;
-  $('list').innerHTML = shown === 0 && total > 0
-    ? '<div class="nomatch">Kein Eintrag passt zu den Filtern.</div>'
-    : group('Braucht dich', needs, 'Nichts wartet auf dich.')
-    + group('Meine MRs', mrs, 'Keine weiteren offenen MRs.')
-    + group('Offene Branches', branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.',
-        state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '');
+  const tiles = {};
+  const st = storiesTile();
+  if (st) tiles.stories = st;
+  tiles.need = { title: 'Braucht dich', count: needs.length, body: listBody(needs, 'Nichts wartet auf dich.') };
+  tiles.mrs = { title: 'Meine MRs', count: mrs.length, body: listBody(mrs, 'Keine weiteren offenen MRs.') };
+  tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
+    hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
+  const ids = Object.keys(tiles);
+  openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
+  const open = ids.filter(id => openTiles.includes(id));
+  const board = $('board');
+  board.className = 'board o' + open.length;
+  if (open.length === 2) {
+    const closed = ids.filter(id => !open.includes(id));
+    board.innerHTML = `<div class="strip">${closed.map(id => tileHtml(id, tiles[id], false, true)).join('')}</div>` + open.map(id => tileHtml(id, tiles[id], true, false)).join('');
+  } else {
+    board.innerHTML = ids.map(id => tileHtml(id, tiles[id], open.includes(id), false)).join('');
+  }
 }
+
 function renderIdeas() {
   const ideas = state.ideas;
   const open = ideas.filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length;
   document.getElementById('ideaCount').textContent = `${open}/${state.idea_cap}`;
+  const bd = $('ideaBadge'); bd.textContent = open; bd.hidden = !open;
   const list = ideas.filter(i => !['verworfen', 'erledigt'].includes(i.status));
   document.getElementById('ideas').innerHTML = list.length ? list.map(i => `
     <div class="idea ${i.expired ? 'expired' : ''}" data-id="${i.id}">
@@ -513,6 +600,7 @@ function renderAside() {
   $('jobsBox').hidden = !f.testenv;
   const on = !!(f.ideas || f.testenv);
   $('aside').hidden = !on;
+  document.querySelector('.bn[data-view=ideas]').hidden = !f.ideas;
   $('viewOverview').classList.toggle('withaside', on);
 }
 
@@ -527,6 +615,15 @@ async function load() {
   } catch (e) { toast(e.message); }
 }
 
+// Kacheln öffnen (höchstens zwei, jede nimmt die halbe Breite)
+function toggleTile(id) {
+  if (matchMedia('(max-width: 960px)').matches) return;
+  openTiles = openTiles.includes(id) ? openTiles.filter(x => x !== id) : openTiles.concat(id).slice(-2);
+  LS.set('open', openTiles); renderLeft();
+}
+$('board').addEventListener('click', ev => { const h = ev.target.closest('[data-toggle]'); if (h && !ev.target.closest('a')) toggleTile(h.dataset.toggle); });
+$('board').addEventListener('keydown', ev => { const h = ev.target.closest('[data-toggle]'); if (h && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toggleTile(h.dataset.toggle); } });
+
 // Filter
 function applyFilters() { renderLeft(); }
 $('fq').addEventListener('input', ev => { filt.q = ev.target.value; applyFilters(); });
@@ -537,7 +634,7 @@ document.addEventListener('keydown', ev => {
   if (ev.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && view === 'overview') { ev.preventDefault(); $('fq').focus(); }
 });
 // Aktionen auf Karten
-document.getElementById('list').addEventListener('click', async ev => {
+document.getElementById('board').addEventListener('click', async ev => {
   const btn = ev.target.closest('button[data-act]');
   if (!btn) return;
   if (btn.dataset.act === 'idea') {
@@ -619,14 +716,16 @@ let P = [];            // Arbeitskopie der Projekte
 let view = 'overview';
 
 function setView(v) {
+  if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'overview';
   view = v;
-  document.getElementById('viewOverview').hidden = v !== 'overview';
+  document.getElementById('viewOverview').hidden = v === 'settings';
   document.getElementById('viewSettings').hidden = v !== 'settings';
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  $('viewOverview').classList.toggle('showideas', v === 'ideas');
+  document.querySelectorAll('.tab, .bn').forEach(t => t.classList.toggle('on', t.dataset.view === v));
   try { history.replaceState(null, '', '#' + v); } catch (e) { /* egal */ }
   if (v === 'settings') loadSettings();
 }
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
+document.querySelectorAll('.tab, .bn').forEach(t => t.onclick = () => setView(t.dataset.view));
 document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
 if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
 

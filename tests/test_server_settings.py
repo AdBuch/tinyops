@@ -66,7 +66,7 @@ class Flow(unittest.TestCase):
                 self.assertEqual(code, 200)
                 self.assertFalse(ov["configured"])
                 self.assertTrue(ov["problems"])
-                self.assertEqual(ov["features"], {"ideas": False, "testenv": False})
+                self.assertEqual(ov["features"], {"ideas": True, "testenv": False})
 
                 code, st = self.call("GET", "/api/settings")
                 self.assertEqual(code, 200)
@@ -124,7 +124,7 @@ class Flow(unittest.TestCase):
                 self.assertNotIn('"jtoken"', json.dumps(st))
 
                 # ausgeblendete Funktionen sind auch serverseitig zu
-                for m, path in (("GET", "/api/ideas/triage-prompt"), ("POST", "/api/ideas"), ("POST", "/api/deploy"),
+                for m, path in (("POST", "/api/deploy"),
                                 ("POST", "/api/prompt"), ("GET", "/api/jobs")):
                     code, r = self.call(m, path, {} if m == "POST" else None)
                     self.assertEqual(code, 404, path)
@@ -143,7 +143,7 @@ class Flow(unittest.TestCase):
                 self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102", "DLP-120"})
                 # einschalten, ohne Neustart
                 code, _ = self.call("POST", "/api/settings/save", {
-                    "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}], "features": {"ideas": True},
+                    "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}], "features": {"ideas": True, "testenv": True},
                     "jira": {"url": jiurl, "auth": "bearer", "project_keys": ["DLP"]}})
                 self.assertEqual(code, 200)
                 code, r = self.call("POST", "/api/ideas", {"text": "Test"})
