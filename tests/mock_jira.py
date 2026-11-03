@@ -13,13 +13,18 @@ ISSUES = {
     "DLP-102": ("Helm Limits", "In Progress", "Story"),
     "DLP-103": ("Ein Bug", "In Progress", "Bug"),
     "DLP-110": ("Review-Ticket", "In Review", "Story"),
+    "DLP-120": ("Backlog-Ticket", "In Progress", "Story"),   # nicht im aktiven Sprint
 }
+ACTIVE_SPRINT = ["com.atlassian.greenhopper.service.sprint.Sprint@1[id=11,rapidViewId=3,state=CLOSED,name=Sprint 11,endDate=2026-10-01T09:00:00.000+0000]",
+                 "com.atlassian.greenhopper.service.sprint.Sprint@2[id=12,rapidViewId=3,state=ACTIVE,name=Sprint 12,endDate=2099-11-13T09:00:00.000+0000]"]
+NO_SPRINT = {"DLP-120"}
 BASIC = "Basic " + base64.b64encode(b"jira-user:jpass").decode()
 
 
 def issue(key):
     s, st, t = ISSUES[key]
-    return {"key": key, "fields": {"summary": s, "status": {"name": st}, "issuetype": {"name": t}}}
+    return {"key": key, "fields": {"summary": s, "status": {"name": st}, "issuetype": {"name": t},
+                                   "customfield_10020": None if key in NO_SPRINT else ACTIVE_SPRINT}}
 
 
 def jira_time(hours_ago):
@@ -44,6 +49,9 @@ class H(BaseHTTPRequestHandler):
             return self._json(401, {"errorMessages": ["Unauthorized"]})
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        if u.path == "/rest/api/2/field":
+            return self._json(200, [{"id": "summary", "name": "Summary"},
+                                    {"id": "customfield_10020", "name": "Sprint", "schema": {"custom": "com.pyxis.greenhopper.jira:gh-sprint"}}])
         if u.path == "/rest/api/2/project":
             return self._json(200, [{"key": "DLP"}, {"key": "OPS"}])
         if u.path == "/rest/api/2/issuetype":
@@ -64,7 +72,9 @@ class H(BaseHTTPRequestHandler):
                           for i, h in enumerate((5, 30, 80), 1)]
                 return self._json(200, {"issues": issues, "total": 3})
             if "currentUser()" in jql:
-                keys = list(ISSUES)[:3]
+                keys = [k for k in ISSUES if k not in ("DLP-110",)]
+                if "openSprints()" in jql:
+                    keys = [k for k in keys if k not in NO_SPRINT]
                 return self._json(200, {"issues": [issue(k) for k in keys], "total": len(keys)})
             return self._json(400, {"errorMessages": ["unbekannte JQL im Mock"]})
         return self._json(404, {})

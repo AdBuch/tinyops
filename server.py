@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tinyops 1.4: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
+"""tinyops 1.5: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
 
 Zeigt deine Branches/MRs mit Pipeline-Status, verknüpft sie mit Jira-Tickets, überwacht
 das Story-Limit, die Review-Queue, dir zugeteilte MRs und eine Helpdesk-Zahl. Dazu eine
@@ -24,18 +24,20 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import fnmatch
 import net
 import secretstore as store
 import settings
+import sprint
 import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "1.4"
+VERSION = "1.5"
 BASE = Path(__file__).resolve().parent
 log = tlog.get("app")
 hlog = tlog.get("http")
@@ -92,6 +94,7 @@ JIRA_DEFAULTS = {
     "project_keys": [],
     "story_limit": 2,
     "wip_issue_types": [],
+    "only_active_sprints": True,   # nur Tickets aus aktiven Sprints (Jira Software, JQL sprint in openSprints())
     "jql_in_progress": 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC',
     "create_pid": "",
     "create_issuetype": "",
@@ -106,6 +109,7 @@ BRANCH_DEFAULTS = {
     "agent_message_patterns": ["Co-Authored-By: Claude", "Claude-Session"],   # nur zum Beschriften
     "max_branches": 40,           # so viele Branches pro Projekt werden verglichen (neueste zuerst)
     "max_age_days": 90,           # ältere Branches werden ignoriert, 0 = kein Limit
+    "ignore_branches": ["release/*"],   # Muster (* = beliebig): gilt für Branches ohne MR und für eigene MRs
 }
 
 PLAIN_SECRET_KEYS = {"token", "password", "access_token", "gitlab_token", "jira_token",
@@ -152,6 +156,11 @@ def branch_cfg(cfg):
     b = dict(BRANCH_DEFAULTS)
     b.update(cfg.get("branch_filter") or {})
     return b
+
+
+def ignored_branch(name, patterns):
+    """Passt der Branch auf eines der Muster (zum Beispiel release/*)? Groß-/Kleinschreibung zählt."""
+    return any(fnmatch.fnmatchcase(name, p) for p in patterns if p)
 
 
 def slug(text, limit=30):
@@ -448,6 +457,7 @@ class GitLabClient:
         glog.debug("Angemeldet als %s, %d E-Mails und %d Namen für die Branch-Erkennung", username,
                    len(ident["emails"]), len(ident["names"]))
         bf = branch_cfg(self.cfg)
+        ignore = list(bf.get("ignore_branches") or [])
         mine, review, assigned = [], [], []
         for p in self.cfg["projects"]:
             pid, name = p["id"], p.get("name", str(p["id"]))
@@ -457,8 +467,13 @@ class GitLabClient:
                 mrs = self.http.get("/projects/%s/merge_requests" % pid,
                                     {"state": "opened", "author_username": username, "per_page": 50})
                 with_mr = set()
+                ignored_mrs = 0
                 for mr in mrs:
                     with_mr.add(mr["source_branch"])
+                    if ignored_branch(mr["source_branch"], ignore):
+                        glog.debug("%s: MR !%s übersprungen (Branch %s passt auf ignore_branches)", name, mr["iid"], mr["source_branch"])
+                        ignored_mrs += 1
+                        continue
                     mine.append(self._mr_item(mr, "mr", name))
                 branches = self.http.get("/projects/%s/repository/branches" % pid, {"per_page": 100})
                 branches.sort(key=lambda b: _age_key((b.get("commit") or {}).get("committed_date")))
@@ -467,7 +482,8 @@ class GitLabClient:
                 for b in branches:
                     bn = b["name"]
                     reason = ("Default-Branch" if bn == default else "geschützt" if b.get("protected")
-                              else "schon gemergt" if b.get("merged") else "hat einen MR" if bn in with_mr else "")
+                              else "schon gemergt" if b.get("merged") else "hat einen MR" if bn in with_mr
+                              else "passt auf ignore_branches" if ignored_branch(bn, ignore) else "")
                     if reason:
                         glog.debug("%s: Branch %s übersprungen (%s)", name, bn, reason)
                         continue
@@ -503,7 +519,8 @@ class GitLabClient:
                         "ahead": info["ahead"], "by_me": info["by_me"], "by_agent": info["by_agent"],
                         "last_author": commit.get("author_name", ""),
                     })
-                glog.info("%s: %d eigene MRs, %d Branches geprüft, %d angezeigt, %d zu alt", name, len(mrs), checked, shown_b, skipped)
+                glog.info("%s: %d eigene MRs (%d ignoriert), %d Branches geprüft, %d angezeigt, %d zu alt", name, len(mrs),
+                          ignored_mrs, checked, shown_b, skipped)
             except UserError as e:
                 glog.error("%s: %s", name, e)
                 errors.append("%s: %s" % (name, e))
@@ -540,23 +557,58 @@ class JiraClient:
         self.base = jc["url"].rstrip("/")
         self.http = Http("Jira", self.base + "/rest/api/2",
                          {"Authorization": auth_header, "Accept": "application/json"}, ctx)
+        self._sf = None   # Feld-ID des Sprint-Feldes; "" = es gibt keines
+
+    def sprint_field(self):
+        if self._sf is None:
+            self._sf = ""
+            try:
+                for f in self.http.get("/field"):
+                    if f.get("name") == "Sprint" and "gh-sprint" in str((f.get("schema") or {}).get("custom", "")):
+                        self._sf = f["id"]
+                        break
+                jlog.info("Sprint-Feld: %s", self._sf or "nicht gefunden (kein Jira Software?)")
+            except UserError as e:
+                jlog.warning("Sprint-Feld nicht lesbar: %s", e)
+        return self._sf
+
+    def _fields(self):
+        sf = self.sprint_field()
+        return ["summary", "status", "issuetype"] + ([sf] if sf else [])
 
     def _issue(self, i):
         f = i.get("fields") or {}
-        return {
+        out = {
             "key": i["key"], "summary": f.get("summary", ""),
             "status": (f.get("status") or {}).get("name", ""),
             "type": (f.get("issuetype") or {}).get("name", ""),
             "url": self.base + "/browse/" + i["key"],
+            "sprint": "", "sprint_end": "", "in_sprint": None,
         }
+        if self._sf:
+            act = sprint.active_sprint(f.get(self._sf))
+            out["in_sprint"] = bool(act)
+            if act:
+                out["sprint"], out["sprint_end"] = act["name"], act["end"]
+        return out
 
     def _search(self, jql, fields, limit=100):
         res = self.http.get("/search", {"jql": jql, "fields": ",".join(fields), "maxResults": limit})
         return res.get("issues", []), int(res.get("total", 0))
 
+    def jql_in_progress(self):
+        return sprint.effective_jql(self.jc["jql_in_progress"], self.jc.get("only_active_sprints", True))
+
     def in_progress(self):
-        issues, _ = self._search(self.jc["jql_in_progress"], ["summary", "status", "issuetype"])
-        return [self._issue(i) for i in issues]
+        fields = self._fields()
+        jql = self.jql_in_progress()
+        jlog.debug("JQL in Arbeit: %s", jql)
+        issues, _ = self._search(jql, fields)
+        out = [self._issue(i) for i in issues]
+        if self.jc.get("only_active_sprints", True):
+            for o in out:
+                o["in_sprint"] = True   # die JQL hat es schon geprüft
+        return out
 
     def lookup(self, keys):
         """Einzelabfragen: ein unbekannter Key bricht sonst die ganze JQL-Suche ab."""
@@ -564,7 +616,7 @@ class JiraClient:
         for key in keys[:30]:
             try:
                 out[key] = self._issue(self.http.get("/issue/" + urllib.parse.quote(key),
-                                                     {"fields": "summary,status,issuetype"}))
+                                                     {"fields": ",".join(self._fields())}))
             except HttpStatus as e:
                 if e.code in (400, 403, 404):
                     continue
@@ -672,12 +724,17 @@ class DemoJira:
         "DLP-150": ("Sonar Quality Gate", "In Review"),
     }
 
+    _BACKLOG = {"DLP-103", "DLP-120"}   # nicht im aktiven Sprint
+
     def __init__(self, jc):
         self.jc = jc
 
     def _issue(self, key):
         summary, status = self._DATA[key]
-        return {"key": key, "summary": summary, "status": status, "type": "Story", "url": "%s/browse/%s" % (self.base, key)}
+        ins = key not in self._BACKLOG
+        end = (datetime.now(timezone.utc) + timedelta(days=9)).isoformat()
+        return {"key": key, "summary": summary, "status": status, "type": "Story", "url": "%s/browse/%s" % (self.base, key),
+                "sprint": "Sprint 12" if ins else "", "sprint_end": end if ins else "", "in_sprint": ins}
 
     def in_progress(self):
         return [self._issue(k) for k, v in self._DATA.items() if v[1] == "In Progress"]
@@ -873,6 +930,16 @@ class App:
                       for it in items if s["key"] in it["keys"]]
             s["items"] = linked
             s["no_mr"] = not any(x["kind"] in ("mr", "assigned") for x in linked)
+        sprints = {}
+        for t in list(by_key.values()):
+            if t.get("sprint") and t["sprint"] not in sprints:
+                end = t.get("sprint_end") or ""
+                left = None
+                if parse_ts(end):
+                    left = int((parse_ts(end) - datetime.now(timezone.utc)).total_seconds() // 86400) if parse_ts(end).tzinfo else None
+                sprints[t["sprint"]] = {"name": t["sprint"], "end": end, "days_left": left}
+        out["sprints"] = list(sprints.values())
+        out["only_active"] = bool(self.jc.get("only_active_sprints", True))
         out.update({"ok": True, "count": len(inprog), "over": over, "stories": inprog})
         linked_n = sum(1 for it in items if it.get("ticket"))
         jlog.info("%d Stories in Arbeit (Limit %d)%s; %d von %d Einträgen mit Ticket verknüpft, %d ohne Key, %d Key unbekannt",
@@ -933,6 +1000,7 @@ class App:
             "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
             "helpdesk": self.helpdesk(), "configured": True, "problems": list(self.problems),
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
+            "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
         })
         return data
 

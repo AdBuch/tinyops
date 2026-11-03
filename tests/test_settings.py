@@ -16,6 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import secretstore as store  # noqa: E402
 import settings  # noqa: E402
+import sprint  # noqa: E402
+import server  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -254,6 +256,29 @@ class JiraTests(unittest.TestCase):
         self.assertIn("In Progress", j["hint"])   # Status der Instanz als Hilfe
         self.assertFalse(r["ok"])
 
+    def test_sprint_filter_in_test(self):
+        r = settings.test_jira(self.form(), nostored)
+        self.assertEqual(step(r, "sprintfield")["status"], "ok")
+        j = step(r, "jql")
+        self.assertIn("sprint in openSprints()", j["detail"])   # zeigt die tatsächlich abgefragte JQL
+        self.assertIn("Sprint 12", j["detail"])
+        self.assertIn("3 Treffer", j["detail"])                  # DLP-120 liegt im Backlog
+        r = settings.test_jira(self.form(only_active_sprints=False), nostored)
+        self.assertIn("4 Treffer", step(r, "jql")["detail"])
+        self.assertNotIn("openSprints", step(r, "jql")["detail"])
+
+    def test_client_marks_sprint(self):
+        jc = dict(server.JIRA_DEFAULTS, url=self.url)
+        c = server.JiraClient(jc, "Bearer jtoken", server.make_ssl({}))
+        got = c.lookup(["DLP-101", "DLP-120"])
+        self.assertIs(got["DLP-101"]["in_sprint"], True)
+        self.assertEqual(got["DLP-101"]["sprint"], "Sprint 12")
+        self.assertIs(got["DLP-120"]["in_sprint"], False)
+        keys = {i["key"] for i in c.in_progress()}
+        self.assertEqual(keys, {"DLP-101", "DLP-102", "DLP-103"})
+        c2 = server.JiraClient(dict(jc, only_active_sprints=False), "Bearer jtoken", server.make_ssl({}))
+        self.assertIn("DLP-120", {i["key"] for i in c2.in_progress()})
+
     def test_over_limit_warns(self):
         r = settings.test_jira(self.form(story_limit=1), nostored)
         self.assertEqual(step(r, "jql")["status"], "warn")
@@ -314,6 +339,31 @@ class TlsTests(unittest.TestCase):
                 srv.shutdown()
 
 
+class SprintHelpers(unittest.TestCase):
+    def test_effective_jql(self):
+        self.assertEqual(sprint.effective_jql('a = 1 ORDER BY x', True), '(a = 1) AND sprint in openSprints() ORDER BY x')
+        self.assertEqual(sprint.effective_jql('a = 1', False), 'a = 1')
+        self.assertEqual(sprint.effective_jql('sprint in openSprints() ORDER BY x', True), 'sprint in openSprints() ORDER BY x')
+        self.assertEqual(sprint.effective_jql('', True), 'sprint in openSprints()')
+        self.assertEqual(sprint.effective_jql('status = "Sprint Backlog"', True), '(status = "Sprint Backlog") AND sprint in openSprints()')
+
+    def test_parse_sprints(self):
+        txt = ["x.Sprint@1[id=1,state=CLOSED,name=Alt,endDate=2026-01-01]",
+               "x.Sprint@2[id=2,state=ACTIVE,name=Sprint 12, Team A,endDate=2026-11-13T09:00:00.000+0100,completeDate=<null>]"]
+        a = sprint.active_sprint(txt)
+        self.assertEqual(a["name"], "Sprint 12, Team A")
+        self.assertTrue(a["end"].startswith("2026-11-13"))
+        self.assertEqual(sprint.active_sprint([{"name": "S", "state": "ACTIVE", "endDate": "2026-11-01"}])["name"], "S")
+        self.assertIsNone(sprint.active_sprint(None))
+        self.assertIsNone(sprint.active_sprint([{"name": "S", "state": "closed"}]))
+
+    def test_ignored_branch(self):
+        self.assertTrue(server.ignored_branch("release/1.2", ["release/*"]))
+        self.assertFalse(server.ignored_branch("feature/release/x", ["release/*"]))
+        self.assertFalse(server.ignored_branch("Release/1", ["release/*"]))
+        self.assertFalse(server.ignored_branch("release/1", []))
+
+
 class BuildAndSave(unittest.TestCase):
     def test_validation(self):
         cfg, err = settings.build_config({}, {"gitlab": {"url": "gitlab"}, "jira": {"url": "ftp://x", "project_keys": ["dlp", "1x"],
@@ -341,6 +391,19 @@ class BuildAndSave(unittest.TestCase):
         self.assertEqual(cfg["jira"]["wip_issue_types"], ["Story", "Bug"])
         self.assertEqual(cfg["features"], {"ideas": True, "testenv": False})
         self.assertEqual(json.dumps(disk).count("projects"), 1)   # Eingabe unverändert
+
+    def test_new_options_roundtrip(self):
+        cfg, err = settings.build_config({}, {"branch_filter": {"ignore_branches": "release/*, hotfix/*"},
+                                              "jira": {"url": "https://j.example", "only_active_sprints": False}})
+        self.assertEqual(err, {})
+        self.assertEqual(cfg["branch_filter"]["ignore_branches"], ["release/*", "hotfix/*"])
+        self.assertFalse(cfg["jira"]["only_active_sprints"])
+        v = settings.view(cfg, "c.json")
+        self.assertEqual(v["branch_filter"]["ignore_branches"], ["release/*", "hotfix/*"])
+        self.assertFalse(v["jira"]["only_active_sprints"])
+        d = settings.view({}, "c.json")   # ohne Eintrag gelten die Standards
+        self.assertEqual(d["branch_filter"]["ignore_branches"], ["release/*"])
+        self.assertTrue(d["jira"]["only_active_sprints"])
 
     def test_empty_jira_url_switches_off(self):
         cfg, err = settings.build_config({"jira": {"url": "https://j", "auth": "basic"}}, {"jira": {"url": ""}})

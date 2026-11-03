@@ -18,6 +18,7 @@ def mr(iid, title, branch, sha, draft, updated, author):
 MR_A = mr(7, "Feature A", "feature/DLP-101-a", "abcdef1234567890", False, NOW, "me")
 MR_B = mr(8, "Draft B", "feature-b", "1234567890abcdef", True, OLD, "me")
 MR_R = mr(9, "DLP-110 Kollege C", "feature-c", "fedcba0987654321", False, NOW, "kollege")
+MR_REL = mr(12, "Release-Merge", "release/1.5", "99887766aabbccdd", False, NOW, "me")
 MR_Z = mr(11, "Zugeteilt D", "feature/DLP-102-d", "0011223344556677", False, NOW, "kollege")
 
 ROUTES = {
@@ -33,7 +34,7 @@ ROUTES = {
         {"author_name": "Kollege", "author_email": "k@x.ch", "message": "e"},
     ],
     "/api/v4/projects/1": {"id": 1, "name": "dlp-core", "path": "dlp-core", "path_with_namespace": "dlp/dlp-core", "default_branch": "main", "web_url": "https://g/x"},
-    "/api/v4/projects/1/merge_requests": [MR_A, MR_B],
+    "/api/v4/projects/1/merge_requests": [MR_A, MR_B, MR_REL],
     "/api/v4/projects/1/merge_requests/7": MR_A,
     "/api/v4/projects/1/merge_requests/8": MR_B,
     "/api/v4/projects/1/merge_requests/9": MR_R,
@@ -51,6 +52,8 @@ ROUTES = {
          "commit": {"author_email": "k@x.ch", "committed_date": NOW, "title": "kollege", "id": "dddd"}},
         {"name": "mixed", "merged": False, "protected": False,
          "commit": {"author_email": "k@x.ch", "committed_date": NOW, "title": "gemischt", "id": "eeee"}},
+        {"name": "release/2.0", "merged": False, "protected": False,
+         "commit": {"author_email": "me@x.ch", "committed_date": NOW, "title": "release-arbeit", "id": "ffff"}},
         {"name": "done", "merged": True, "protected": False, "commit": {"author_email": "me@x.ch"}},
     ],
 }
@@ -62,6 +65,7 @@ def C(email, msg="x", name=""):
 
 COMPARE = {
     "idea-old": [C("me@x.ch"), C("me@x.ch")],
+    "release/2.0": [C("me@x.ch")],
     "other-person": [C("x@y.ch")],
     "agent/DLP-130-retry": [C("bot@x.ch", "Co-Authored-By: Claude")],
     "kollege-claude": [C("k@x.ch", "Co-Authored-By: Claude")],

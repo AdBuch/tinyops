@@ -1,4 +1,4 @@
-# tinyops 1.4: Arbeitspanel
+# tinyops 1.5: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -165,6 +165,16 @@ Eigene Firmen-CA: `"ca_bundle": "/pfad/zur/firmen-ca.pem"`. Das Prüfen der Zert
   `create_issuetype` (Vorgangstyp-ID), sonst öffnet sich die leere Maske.
 - **Wichtig, ungeprüft gegen dein Jira:** Der Standard `statusCategory = "In Progress"` kann in einer deutschen Instanz
   anders heißen. Teste die JQL im Jira-Suchfeld und passe `jql_in_progress` an, falls nötig.
+
+## 4b. Filter (neu in 1.5)
+
+- **Nur aktive Sprints** (`jira.only_active_sprints`, Standard an): Die JQL für «in Arbeit» wird um `sprint in openSprints()` ergänzt.
+  Verknüpfte Tickets, die in keinem aktiven Sprint liegen, bleiben sichtbar, tragen aber den Hinweis «außerhalb Sprint».
+  Braucht Jira Software (Sprint-Feld). Der Jira-Test in den Einstellungen warnt, wenn das nicht klappt; dann Option ausschalten.
+- **Branches ignorieren** (`branch_filter.ignore_branches`, Standard `["release/*"]`): Muster mit `*`, Groß/Klein zählt.
+  Gilt für Branches ohne MR und für deine eigenen MRs. Review-Anfragen und dir zugeteilte MRs bleiben immer sichtbar.
+  Im Debug-Log (`-v`) steht, welcher Branch warum ignoriert wurde.
+- **Filterleiste** auf der Übersicht: Suche (Taste `/`), Projekt, nur Agent, ohne Ticket, liegt schon lange. Die Auswahl merkt sich der Browser.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

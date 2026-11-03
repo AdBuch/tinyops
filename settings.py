@@ -14,6 +14,7 @@ from pathlib import Path
 
 import net
 import secretstore as store
+import sprint
 import tlog
 
 log = tlog.get("settings")
@@ -406,7 +407,8 @@ def test_jira(form, stored):
         r.add("cloud", "Jira Cloud", "warn", "Das ist Jira Cloud.",
               "Cloud verlangt E-Mail-Adresse + API-Token mit Anmeldeart «basic» und nutzt andere Schnittstellen. tinyops ist für Jira Server/Data Center gebaut.")
     ctx = _check_connection(r, base, form.get("ca_bundle"))
-    steps = (("api", "Jira-API"), ("auth", "Anmeldung"), ("projects", "Projekte"), ("types", "Vorgangstypen"), ("jql", "JQL «in Arbeit»"))
+    steps = (("api", "Jira-API"), ("auth", "Anmeldung"), ("projects", "Projekte"), ("types", "Vorgangstypen"),
+             ("sprintfield", "Sprints"), ("jql", "JQL «in Arbeit»"))
     if ctx is None:
         for sid, t in steps:
             r.skip(sid, t)
@@ -541,8 +543,30 @@ def test_jira(form, stored):
     except net.NetError as e:
         r.add("types", "Vorgangstypen", "skip", e.detail)
 
+    # Sprint-Feld
+    only_active = bool(form.get("only_active_sprints", True))
+    sf = ""
+    try:
+        resp = _get(base, "/rest/api/2/field", hdr, ctx)
+        if resp["status"] == 200:
+            for f in net.parse_json(resp) or []:
+                if f.get("name") == "Sprint" and "gh-sprint" in str((f.get("schema") or {}).get("custom", "")):
+                    sf = f["id"]
+                    break
+        if sf:
+            r.add("sprintfield", "Sprints", "ok", "Sprint-Feld gefunden (%s). Jira Software ist aktiv." % sf)
+        elif only_active:
+            r.add("sprintfield", "Sprints", "warn", "Kein Sprint-Feld gefunden.",
+                  "Ohne Jira Software gibt es keine Sprints, und «nur aktive Sprints» findet dann nichts oder meldet einen Fehler. "
+                  "Schalte die Option aus, wenn ihr keine Sprints nutzt.")
+        else:
+            r.add("sprintfield", "Sprints", "skip", "Kein Sprint-Feld (nicht nötig, «nur aktive Sprints» ist aus).")
+    except net.NetError as e:
+        r.add("sprintfield", "Sprints", "skip", e.detail)
+
     # JQL
-    jql = (form.get("jql") or "").strip() or JQL_DEFAULT
+    jql_user = (form.get("jql") or "").strip() or JQL_DEFAULT
+    jql = sprint.effective_jql(jql_user, only_active)
     statuses = []
     try:
         sr = _get(base, "/rest/api/2/status", hdr, ctx)
@@ -551,28 +575,40 @@ def test_jira(form, stored):
     except net.NetError:
         pass
     try:
-        resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": "summary,status,issuetype", "maxResults": 50})
+        fields = "summary,status,issuetype" + ("," + sf if sf else "")
+        resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": fields, "maxResults": 50})
         st, d = resp["status"], net.parse_json(resp)
+        used = ("Abgefragt wird: %s\n" % jql) if jql != jql_user else ""
         if st == 200 and isinstance(d, dict):
             total = int(d.get("total", 0))
             issues = d.get("issues", [])
             want = {t.strip().lower() for t in (form.get("issue_types") or []) if t.strip()}
             counted = [i for i in issues if not want or ((i.get("fields") or {}).get("issuetype") or {}).get("name", "").lower() in want]
-            lines = ["%s · %s · %s · %s" % (i["key"], ((i.get("fields") or {}).get("issuetype") or {}).get("name", ""),
-                                            ((i.get("fields") or {}).get("status") or {}).get("name", ""),
-                                            ((i.get("fields") or {}).get("summary") or "")[:50]) for i in issues[:6]]
+
+            def line(i):
+                f = i.get("fields") or {}
+                sp = sprint.active_sprint(f.get(sf)) if sf else None
+                return "%s · %s · %s · %s%s" % (i["key"], (f.get("issuetype") or {}).get("name", ""), (f.get("status") or {}).get("name", ""),
+                                               (f.get("summary") or "")[:50], (" · " + sp["name"]) if sp else "")
             limit = int(form.get("story_limit") or 2)
-            det = "%d Treffer, davon %d zählen beim Limit (%d)." % (total, len(counted), limit) + ("\n" + "\n".join(lines) if lines else "")
+            det = used + "%d Treffer, davon %d zählen beim Limit (%d)." % (total, len(counted), limit)
+            lines = [line(i) for i in issues[:6]]
+            det += ("\n" + "\n".join(lines)) if lines else ""
             if len(counted) > limit:
                 r.add("jql", "JQL «in Arbeit»", "warn", det, "Über dem Limit: Das Panel zeigt dann ein rotes Banner.")
             elif total == 0:
                 r.add("jql", "JQL «in Arbeit»", "warn", det,
-                      "0 Treffer: Stimmt das, oder heißt der Status anders? Status in deinem Jira: %s." % (", ".join(statuses) or "nicht lesbar"))
+                      "0 Treffer: Stimmt das, oder heißt der Status anders? Status in deinem Jira: %s.%s" % (
+                          ", ".join(statuses) or "nicht lesbar",
+                          " Ist gerade ein Sprint aktiv und sind die Tickets darin?" if only_active else ""))
             else:
                 r.add("jql", "JQL «in Arbeit»", "ok", det)
         elif st == 400:
-            r.add("jql", "JQL «in Arbeit»", "fail", "Jira weist die JQL ab: %s" % _msg(resp),
-                  "Teste die Abfrage im Jira-Suchfeld (Erweitert). Status in deinem Jira: %s." % (", ".join(statuses) or "nicht lesbar"))
+            hint = "Teste die Abfrage im Jira-Suchfeld (Erweitert). Status in deinem Jira: %s." % (", ".join(statuses) or "nicht lesbar")
+            if only_active and "sprint" in _msg(resp).lower():
+                hint = ("Die Funktion openSprints() gibt es nur mit Jira Software. Schalte «nur aktive Sprints» aus, wenn ihr keine Sprints nutzt. "
+                        + hint)
+            r.add("jql", "JQL «in Arbeit»", "fail", used + "Jira weist die JQL ab: %s" % _msg(resp), hint)
         else:
             r.add("jql", "JQL «in Arbeit»", "fail", "HTTP %d: %s" % (st, _msg(resp)))
     except net.NetError as e:
@@ -635,10 +671,12 @@ def view(cfg, config_path, features_default=None):
             "emails": sorted(set(bf.get("emails", [])) | set(cfg.get("my_emails", []))), "names": bf.get("names", []),
             "agent_emails": bf.get("agent_emails", []), "agent_names": bf.get("agent_names", []),
             "agent_message_patterns": bf.get("agent_message_patterns", ["Co-Authored-By: Claude"]),
-            "max_branches": bf.get("max_branches", 40), "max_age_days": bf.get("max_age_days", 90)},
+            "max_branches": bf.get("max_branches", 40), "max_age_days": bf.get("max_age_days", 90),
+            "ignore_branches": bf.get("ignore_branches", ["release/*"])},
         "jira": {"url": jc.get("url", ""), "auth": jc.get("auth", "bearer"), "username": jc.get("username", ""),
                  "project_keys": jc.get("project_keys", []), "story_limit": jc.get("story_limit", 2),
-                 "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT},
+                 "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT,
+                 "only_active_sprints": bool(jc.get("only_active_sprints", True))},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
         "storage": {"keyring": bool(kr), "file": str(store.secrets_file()),
@@ -686,6 +724,7 @@ def build_config(current, p):
     bf["agent_message_patterns"] = _lst(b.get("agent_message_patterns"), "branch_filter.agent_message_patterns", errors)
     bf["max_branches"] = _int(b.get("max_branches"), "branch_filter.max_branches", 1, 200, errors, 40)
     bf["max_age_days"] = _int(b.get("max_age_days"), "branch_filter.max_age_days", 0, 3650, errors, 90)
+    bf["ignore_branches"] = _lst(b.get("ignore_branches", ["release/*"]), "branch_filter.ignore_branches", errors)
     cfg["branch_filter"] = bf
     cfg["my_emails"] = bf["emails"]
 
@@ -712,6 +751,7 @@ def build_config(current, p):
         jc["project_keys"] = keys
         jc["story_limit"] = _int(j.get("story_limit"), "jira.story_limit", 1, 20, errors, 2)
         jc["wip_issue_types"] = _lst(j.get("wip_issue_types"), "jira.wip_issue_types", errors)
+        jc["only_active_sprints"] = bool(j.get("only_active_sprints", True))
         jql = (j.get("jql_in_progress") or "").strip() or JQL_DEFAULT
         if len(jql) > 2000:
             errors["jira.jql_in_progress"] = "Zu lang."

@@ -104,6 +104,17 @@ class Flow(unittest.TestCase):
                 self.assertEqual(ov["me"], "me")
                 self.assertTrue(ov["jira"]["ok"])
                 self.assertTrue(any(i["kind"] == "branch" and i["branch"] == "agent/DLP-130-retry" for i in ov["mine"]))
+                names = [(i["kind"], i["branch"]) for i in ov["mine"]]
+                self.assertNotIn(("branch", "release/2.0"), names)   # release/* wird standardmäßig ignoriert
+                self.assertNotIn(("mr", "release/1.5"), names)
+                self.assertIn(("mr", "feature/DLP-101-a"), names)
+                self.assertTrue(ov["jira"]["only_active"])
+                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102"})   # DLP-120 liegt nicht im aktiven Sprint
+                self.assertEqual(ov["jira"]["sprints"][0]["name"], "Sprint 12")
+                self.assertGreater(ov["jira"]["sprints"][0]["days_left"], 100)
+                t101 = next(i for i in ov["mine"] if i["branch"] == "feature/DLP-101-a")["ticket"]
+                self.assertTrue(t101["in_sprint"])
+                self.assertEqual(t101["sprint"], "Sprint 12")
                 self.assertEqual(ov["ideas"], [])
                 self.assertEqual(ov["jobs"], [])
 
@@ -118,6 +129,18 @@ class Flow(unittest.TestCase):
                     code, r = self.call(m, path, {} if m == "POST" else None)
                     self.assertEqual(code, 404, path)
                     self.assertIn("ausgeschaltet", r["error"])
+                # release/* wieder zeigen und alle Sprints zulassen
+                code, _ = self.call("POST", "/api/settings/save", {
+                    "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}],
+                    "branch_filter": {"emails": ["me@x.ch"], "ignore_branches": []},
+                    "jira": {"url": jiurl, "auth": "bearer", "project_keys": ["DLP"], "wip_issue_types": ["Story"],
+                             "only_active_sprints": False}})
+                self.assertEqual(code, 200)
+                code, ov = self.call("GET", "/api/overview")
+                names = [(i["kind"], i["branch"]) for i in ov["mine"]]
+                self.assertIn(("branch", "release/2.0"), names)
+                self.assertIn(("mr", "release/1.5"), names)
+                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102", "DLP-120"})
                 # einschalten, ohne Neustart
                 code, _ = self.call("POST", "/api/settings/save", {
                     "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}], "features": {"ideas": True},

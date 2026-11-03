@@ -6,127 +6,234 @@
 <title>Arbeitspanel</title>
 <style>
   :root {
-    --bg: #f6f6f4; --card: #ffffff; --ink: #1d1d1b; --quiet: #6b6b66; --line: #e3e3de;
-    --ok: #1f7a4d; --bad: #b3261e; --run: #2457b8; --warn: #9a6200; --accent: #2457b8;
-    --okbg: #e4f3ea; --badbg: #fbe6e4; --runbg: #e3ebfa; --warnbg: #fbf0d9;
+    color-scheme: light dark;
+    --ground: #eceef1; --surface: #ffffff; --raised: #f4f5f8; --ink: #161a21; --quiet: #596271; --line: #d8dce3;
+    --focus: #2747d6; --focus-bg: #e3e8fb;
+    --ok: #12744a; --ok-bg: #dcf1e6; --bad: #bc2d26; --bad-bg: #fbe3e1; --warn: #94560a; --warn-bg: #faebcf;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #151514; --card: #1e1e1c; --ink: #ecece8; --quiet: #9a9a93; --line: #34342f;
-      --ok: #6fd1a0; --bad: #f2877f; --run: #8fb2f5; --warn: #e9b659; --accent: #8fb2f5;
-      --okbg: #1b2e24; --badbg: #38211f; --runbg: #1d2638; --warnbg: #33290f;
+      --ground: #0f1217; --surface: #171b22; --raised: #1e232c; --ink: #e8ebf1; --quiet: #9aa3b2; --line: #29303b;
+      --focus: #86a2ff; --focus-bg: #1c2540;
+      --ok: #62d4a0; --ok-bg: #16302a; --bad: #ff8f87; --bad-bg: #36201f; --warn: #f2bc5c; --warn-bg: #33290f;
     }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-  .pill { padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; }
-  .pill.ok { background: var(--okbg); color: var(--ok); }
-  .pill.bad { background: var(--badbg); color: var(--bad); }
-  .pill.neutral { background: var(--line); color: var(--quiet); }
-  .pill.warn { background: var(--warnbg); color: var(--warn); }
-  a.pill { text-decoration: none; }
-  .spacer { flex: 1; }
-  .quiet { color: var(--quiet); font-size: 13px; }
-  main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; padding: 16px; max-width: 1300px; margin: 0 auto; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--quiet); margin: 18px 0 8px; }
-  h2:first-child { margin-top: 0; }
-  .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; }
-  .banner.bad { background: var(--badbg); color: var(--bad); }
-  .banner.warn { background: var(--warnbg); color: var(--warn); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-  .card.stale { border-left: 4px solid var(--warn); }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .title { font-weight: 600; }
-  .meta { color: var(--quiet); font-size: 13px; }
-  .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--line); color: var(--quiet); }
-  .badge.success { background: var(--okbg); color: var(--ok); }
-  .badge.failed { background: var(--badbg); color: var(--bad); }
-  .badge.running, .badge.pending { background: var(--runbg); color: var(--run); }
-  .badge.draft { background: var(--warnbg); color: var(--warn); }
-  .badge.ticket { background: var(--runbg); color: var(--run); }
-  .badge.noticket { background: var(--warnbg); color: var(--warn); }
-  a.btn { font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
-  a.btn:hover { border-color: var(--accent); text-decoration: none; }
-  button, select { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  button:disabled { opacity: .5; cursor: default; }
-  a { color: var(--accent); text-decoration: none; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 14.5px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+  a { color: var(--focus); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  textarea { width: 100%; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); resize: vertical; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .quiet { color: var(--quiet); }
+  .small { font-size: 12.5px; }
+
+  /* Kopfzeile */
+  header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--ground) 92%, transparent); backdrop-filter: blur(8px);
+           border-bottom: 1px solid var(--line); height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 22px; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  .tabs { display: flex; gap: 18px; height: 100%; }
+  .tab { all: unset; cursor: pointer; display: flex; align-items: center; height: 100%; font-weight: 600; color: var(--quiet); border-bottom: 2px solid transparent; padding-top: 2px; }
+  .tab:hover { color: var(--ink); }
+  .tab.on { color: var(--ink); border-bottom-color: var(--focus); }
+  .spacer { flex: 1; }
+  .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--quiet); }
+  .conn:hover { text-decoration: none; color: var(--ink); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--quiet); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--quiet); }
+  button, select { font: inherit; font-size: 13px; }
+  .btn, button { cursor: pointer; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .btn:hover, button:hover { border-color: var(--focus); text-decoration: none; }
+  button.primary { background: var(--focus); border-color: var(--focus); color: var(--ground); font-weight: 650; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.quiet-btn { border-color: transparent; background: transparent; color: var(--quiet); }
+  #fetched { font-size: 12.5px; color: var(--quiet); }
+
+  /* Übersicht */
+  #viewOverview { max-width: 1180px; margin: 0 auto; padding: 22px 20px 64px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 28px; }
+  #viewOverview.withaside { grid-template-columns: minmax(0, 1fr) 300px; }
+  @media (max-width: 960px) { #viewOverview.withaside { grid-template-columns: minmax(0, 1fr); } }
+  .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; }
+  .banner.bad { background: var(--bad-bg); color: var(--bad); }
+  .banner.warn { background: var(--warn-bg); color: var(--warn); }
+  .secthead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; }
+  .secthead h2 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -.005em; }
+  .secthead .count { color: var(--quiet); font-weight: 600; }
+  .secthead .right { margin-left: auto; font-size: 13px; color: var(--quiet); display: flex; gap: 14px; }
+
+  /* Fokus: die Story-Plätze */
+  .slots { display: grid; grid-template-columns: repeat(var(--slots, 2), minmax(0, 1fr)); gap: 14px; margin-bottom: 30px; }
+  @media (max-width: 760px) { .slots { grid-template-columns: minmax(0, 1fr); } }
+  .slot { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-height: 132px; display: flex; flex-direction: column; gap: 10px; }
+  .slot.free { background: transparent; border: 1.5px dashed var(--line); color: var(--quiet); justify-content: center; align-items: flex-start; }
+  .slot.free strong { font-size: 15px; color: var(--ink); font-weight: 650; }
+  .slot.over { border-color: var(--bad); box-shadow: inset 4px 0 0 var(--bad); }
+  .slot .top { display: flex; gap: 10px; align-items: center; }
+  .slot .key { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .slot .sum { font-size: 17px; font-weight: 680; line-height: 1.28; letter-spacing: -.01em; color: var(--ink); }
+  .slot .sum:hover { text-decoration: none; color: var(--focus); }
+  .slot .links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; align-items: center; }
+  .mrchip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--ink); background: var(--raised); }
+  .mrchip:hover { border-color: var(--focus); text-decoration: none; }
+  .nolink { color: var(--warn); font-size: 13px; font-weight: 600; }
+  .overnote { margin: -18px 0 26px; color: var(--bad); font-weight: 600; }
+
+  /* Filterleiste */
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }
+  .toolbar input[type=search] { flex: 1 1 260px; max-width: 420px; font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .toolbar select { padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .tog { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13px; user-select: none; }
+  .tog:has(input:checked) { background: var(--focus-bg); border-color: var(--focus); color: var(--focus); font-weight: 600; }
+  .tog input { position: absolute; opacity: 0; pointer-events: none; }
+  .tog:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  #fcount { margin-left: auto; font-size: 13px; color: var(--quiet); }
+
+  /* Listen */
+  .group { margin-bottom: 26px; }
+  .list { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .item { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto; column-gap: 14px; padding: 11px 16px 11px 0; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .item:hover { background: var(--raised); }
+  .rail { background: transparent; }
+  .rail.bad { background: var(--bad); } .rail.focus { background: var(--focus); } .rail.warn { background: var(--warn); } .rail.ok { background: var(--ok); }
+  .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .l1 .t { font-weight: 650; color: var(--ink); font-size: 14.5px; }
+  .l1 .t:hover { color: var(--focus); text-decoration: none; }
+  .l2 { display: flex; gap: 6px 16px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--quiet); margin-top: 2px; }
+  .l2 code { color: var(--ink); background: var(--raised); padding: 0 6px; border-radius: 5px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  .reason { font-weight: 650; }
+  .reason.bad { color: var(--bad); } .reason.focus { color: var(--focus); } .reason.warn { color: var(--warn); }
+  .age.stale { color: var(--warn); font-weight: 650; }
+  .acts { display: flex; gap: 8px; align-items: center; align-self: center; flex-wrap: wrap; justify-content: flex-end; }
+  .acts a, .acts button { font-size: 13px; }
+  .l3 { grid-column: 2 / 4; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .pd { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--quiet); flex: none; }
+  .pd.success { background: var(--ok); } .pd.failed { background: var(--bad); }
+  .pd.running, .pd.pending { background: var(--focus); animation: pulse 1.6s ease-in-out infinite; }
+  .pd.none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--quiet); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .pd.running, .pd.pending { animation: none; } }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--raised); color: var(--quiet); border: 1px solid transparent; white-space: nowrap; }
+  a.chip:hover { text-decoration: none; border-color: var(--focus); }
+  .chip.tk { background: var(--focus-bg); color: var(--focus); }
+  .chip.out { background: transparent; border: 1px dashed var(--quiet); color: var(--quiet); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .chip.agent { background: transparent; border-color: var(--focus); color: var(--focus); }
+  .chip.draft { background: var(--warn-bg); color: var(--warn); }
+  .empty { color: var(--quiet); padding: 16px 18px; }
+  .nomatch { color: var(--quiet); padding: 28px 8px; text-align: center; }
+
+  /* Seitenspalte (Ideenbox, Jobs: vorerst aus) */
+  aside h2 { font-size: 15px; margin: 0 0 10px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .idea { padding: 8px 0; border-bottom: 1px solid var(--line); }
   .idea.expired { opacity: .5; }
   .idea:last-child { border-bottom: 0; }
-  .empty { color: var(--quiet); font-style: italic; padding: 6px 0; }
-  pre.log { background: #111; color: #d8d8d2; padding: 8px; border-radius: 8px; max-height: 240px; overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
-  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); width: min(720px, 92vw); }
-  dialog textarea { height: 300px; font-family: ui-monospace, monospace; font-size: 13px; }
-  .tabs { display: flex; gap: 4px; }
-  .tab { border-radius: 8px; border: 1px solid transparent; background: transparent; font-weight: 600; }
-  .tab.on { background: var(--card); border-color: var(--line); }
-  main.single { grid-template-columns: minmax(0, 1fr); }
-  #viewSettings { max-width: 860px; margin: 0 auto; padding: 16px 16px 96px; }
-  #viewSettings h2 { margin-top: 0; }
-  .field { display: grid; gap: 3px; margin-bottom: 10px; }
-  .field > label { font-size: 13px; font-weight: 600; }
-  .field .help { font-size: 12.5px; color: var(--quiet); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .meta { color: var(--quiet); font-size: 13px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--raised); color: var(--quiet); }
+  .badge.success { background: var(--ok-bg); color: var(--ok); } .badge.failed { background: var(--bad-bg); color: var(--bad); } .badge.running { background: var(--focus-bg); color: var(--focus); }
+  textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+  pre.log { background: #0d1015; color: #d8dde6; padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; font: 12px/1.5 var(--mono); white-space: pre-wrap; margin: 6px 0 0; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); width: min(720px, 92vw); }
+  dialog::backdrop { background: rgba(8, 10, 14, .5); }
+  dialog textarea { height: 300px; font-family: var(--mono); font-size: 13px; }
+  .toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--ground); padding: 9px 16px; border-radius: 10px; z-index: 20; max-width: 90vw; }
+
+  /* Einstellungen */
+  #viewSettings { max-width: 1060px; margin: 0 auto; padding: 22px 20px 110px; }
+  .setgrid { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 36px; }
+  @media (max-width: 800px) { .setgrid { grid-template-columns: minmax(0, 1fr); } .setnav { display: none; } }
+  .setnav { position: sticky; top: 76px; align-self: start; display: grid; gap: 2px; }
+  .setnav button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 8px; color: var(--quiet); font-weight: 600; }
+  .setnav button:hover { background: var(--surface); color: var(--ink); }
+  .setnav button.on { background: var(--surface); color: var(--ink); box-shadow: inset 3px 0 0 var(--focus); }
+  .sset { padding-bottom: 30px; margin-bottom: 30px; border-bottom: 1px solid var(--line); scroll-margin-top: 70px; }
+  .sset:last-child { border-bottom: 0; }
+  .sset > header { all: unset; display: block; margin-bottom: 14px; }
+  .sset h2 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.015em; }
+  .sset h3 { font-size: 14px; margin: 22px 0 6px; }
+  .lead { color: var(--quiet); margin: 0; max-width: 62ch; }
+  .field { display: grid; gap: 4px; margin-bottom: 12px; }
+  .field > label { font-size: 13px; font-weight: 650; }
+  .field .help { font-size: 12.5px; color: var(--quiet); max-width: 70ch; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
   @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
   input[type=text], input[type=password], input[type=number], select.full, textarea.full {
-    width: 100%; font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
-  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  textarea.full { font-family: ui-monospace, monospace; font-size: 13px; resize: vertical; }
-  .ferr { color: var(--bad); font-size: 12.5px; min-height: 0; }
+    width: 100%; font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  textarea.full { font-family: var(--mono); font-size: 13px; resize: vertical; }
+  .ferr { color: var(--bad); font-size: 12.5px; }
   .ferr:empty { display: none; }
-  .steps { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .step { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .steps { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
   .step .ic { font-weight: 800; text-align: center; }
   .step.ok .ic { color: var(--ok); } .step.fail .ic { color: var(--bad); } .step.warn .ic { color: var(--warn); } .step.skip { opacity: .6; }
-  .step .st { font-weight: 600; }
+  .step .st { font-weight: 650; }
   .step .sd { font-size: 13px; color: var(--quiet); white-space: pre-wrap; word-break: break-word; }
-  .step.fail { background: var(--badbg); }
-  .hint { margin-top: 4px; font-size: 13px; padding: 6px 9px; border-radius: 8px; background: var(--runbg); color: var(--ink); }
-  .step.fail .hint { background: var(--card); }
-  .verdict { padding: 8px 10px; font-weight: 650; }
-  .verdict.ok { background: var(--okbg); color: var(--ok); } .verdict.bad { background: var(--badbg); color: var(--bad); }
-  .chip { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--line); font-size: 13px; margin: 0 6px 6px 0; }
-  .chip button { border: 0; background: transparent; padding: 0 2px; font-size: 15px; line-height: 1; }
-  .chip input { width: 150px; padding: 2px 6px; font-size: 13px; }
-  .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 6; }
+  .step.fail { background: var(--bad-bg); }
+  .hint { margin-top: 5px; font-size: 13px; padding: 7px 10px; border-radius: 8px; background: var(--focus-bg); color: var(--ink); }
+  .step.fail .hint { background: var(--surface); }
+  .verdict { padding: 9px 12px; font-weight: 700; }
+  .verdict.ok { background: var(--ok-bg); color: var(--ok); } .verdict.bad { background: var(--bad-bg); color: var(--bad); }
+  .pchip { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); font-size: 13px; margin: 0 6px 6px 0; }
+  .pchip button { border: 0; background: transparent; padding: 0 2px; font-size: 15px; line-height: 1; }
+  .pchip input { width: 150px; padding: 2px 6px; font-size: 13px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--ground) 94%, transparent); backdrop-filter: blur(8px);
+             border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 14px; justify-content: center; align-items: center; z-index: 6; }
   table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
-  table.mini td, table.mini th { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
-  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; z-index: 10; }
+  table.mini td, table.mini th { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  label.check { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+  label.check input { margin-top: 3px; }
+  @media (max-width: 720px) {
+    header { height: auto; flex-wrap: wrap; gap: 6px 14px; padding: 8px 16px; }
+    header h1, #fetched, #logBtn { display: none; }
+    .tabs { height: 36px; }
+    #viewOverview, #viewSettings { padding-left: 16px; padding-right: 16px; }
+    .item { grid-template-columns: 5px minmax(0, 1fr); }
+    .item .acts { grid-column: 2; justify-content: flex-start; margin-top: 8px; }
+    .l3 { grid-column: 2; }
+    .l2 code { max-width: 200px; }
+    .savebar { padding: 8px 16px; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>Arbeitspanel</h1>
   <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="settings">Einstellungen</button></nav>
-  <a id="pGl" class="pill neutral" href="#settings" style="display:none"></a>
-  <a id="pJi" class="pill neutral" href="#settings" style="display:none"></a>
-  <span id="stories" class="pill neutral" style="display:none"></span>
-  <span id="wip" class="pill ok">WIP –</span>
-  <a id="helpdesk" class="pill neutral" style="display:none" target="_blank" rel="noopener"></a>
-  <span id="demo" class="pill" style="display:none;background:var(--warnbg);color:var(--warn)">Demo-Daten</span>
   <span class="spacer"></span>
-  <span id="fetched" class="quiet"></span>
-  <button id="logBtn">Log</button>
+  <a id="pGl" class="conn" href="#settings" style="display:none"></a>
+  <a id="pJi" class="conn" href="#settings" style="display:none"></a>
+  <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
+  <span id="fetched"></span>
+  <button id="logBtn" class="quiet-btn">Log</button>
   <button id="refresh">Neu laden</button>
 </header>
-<main id="viewOverview">
-  <section id="left"></section>
-  <aside id="aside">
+
+<div id="viewOverview">
+  <section id="left">
+    <div id="banners"></div>
+    <div id="focusBox"></div>
+    <div class="toolbar" id="toolbar" hidden>
+      <input type="search" id="fq" placeholder="Suchen: Titel, Branch, Ticket   ( / )" aria-label="Suchen" autocomplete="off">
+      <select id="fproj" aria-label="Projekt"></select>
+      <label class="tog"><input type="checkbox" id="fagent"> Nur Agent</label>
+      <label class="tog"><input type="checkbox" id="fnotk"> Ohne Ticket</label>
+      <label class="tog"><input type="checkbox" id="fstale"> Liegt schon lange</label>
+      <span id="fcount"></span>
+    </div>
+    <div id="list"></div>
+  </section>
+  <aside id="aside" hidden>
    <div id="ideasBox" hidden>
     <h2>Ideenbox <span id="ideaCount" class="quiet"></span></h2>
     <div class="card">
       <textarea id="ideaText" rows="2" placeholder="Idee kurz festhalten, Enter speichert (Shift+Enter = neue Zeile)"></textarea>
       <div class="row" style="margin-top:6px">
         <button id="triage">Triage-Prompt kopieren</button>
-        <span class="quiet">Nur erfassen. Gestartet wird nichts.</span>
+        <span class="quiet small">Nur erfassen. Gestartet wird nichts.</span>
       </div>
       <div id="ideas"></div>
     </div>
@@ -136,7 +243,7 @@
     <div id="jobs"></div>
    </div>
   </aside>
-</main>
+</div>
 <div id="viewSettings" hidden></div>
 
 <dialog id="dlg">
@@ -147,14 +254,14 @@
 
 <dialog id="logDlg" style="width:min(1000px,96vw)">
   <div class="row" style="justify-content:space-between">
-    <strong>Log <span id="logFile" class="quiet" style="font-weight:400"></span></strong>
+    <strong>Log <span id="logFile" class="quiet small" style="font-weight:400"></span></strong>
     <span class="row">
-      <select id="logLevel"><option value="debug">alles</option><option value="info" selected>ab Info</option><option value="warning">nur Warnungen/Fehler</option></select>
+      <select id="logLevel"><option value="debug">alles</option><option value="info" selected>ab Info</option><option value="warning">nur Warnungen und Fehler</option></select>
       <button id="logReload">Neu laden</button><button id="logClose">Schließen</button>
     </span>
   </div>
   <pre class="log" id="logText" style="max-height:60vh"></pre>
-  <div class="quiet" style="margin-top:6px">Alles Genauere (jede Anfrage, jede Branch-Entscheidung) steht nur im Log, wenn der Server mit <code>-v</code> oder <code>log_level: debug</code> läuft.</div>
+  <div class="quiet small" style="margin-top:6px">Jede Anfrage und jede Branch-Entscheidung steht nur im Log, wenn der Server mit <code>-v</code> oder <code>log_level: debug</code> läuft.</div>
 </dialog>
 
 <script>
@@ -175,7 +282,7 @@ function toast(msg) {
   const t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2800);
+  setTimeout(() => t.remove(), 3200);
 }
 
 async function copyText(text, title) {
@@ -184,93 +291,170 @@ async function copyText(text, title) {
   document.getElementById('dlgText').value = text;
   document.getElementById('dlg').showModal();
 }
+const $ = id => document.getElementById(id);
 
+// ---------------------------------------------------------------- Übersicht
 const pipelineLabel = { success: 'Pipeline grün', failed: 'Pipeline rot', running: 'Pipeline läuft', pending: 'Pipeline wartet', none: 'keine Pipeline' };
+const F = () => (state && state.features) || {};
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('tinyops.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('tinyops.' + k, JSON.stringify(v)); } catch (e) { /* egal */ } },
+};
+const filt = { q: '', proj: LS.get('proj', ''), agent: LS.get('agent', false), notk: LS.get('notk', false), stale: LS.get('stale', false) };
 
-function card(it) {
-  const badges = [];
-  if (it.kind === 'branch') {
-    badges.push('<span class="badge">kein MR</span>');
-    if (it.ahead) badges.push(`<span class="badge" title="Commits vor dem Default-Branch">${it.ahead} Commit${it.ahead === 1 ? '' : 's'}</span>`);
-    if (it.by_agent) badges.push('<span class="badge draft" title="Commits vom Agenten (Konto oder Co-Authored-By)">Agent</span>');
-    else if (it.by_me) badges.push('<span class="badge" title="Mindestens ein Commit von dir">von mir</span>');
+// Warum steht das hier? Eine Zeile, die sagt, was von dir erwartet wird.
+function reasonOf(it) {
+  if (it.kind === 'review') return { t: 'Review wartet auf dich', c: 'focus' };
+  if (it.kind === 'assigned') return { t: 'Dir zugeteilt', c: 'focus' };
+  if (it.kind === 'branch') return { t: it.ahead ? `${it.ahead} Commit${it.ahead === 1 ? '' : 's'} ohne MR` : 'Branch ohne MR', c: '' };
+  if (it.draft) return { t: 'Draft', c: '' };
+  if (it.pipeline === 'failed') return { t: 'Pipeline rot', c: 'bad' };
+  if (it.pipeline === 'success') return { t: 'Bereit zum Mergen', c: 'focus' };
+  if (['running', 'pending', 'created', 'waiting_for_resource'].includes(it.pipeline)) return { t: 'Pipeline läuft', c: '' };
+  return { t: 'Offen', c: '' };
+}
+function railOf(it) {
+  const r = reasonOf(it);
+  if (r.c === 'bad') return 'bad';
+  if (it.stale) return 'warn';
+  return r.c === 'focus' ? 'focus' : '';
+}
+function ticketChip(it) {
+  const j = state.jira;
+  if (!j || !j.ok) return '';
+  if (it.ticket) {
+    const t = it.ticket;
+    const out = j.only_active && t.in_sprint === false;
+    const cls = out ? 'chip out' : 'chip tk';
+    const hint = esc(t.summary) + (t.sprint ? ' · ' + esc(t.sprint) : out ? ' · nicht in einem aktiven Sprint' : '');
+    return `<a class="${cls}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}">${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}</a>`;
   }
-  if (it.draft) badges.push('<span class="badge draft">Draft</span>');
-  if (it.kind !== 'branch') badges.push(`<span class="badge ${esc(it.pipeline)}">${esc(pipelineLabel[it.pipeline] || it.pipeline)}</span>`);
-  if (it.ticket) badges.push(`<a class="badge ticket" href="${esc(it.ticket.url)}" target="_blank" rel="noopener" title="${esc(it.ticket.summary)}">${esc(it.ticket.key)} · ${esc(it.ticket.status)}</a>`);
-  else if (it.ticket_unknown) badges.push(`<span class="badge noticket" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>`);
-  else if (it.no_ticket) badges.push('<span class="badge noticket">ohne Ticket</span>');
-  const age = it.age_days === 0 ? 'heute' : `${it.age_days} Tage ohne Änderung`;
-  const mrLabel = it.iid ? ` !${it.iid}` : '';
+  if (it.ticket_unknown) return `<span class="chip warn" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>`;
+  if (it.no_ticket) return '<span class="chip warn">ohne Ticket</span>';
+  return '';
+}
+function ageHtml(it) {
+  const txt = it.age_days === 0 ? 'heute' : it.age_days === 1 ? 'seit gestern' : `seit ${it.age_days} Tagen`;
+  return `<span class="age ${it.stale ? 'stale' : ''}">${txt}</span>`;
+}
+
+function row(it) {
+  const r = reasonOf(it);
+  const mr = it.iid ? `!${it.iid}` : '';
+  const chips = [ticketChip(it)];
+  if (it.draft && it.kind !== 'branch') chips.push('<span class="chip draft">Draft</span>');
+  if (it.by_agent) chips.push('<span class="chip agent" title="Commits vom Agenten (Konto oder Co-Authored-By)">Agent</span>');
+  else if (it.kind === 'branch' && it.by_me) chips.push('<span class="chip" title="Mindestens ein Commit von dir">von mir</span>');
+  const pipe = it.kind === 'branch' ? '' : `<span class="pd ${esc(it.pipeline)}" title="${esc(pipelineLabel[it.pipeline] || it.pipeline)}"></span>`;
+  const acts = [];
+  if (it.pipeline_url) acts.push(`<a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>`);
+  if (it.no_ticket && it.create_url) acts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>`);
+  acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Öffnen</a>`);
   const parts = [];
-  const F = (state && state.features) || {};
-  if (F.testenv && it.iid && it.can_deploy) {
+  if (F().testenv && it.iid && it.can_deploy) {
     const opts = state.prompts.map(p => `<option>${esc(p)}</option>`).join('');
     const lock = it.agent_locked ? ' disabled title="Story-Limit überschritten: Agenten nur für Tickets, die schon in Arbeit sind"' : '';
-    parts.push(`<button class="primary" data-act="deploy">Testumgebung starten</button>
-      <button data-act="teardown">Abbauen</button>
-      <select class="ps">${opts}</select>
-      <button data-act="copy">Prompt kopieren</button>
+    parts.push(`<button class="primary" data-act="deploy">Testumgebung starten</button><button data-act="teardown">Abbauen</button>
+      <select class="ps">${opts}</select><button data-act="copy">Prompt kopieren</button>
       ${state.agent_enabled ? `<button data-act="agent"${lock}>Agent starten</button>` : ''}`);
   }
-  if (it.no_ticket) {
-    parts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>`
-      + (F.ideas ? `<button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>` : ''));
-  }
-  const actions = parts.length ? `<div class="row" style="margin-top:8px" data-p="${it.project_id}" data-i="${it.iid ?? ''}">${parts.join('')}</div>` : '';
-  return `<div class="card ${it.stale ? 'stale' : ''}">
-    <div class="row"><span class="title">${esc(it.title)}</span>${badges.join('')}</div>
-    <div class="meta">${esc(it.project)}${mrLabel} · <code>${esc(it.branch)}</code> · ${esc(age)}
-      · <a href="${esc(it.url)}" target="_blank" rel="noopener">öffnen</a>${it.pipeline_url ? ` · <a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>` : ''}</div>
-    ${actions}
+  if (it.no_ticket && F().ideas) parts.push(`<button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>`);
+  return `<div class="item">
+    <div class="rail ${railOf(it)}"></div>
+    <div>
+      <div class="l1">${pipe}<a class="t" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${chips.join('')}</div>
+      <div class="l2"><span class="reason ${r.c}">${esc(r.t)}</span><span>${esc(it.project)}${mr ? ' ' + mr : ''}</span><code title="${esc(it.branch)}">${esc(it.branch)}</code>${ageHtml(it)}</div>
+    </div>
+    <div class="acts">${acts.join('')}</div>
+    ${parts.length ? `<div class="l3" data-p="${it.project_id}" data-i="${it.iid ?? ''}">${parts.join('')}</div>` : ''}
   </div>`;
 }
 
-function section(title, items, emptyText) {
-  return `<h2>${esc(title)} (${items.length})</h2>` + (items.length ? items.map(card).join('') : `<div class="empty">${esc(emptyText)}</div>`);
+function matches(it) {
+  if (filt.proj && it.project !== filt.proj) return false;
+  if (filt.agent && !it.by_agent) return false;
+  if (filt.notk && !it.no_ticket) return false;
+  if (filt.stale && !it.stale) return false;
+  if (filt.q) {
+    const hay = [it.title, it.branch, it.project, it.ticket && it.ticket.key, it.ticket && it.ticket.summary, it.ticket_unknown].join(' ').toLowerCase();
+    if (!filt.q.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
+  }
+  return true;
 }
 
-function storiesSection() {
+function group(title, items, empty, hint) {
+  const body = items.length ? `<div class="list">${items.map(row).join('')}</div>` : `<div class="list"><div class="empty">${esc(empty)}</div></div>`;
+  return `<div class="group"><div class="secthead"><h2>${esc(title)}</h2><span class="count">${items.length}</span>${hint ? `<span class="right">${hint}</span>` : ''}</div>${body}</div>`;
+}
+
+function focusHtml() {
   const j = state.jira;
-  if (!j || !j.ok) return '';
-  const rows = j.stories.map(s => {
-    const linked = s.items.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join(', ');
-    const flag = s.no_mr ? '<span class="badge noticket">kein MR</span>' : '';
-    return `<div class="card story">
-      <div class="row"><a class="title" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.key)} ${esc(s.summary)}</a>
-        <span class="badge ticket">${esc(s.status)}</span>${flag}</div>
-      <div class="meta">${linked ? 'MR/Branch: ' + linked : 'Noch kein MR oder Branch mit diesem Key.'}</div>
-    </div>`;
-  }).join('');
-  return `<h2>Stories in Arbeit (${j.count}/${j.limit})</h2>` + (rows || '<div class="empty">Keine Story in Arbeit.</div>');
+  if (!j || !j.ok) {
+    if (!state.configured) return '';
+    return `<div class="secthead"><h2>Fokus</h2><span class="right">Ohne Jira zählt das Panel nur MRs und Branches: ${state.wip} von ${state.wip_limit}.</span></div>`;
+  }
+  const slots = [];
+  const n = Math.max(j.limit, j.stories.length);
+  for (let i = 0; i < n; i++) {
+    const s = j.stories[i];
+    if (!s) {
+      slots.push(`<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>`);
+      continue;
+    }
+    const over = i >= j.limit;
+    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span>${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join('');
+    slots.push(`<div class="slot ${over ? 'over' : ''}">
+      <div class="top"><span class="key">${esc(s.key)}</span><span class="chip">${esc(s.status)}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
+      <a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>
+      <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
+    </div>`);
+  }
+  const sp = (j.sprints || []).map(s => `${esc(s.name)}${s.days_left !== null && s.days_left !== undefined ? (s.days_left >= 0 ? ` · noch ${s.days_left} Tage` : ' · überfällig') : ''}`).join(', ');
+  const scope = j.only_active ? 'nur aktive Sprints' : 'alle Sprints';
+  return `<div class="secthead"><h2>Stories in Arbeit</h2><span class="count">${j.count} von ${j.limit}</span>
+      <span class="right">${sp ? esc(scope) + ': ' + sp : esc(scope)}</span></div>
+    <div class="slots" style="--slots:${Math.min(n, 3)}">${slots.join('')}</div>
+    ${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}`;
 }
 
 function renderLeft() {
-  const mine = state.mine, review = state.review;
-  const j = state.jira;
-  const bereit = mine.filter(i => i.state === 'bereit' || i.state === 'offen');
-  const waiting = review.concat(bereit);
-  let html = '';
+  let banners = '';
   if (!state.configured) {
-    html += `<div class="banner warn"><strong>Noch nicht verbunden.</strong> ${state.problems.map(esc).join(' ')}
+    banners += `<div class="banner warn"><strong>Noch nicht verbunden.</strong> ${state.problems.map(esc).join(' ')}
       <div style="margin-top:8px"><button class="primary" onclick="setView('settings')">Einstellungen öffnen</button></div></div>`;
   }
-  if (state.errors.length) html += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
-  if (j && j.ok && j.over) html += `<div class="banner bad"><strong>${j.count} Stories in Arbeit, Limit ${j.limit}.</strong> Schließe eine ab oder setze sie zurück, bevor etwas Neues beginnt. Agenten starten nur noch für Stories, die schon laufen.</div>`;
-  else if (!(j && j.ok) && state.wip > state.wip_limit) html += `<div class="banner bad"><strong>${state.wip} offene Arbeiten, Limit ${state.wip_limit}.</strong> Erst abschließen oder parken, bevor etwas Neues startet.</div>`;
-  const stale = mine.filter(i => i.stale).length;
-  if (stale) html += `<div class="banner warn">${stale} Eintrag/Einträge seit ${state.stale_days} Tagen oder länger unberührt (gelb markiert). Mergen, parken oder löschen.</div>`;
-  html += storiesSection();
-  html += section('Wartet auf mich', waiting, 'Nichts wartet auf dich.');
-  html += section('Mir zugeteilt', state.assigned, 'Dir ist nichts zugeteilt, was nicht von dir ist.');
-  html += section('Läuft', mine.filter(i => i.state === 'laeuft'), 'Keine laufenden Pipelines.');
-  html += section('Rot', mine.filter(i => i.state === 'rot'), 'Nichts Rotes.');
-  html += section('Draft', mine.filter(i => i.state === 'draft'), 'Keine Drafts.');
-  html += section('Offene Branches mit meinen oder Agent-Commits (ohne MR)', mine.filter(i => i.state === 'kein-mr'), 'Keine offenen Branches von dir oder deinem Agenten.');
-  if (!state.configured) html = html.split('<h2>')[0];   // ohne Verbindung nur den Hinweis zeigen
-  document.getElementById('left').innerHTML = html;
-}
+  if (state.errors.length) banners += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
+  $('banners').innerHTML = banners;
+  const tb = $('toolbar');
+  if (!state.configured) { $('focusBox').innerHTML = ''; $('list').innerHTML = ''; tb.hidden = true; return; }
+  $('focusBox').innerHTML = focusHtml();
 
+  const all = state.review.concat(state.assigned, state.mine);
+  const projs = [...new Set(all.map(i => i.project))].sort();
+  const sel = $('fproj');
+  if (filt.proj && !projs.includes(filt.proj)) filt.proj = '';
+  sel.innerHTML = '<option value="">Alle Projekte</option>' + projs.map(p => `<option ${p === filt.proj ? 'selected' : ''}>${esc(p)}</option>`).join('');
+  $('fagent').checked = filt.agent; $('fnotk').checked = filt.notk; $('fstale').checked = filt.stale;
+  tb.hidden = false;
+  $('fnotk').parentElement.hidden = !(state.jira && state.jira.ok);
+
+  const mine = state.mine;
+  const needs = state.review.concat(state.assigned, mine.filter(i => i.kind === 'mr' && (i.pipeline === 'failed' || (i.pipeline === 'success' && !i.draft)))).filter(matches);
+  const needSet = new Set(needs);
+  const mrs = mine.filter(i => i.kind === 'mr' && matches(i) && !needSet.has(i));
+  const branches = mine.filter(i => i.kind === 'branch' && matches(i));
+  const shown = needs.length + mrs.length + branches.length;
+  const total = all.length;
+  $('fcount').textContent = shown === total ? `${total} Einträge` : `${shown} von ${total}`;
+
+  const ign = state.ignored_branches;
+  $('list').innerHTML = shown === 0 && total > 0
+    ? '<div class="nomatch">Kein Eintrag passt zu den Filtern.</div>'
+    : group('Braucht dich', needs, 'Nichts wartet auf dich.')
+    + group('Meine MRs', mrs, 'Keine weiteren offenen MRs.')
+    + group('Offene Branches', branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.',
+        state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '');
+}
 function renderIdeas() {
   const ideas = state.ideas;
   const open = ideas.filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length;
@@ -308,52 +492,28 @@ async function loadLog(id) {
   } catch (e) { /* Job weg */ }
 }
 
+
 function renderHeader() {
-  const j = state.jira;
-  const s = document.getElementById('stories');
-  const w = document.getElementById('wip');
-  if (j && j.ok) {
-    s.style.display = '';
-    s.textContent = `Stories ${j.count}/${j.limit}`;
-    s.className = 'pill ' + (j.over ? 'bad' : 'ok');
-    w.textContent = `${state.wip} MR/Branches`;
-    w.className = 'pill neutral';
-  } else {
-    s.style.display = 'none';
-    w.textContent = `WIP ${state.wip}/${state.wip_limit}`;
-    w.className = 'pill ' + (state.wip > state.wip_limit ? 'bad' : 'ok');
-  }
-  if (!state.configured) w.style.display = 'none'; else w.style.display = '';
-  const h = state.helpdesk, hd = document.getElementById('helpdesk');
-  if (!h) { hd.style.display = 'none'; }
-  else {
-    hd.style.display = '';
-    if (h.error) {
-      hd.textContent = 'Helpdesk ?'; hd.title = h.error; hd.removeAttribute('href'); hd.className = 'pill neutral';
-    } else {
-      hd.textContent = `Helpdesk ${h.open}${h.truncated ? '+' : ''} · ältestes ${h.oldest_hours} h` + (h.over_hours ? ` · ${h.over_hours} über ${h.sla_hours} h` : '');
-      hd.title = 'Öffnet die Liste in Jira. Zahl wird nur alle paar Minuten aktualisiert.';
-      hd.href = h.url; hd.className = 'pill ' + (h.over_hours ? 'warn' : 'neutral');
-    }
-  }
-  const gl = document.getElementById('pGl'), ji = document.getElementById('pJi');
+  const gl = $('pGl'), ji = $('pJi');
   gl.style.display = ''; ji.style.display = '';
-  if (!state.configured) { gl.textContent = 'GitLab: nicht verbunden'; gl.className = 'pill bad'; }
-  else if (state.errors.some(e => !e.startsWith('Jira'))) { gl.textContent = 'GitLab: Fehler'; gl.className = 'pill bad'; gl.title = 'Details im Banner oder unter Einstellungen'; }
-  else { gl.textContent = 'GitLab ✓'; gl.className = 'pill ok'; }
-  if (state.jira && state.jira.ok) { ji.textContent = 'Jira ✓'; ji.className = 'pill ok'; }
-  else if (state.jira) { ji.textContent = 'Jira: Fehler'; ji.className = 'pill bad'; ji.title = state.jira.error; }
-  else { ji.textContent = 'Jira: aus'; ji.className = 'pill neutral'; }
-  document.getElementById('demo').style.display = state.demo ? '' : 'none';
-  document.getElementById('fetched').textContent = 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  const dot = (cls, text, title) => `<span class="dot ${cls}"></span>${text}`;
+  if (!state.configured) { gl.innerHTML = dot('off', 'GitLab'); gl.title = 'Nicht verbunden'; }
+  else if (state.errors.some(e => !e.startsWith('Jira'))) { gl.innerHTML = dot('bad', 'GitLab'); gl.title = 'Fehler, Details im Banner'; }
+  else { gl.innerHTML = dot('ok', 'GitLab'); gl.title = 'Verbunden'; }
+  if (state.jira && state.jira.ok) { ji.innerHTML = dot('ok', 'Jira'); ji.title = 'Verbunden'; }
+  else if (state.jira) { ji.innerHTML = dot('bad', 'Jira'); ji.title = state.jira.error; }
+  else { ji.innerHTML = dot('off', 'Jira'); ji.title = 'Nicht eingerichtet'; }
+  $('demo').style.display = state.demo ? '' : 'none';
+  $('fetched').textContent = 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
 }
 
 function renderAside() {
-  const F = state.features || {};
-  document.getElementById('ideasBox').hidden = !F.ideas;
-  document.getElementById('jobsBox').hidden = !F.testenv;
-  document.getElementById('aside').hidden = !(F.ideas || F.testenv);
-  document.getElementById('viewOverview').classList.toggle('single', !(F.ideas || F.testenv));
+  const f = F();
+  $('ideasBox').hidden = !f.ideas;
+  $('jobsBox').hidden = !f.testenv;
+  const on = !!(f.ideas || f.testenv);
+  $('aside').hidden = !on;
+  $('viewOverview').classList.toggle('withaside', on);
 }
 
 let firstLoad = true;
@@ -367,8 +527,17 @@ async function load() {
   } catch (e) { toast(e.message); }
 }
 
+// Filter
+function applyFilters() { renderLeft(); }
+$('fq').addEventListener('input', ev => { filt.q = ev.target.value; applyFilters(); });
+$('fproj').addEventListener('change', ev => { filt.proj = ev.target.value; LS.set('proj', filt.proj); applyFilters(); });
+[['fagent', 'agent'], ['fnotk', 'notk'], ['fstale', 'stale']].forEach(([id, k]) =>
+  $(id).addEventListener('change', ev => { filt[k] = ev.target.checked; LS.set(k, filt[k]); applyFilters(); }));
+document.addEventListener('keydown', ev => {
+  if (ev.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && view === 'overview') { ev.preventDefault(); $('fq').focus(); }
+});
 // Aktionen auf Karten
-document.getElementById('left').addEventListener('click', async ev => {
+document.getElementById('list').addEventListener('click', async ev => {
   const btn = ev.target.closest('button[data-act]');
   if (!btn) return;
   if (btn.dataset.act === 'idea') {
@@ -461,7 +630,6 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.datas
 document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
 if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
 
-const $ = id => document.getElementById(id);
 const val = id => ($(id) ? $(id).value : '').trim();
 const split = t => t.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
 const uniq = a => [...new Set(a)];
@@ -497,12 +665,18 @@ async function loadSettings() {
   P = S.projects.map(p => ({ ...p }));
   const g = S.gitlab, j = S.jira, b = S.branch_filter;
   const glTokenUrl = g.url ? esc(g.url.replace(/\/+$/, '')) + '/-/user_settings/personal_access_tokens' : '';
+  const sect = (id, title, lead, body) => `<section class="sset" id="s-${id}"><header><h2>${title}</h2><p class="lead">${lead}</p></header>${body}</section>`;
   box.innerHTML = `
   ${S.demo ? '<div class="banner warn">Demo-Modus: Tests funktionieren, Speichern ist ausgeschaltet.</div>' : ''}
   ${!S.configured && !S.demo ? `<div class="banner warn"><strong>Erst verbinden.</strong> Trage unten GitLab (und, wenn du magst, Jira) ein, drücke jeweils «Verbindung testen» und dann «Speichern».</div>` : ''}
-
-  <h2>1 · GitLab</h2>
-  <div class="card">
+  <div class="setgrid">
+   <nav class="setnav" aria-label="Abschnitte">
+     <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
+     <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
+     <button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+   </nav>
+   <div>
+  ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
     <div class="grid2">
       ${field('gl-url', 'Adresse', g.url, { ph: 'https://gitlab.firma.example', err: 'gitlab.url', help: 'Nur die Basisadresse, ohne /api/v4 und ohne Projektpfad.' })}
       ${field('gl-ca', 'CA-Datei (optional)', g.ca_bundle, { ph: '/pfad/zur/firmen-ca.pem', help: 'Nur bei einer Firmen-CA nötig. Gilt auch für Jira. Die Zertifikatsprüfung bleibt immer an.' })}
@@ -512,24 +686,19 @@ async function loadSettings() {
     <div class="row">
       <button class="primary" id="gl-test">Verbindung testen</button>
       ${S.secrets.gitlab_token.set ? '<button id="gl-del">Gespeicherten Token löschen</button>' : ''}
-      <span class="quiet">Testet mit den Werten in den Feldern, auch ungespeicherten.</span>
+      <span class="quiet small">Testet mit den Werten in den Feldern, auch ungespeicherten.</span>
     </div>
     <div id="gl-result"></div>
-
-    <h2 style="margin-top:18px">Projekte</h2>
-    <div class="quiet" style="margin-bottom:8px">Diese GitLab-Projekte beobachtet das Panel (MRs und Branches). Die Review-Queue und dir zugeteilte MRs kommen projektübergreifend.</div>
+    <h3>Projekte</h3>
+    <div class="quiet small" style="margin-bottom:8px">Diese Projekte beobachtet das Panel (MRs und Branches). Review-Queue und dir zugeteilte MRs kommen projektübergreifend.</div>
     <div id="pj-list"></div>
-    <div class="row"><input type="text" id="pj-q" style="max-width:340px" placeholder="Name oder Projekt-ID suchen" autocomplete="off">
-      <button id="pj-search">Suchen</button></div>
+    <div class="row"><input type="text" id="pj-q" style="max-width:340px" placeholder="Name oder Projekt-ID suchen" autocomplete="off"><button id="pj-search">Suchen</button></div>
     <div id="pj-res" style="margin-top:8px"></div>
-    <div class="ferr" data-err="projects"></div>
-  </div>
+    <div class="ferr" data-err="projects"></div>`)}
 
-  <h2>2 · Meine Commits (für «offene Branches»)</h2>
-  <div class="card">
-    <div class="quiet" style="margin-bottom:8px">Branches ohne MR erscheinen, wenn mindestens ein Commit von dir oder deinem Agenten darauf liegt.</div>
-    <div class="row" style="margin-bottom:8px"><button id="id-suggest">Aus den letzten Commits vorschlagen</button>
-      <span class="quiet">Braucht eine funktionierende GitLab-Verbindung und ein Projekt.</span></div>
+  ${sect('identity', 'Meine Commits', 'Branches ohne MR erscheinen, wenn mindestens ein Commit von dir oder deinem Agenten darauf liegt.', `
+    <div class="row" style="margin-bottom:10px"><button id="id-suggest">Aus den letzten Commits vorschlagen</button>
+      <span class="quiet small">Braucht eine funktionierende GitLab-Verbindung und ein Projekt.</span></div>
     <div id="id-result"></div>
     <div class="grid2">
       ${field('bf-emails', 'Meine E-Mail-Adressen', b.emails.join(', '), { err: 'branch_filter.emails', help: 'Komma getrennt. Alle Adressen, unter denen du committest.' })}
@@ -538,16 +707,17 @@ async function loadSettings() {
       ${field('bf-anames', 'Namen des Agenten', b.agent_names.join(', '), { err: 'branch_filter.agent_names' })}
     </div>
     ${field('bf-pat', 'Muster in Commit-Nachrichten, die den Agenten kennzeichnen', b.agent_message_patterns.join(', '), { err: 'branch_filter.agent_message_patterns',
-      help: 'Zum Beispiel <code>Co-Authored-By: Claude</code>. Markiert nur («Agent»); ein Branch erscheint nur wegen Commits von dir oder dem Agenten-Konto.' })}
+      help: 'Zum Beispiel <code>Co-Authored-By: Claude</code>. Markiert nur («Agent»); ein Branch erscheint nur wegen Commits von dir oder dem Agenten-Konto.' })}`)}
+
+  ${sect('filters', 'Filter', 'Was auf der Übersicht erscheinen soll und was nicht.', `
+    ${field('bf-ignore', 'Branches ignorieren', (b.ignore_branches || []).join(', '), { err: 'branch_filter.ignore_branches', ph: 'release/*, hotfix/*',
+      help: 'Muster mit <code>*</code> als Platzhalter, Groß/Klein zählt. <code>release/*</code> blendet alle Branches aus, die mit «release/» beginnen: Branches ohne MR und deine eigenen MRs. Review-Anfragen und dir zugeteilte MRs bleiben sichtbar.' })}
     <div class="grid2">
       ${field('bf-max', 'Höchstens so viele Branches pro Projekt prüfen', b.max_branches, { type: 'number', err: 'branch_filter.max_branches' })}
       ${field('bf-age', 'Branches älter als so viele Tage ignorieren (0 = nie)', b.max_age_days, { type: 'number', err: 'branch_filter.max_age_days' })}
-    </div>
-  </div>
+    </div>`)}
 
-  <h2>3 · Jira</h2>
-  <div class="card">
-    <div class="quiet" style="margin-bottom:8px">Optional. Verknüpft MRs und Branches mit Tickets und zählt die Stories in Arbeit. Adresse leer lassen = Jira aus.</div>
+  ${sect('jira', 'Jira', 'Optional. Verknüpft MRs und Branches mit Tickets und zählt die Stories in Arbeit. Adresse leer lassen = Jira aus.', `
     <div class="grid2">
       ${field('ji-url', 'Adresse', j.url, { ph: 'https://jira.firma.example', err: 'jira.url', help: 'Basisadresse (mit Kontextpfad, falls Jira unter /jira läuft).' })}
       <div class="field"><label for="ji-auth">Anmeldeart</label>
@@ -562,36 +732,37 @@ async function loadSettings() {
       ${field('ji-limit', 'Höchstens so viele Stories gleichzeitig in Arbeit', j.story_limit, { type: 'number', err: 'jira.story_limit' })}
     </div>
     ${field('ji-types', 'Vorgangstypen, die beim Limit zählen', j.wip_issue_types.join(', '), { err: 'jira.wip_issue_types', help: 'Deutsche Instanzen: oft «Aufgabe», «Fehler». Leer = alle Typen zählen.' })}
+    <label class="check"><input type="checkbox" id="ji-sprint" ${j.only_active_sprints !== false ? 'checked' : ''}>
+      <span><strong>Nur Tickets aus aktiven Sprints</strong><br><span class="quiet small">Ergänzt die JQL um <code>sprint in openSprints()</code> und markiert verknüpfte Tickets ausserhalb eines Sprints. Braucht Jira Software. Der Test unten sagt, ob es funktioniert.</span></span></label>
     ${field('ji-jql', 'JQL für «in Arbeit»', j.jql_in_progress, { area: true, rows: 2, err: 'jira.jql_in_progress',
       help: 'Zuerst im Jira-Suchfeld (Erweitert) probieren. Der Test unten zeigt die ersten Treffer.' })}
     <div class="row"><button class="primary" id="ji-test">Verbindung testen</button>
       ${(S.secrets.jira_token.set || S.secrets.jira_password.set) ? '<button id="ji-del">Gespeicherte Zugangsdaten löschen</button>' : ''}</div>
-    <div id="ji-result"></div>
-  </div>
+    <div id="ji-result"></div>`)}
 
-  <h2>4 · Weitere Funktionen</h2>
-  <div class="card">
-    <div class="quiet" style="margin-bottom:8px">Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.</div>
-    <label class="row"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}> Ideenbox</label>
-    <label class="row"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}> Testumgebungen, Prompts und Agenten-Knöpfe (braucht Helm-Angaben je Projekt in der config.json)</label>
-  </div>
+  ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
+    <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
+    <label class="check"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}><span>Testumgebungen, Prompts und Agenten-Knöpfe <span class="quiet small">(braucht Helm-Angaben je Projekt in der config.json)</span></span></label>`)}
 
-  <h2>Wo liegt was</h2>
-  <div class="card">
-    <div class="meta">Secrets: ${esc(S.storage.text)}</div>
-    ${S.storage.keyring ? '' : '<div class="hint">💡 Kein Schlüsselbund gefunden. Besser: <code>pip install keyring</code> in der Python-Umgebung von tinyops (siehe README). Bis dahin liegen Tokens in einer Datei, die nur dein Benutzer lesen kann.</div>'}
-    <div class="meta">Config: ${esc(S.server.config)} (enthält nie Secrets)</div>
-    <div class="meta">Log: ${esc(S.server.log)} · Adresse: ${esc(S.server.bind)}:${esc(S.server.port)} (nur per Neustart änderbar)</div>
+  ${sect('where', 'Ablage', 'Wo Zugangsdaten, Konfiguration und Log liegen.', `
+    <div class="small">Zugangsdaten: ${esc(S.storage.text)}</div>
+    ${S.storage.keyring ? '' : '<div class="hint">Kein Schlüsselbund gefunden. Besser: <code>pip install keyring</code> in der Python-Umgebung von tinyops (siehe README). Bis dahin liegen Tokens in einer Datei, die nur dein Benutzer lesen kann.</div>'}
+    <div class="small quiet" style="margin-top:8px">Config: ${esc(S.server.config)} (enthält nie Zugangsdaten)</div>
+    <div class="small quiet">Log: ${esc(S.server.log)} · Adresse: ${esc(S.server.bind)}:${esc(S.server.port)} (nur per Neustart änderbar)</div>`)}
+   </div>
   </div>
-
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
-    <span class="quiet" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
+    <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
   renderJiraSecret(); renderProjects();
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
   $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
   if ($('gl-del')) $('gl-del').onclick = () => delSecrets(['gitlab_token'], 'GitLab-Token');
   if ($('ji-del')) $('ji-del').onclick = () => delSecrets(['jira_token', 'jira_password'], 'Jira-Zugangsdaten');
+  box.querySelectorAll('[data-goto]').forEach(btn => btn.onclick = () => {
+    box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', x === btn));
+    $('s-' + btn.dataset.goto).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  });
 }
 
 function renderJiraSecret() {
@@ -619,7 +790,8 @@ async function busy(btn, label, fn) {
 function glForm() { return { url: val('gl-url'), ca_bundle: val('gl-ca'), token: $('gl-token').value, projects: P.map(p => p.id) }; }
 function jiForm() {
   return { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), secret: $('ji-secret').value, ca_bundle: val('gl-ca'),
-    project_keys: split(val('ji-keys')), issue_types: split(val('ji-types')), jql: val('ji-jql'), story_limit: val('ji-limit') };
+    project_keys: split(val('ji-keys')), issue_types: split(val('ji-types')), jql: val('ji-jql'), story_limit: val('ji-limit'),
+    only_active_sprints: $('ji-sprint').checked };
 }
 
 async function testGitlab() {
@@ -636,8 +808,8 @@ async function testJira() {
     try {
       const r = await api('POST', '/api/settings/test/jira', jiForm());
       let extra = '';
-      if (r.projects && r.projects.length) extra += `<div style="margin-top:8px" class="quiet">Sichtbare Projekt-Keys (Klick = hinzufügen):</div><div>${r.projects.slice(0, 40).map(k => `<button class="chip" data-addkey="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
-      if (r.types && r.types.length) extra += `<div style="margin-top:4px" class="quiet">Vorgangstypen (Klick = hinzufügen):</div><div>${r.types.map(k => `<button class="chip" data-addtype="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
+      if (r.projects && r.projects.length) extra += `<div style="margin-top:8px" class="quiet">Sichtbare Projekt-Keys (Klick = hinzufügen):</div><div>${r.projects.slice(0, 40).map(k => `<button class="pchip" data-addkey="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
+      if (r.types && r.types.length) extra += `<div style="margin-top:4px" class="quiet">Vorgangstypen (Klick = hinzufügen):</div><div>${r.types.map(k => `<button class="pchip" data-addtype="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
       out.innerHTML = stepsHtml(r) + extra;
     } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
   });
@@ -650,7 +822,7 @@ $('viewSettings').addEventListener('click', ev => {
 
 // Projekte
 function renderProjects() {
-  $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="chip"><span class="quiet">#${esc(p.id)}</span>
+  $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="pchip"><span class="quiet">#${esc(p.id)}</span>
     <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename"><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
     : '<div class="empty">Noch kein Projekt.</div>';
 }
@@ -713,9 +885,9 @@ function collect() {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P,
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
-      agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age') },
+      agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
-      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql') },
+      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked },
     secrets,
   };
