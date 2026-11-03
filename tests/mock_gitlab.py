@@ -22,6 +22,7 @@ MR_Z = mr(11, "Zugeteilt D", "feature/DLP-102-d", "0011223344556677", False, NOW
 
 ROUTES = {
     "/api/v4/user": {"username": "me", "email": "me@x.ch"},
+    "/api/v4/version": {"version": "19.2.5-ee", "revision": "abc"},
     "/api/v4/personal_access_tokens/self": {"scopes": ["read_api"], "expires_at": "2027-01-01"},
     "/api/v4/projects": [{"id": 1, "name": "dlp-core", "path": "dlp-core", "path_with_namespace": "dlp/dlp-core"}],
     "/api/v4/projects/1/repository/commits": [
@@ -71,8 +72,12 @@ COMPARE = {
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.headers.get("PRIVATE-TOKEN") != "secret":
+            data = b'{"message":"401 Unauthorized"}'
             self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
             self.end_headers()
+            self.wfile.write(data)
             return
         u = urlparse(self.path)
         if u.path == "/api/v4/merge_requests":

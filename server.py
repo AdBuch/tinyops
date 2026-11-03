@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tinyops 1.3: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
+"""tinyops 1.4: kleines lokales Arbeitspanel (nur Python-Standardbibliothek).
 
 Zeigt deine Branches/MRs mit Pipeline-Status, verknüpft sie mit Jira-Tickets, überwacht
 das Story-Limit, die Review-Queue, dir zugeteilte MRs und eine Helpdesk-Zahl. Dazu eine
@@ -28,11 +28,14 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import net
 import secretstore as store
-from secretstore import scrub
+import settings
 import tlog
+from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
+from secretstore import scrub
 
-VERSION = "1.3"
+VERSION = "1.4"
 BASE = Path(__file__).resolve().parent
 log = tlog.get("app")
 hlog = tlog.get("http")
@@ -49,6 +52,8 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
+    "features": {"ideas": False, "testenv": False},   # vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
+    "data_dir": "",               # leer = ./data (Ideenbox)
     "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
     "log_dir": "",                # leer = ~/.config/tinyops/logs
     "log_max_mb": 2,
@@ -218,12 +223,14 @@ def extract_keys(text, allowed=None):
 
 
 def make_ssl(cfg):
-    ca = cfg.get("ca_bundle")
-    if ca:
-        if not Path(ca).exists():
-            raise SystemExit("ca_bundle %s nicht gefunden." % ca)
-        return ssl.create_default_context(cafile=ca)
-    return ssl.create_default_context()
+    try:
+        return net.make_ssl_ca(cfg.get("ca_bundle"))
+    except ValueError as e:
+        raise SystemExit(str(e))
+
+
+def feature(cfg, name):
+    return bool((cfg.get("features") or {}).get(name, False))
 
 
 def warn_plain_http(url, label):
@@ -233,13 +240,6 @@ def warn_plain_http(url, label):
 
 
 # ---------------------------------------------------------------- HTTP-Client
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Folgt keinen Weiterleitungen: Zugangsdaten gehen so nie an einen anderen Host."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
 class Http:
     def __init__(self, label, base, headers, ctx):
         self.label, self.base, self.headers = label, base, headers
@@ -760,32 +760,77 @@ class Jobs:
 
 # ---------------------------------------------------------------- App
 class App:
-    def __init__(self, cfg, demo, secrets, ctx):
-        self.cfg = cfg
+    def __init__(self, cfg, demo, secrets, config_path=None):
         self.demo = demo
+        self.config_path = Path(config_path) if config_path else BASE / "config.json"
         self.access_token = secrets.get("access_token") or ""
-        self.jc = jira_cfg(cfg)
-        self.jira = None
-        if demo:
-            self.client = DemoClient(cfg)
-            self.jira = DemoJira(self.jc)
-        else:
-            if not cfg["gitlab_url"]:
-                raise SystemExit("gitlab_url fehlt in der config.json. Mit --demo siehst du das Panel ohne GitLab.")
-            self.client = GitLabClient(cfg, secrets["gitlab_token"], ctx)
-            if self.jc["url"]:
-                self.jira = JiraClient(self.jc, jira_auth_header(self.jc, secrets), ctx)
-        self.ideas = Ideas(BASE / "data" / "tinyops.db", cfg["idea_cap"], cfg["idea_expire_days"])
-        self.jobs = Jobs(cfg["job_timeout"])
-        self.cache, self.cache_t = None, 0.0
         self.cache_lock = threading.Lock()
-        self.hd_cache, self.hd_t = None, 0.0
         self.hd_lock = threading.Lock()
+        self.ideas = None
+        self.jobs = None
+        self.apply(cfg, secrets)
+
+    def apply(self, cfg, secrets):
+        """Baut Clients und Zwischenspeicher aus Config und Secrets neu. Läuft beim Start und nach dem Speichern der Einstellungen.
+        Fehlende oder falsche Angaben stoppen nichts: Sie erscheinen als «problems», damit man sie in den Einstellungen beheben kann."""
+        self.cfg = cfg
+        self.jc = jira_cfg(cfg)
+        self.problems = []
+        self.client, self.jira = None, None
+        self.cache, self.cache_t = None, 0.0
+        self.hd_cache, self.hd_t = None, 0.0
         self.over_limit = False
         self.inprogress_keys = set()
         self.proj_cfg = {p["id"]: p for p in cfg["projects"]}
-        if demo and not self.proj_cfg:
-            self.proj_cfg = {1: {"id": 1, "name": "dlp-core", "chart": "./helm/dlp-core"}}
+        if self.jobs is None:
+            self.jobs = Jobs(cfg["job_timeout"])
+        if (self.demo or feature(cfg, "ideas")) and self.ideas is None:
+            self.ideas = Ideas(Path(cfg["data_dir"]).expanduser() / "tinyops.db" if cfg.get("data_dir") else BASE / "data" / "tinyops.db",
+                              cfg["idea_cap"], cfg["idea_expire_days"])
+        if self.demo:
+            self.client = DemoClient(cfg)
+            self.jira = DemoJira(self.jc)
+            if not self.proj_cfg:
+                self.proj_cfg = {1: {"id": 1, "name": "dlp-core", "chart": "./helm/dlp-core"}}
+            return
+        try:
+            ctx = make_ssl(cfg)
+        except SystemExit as e:
+            self.problems.append(str(e))
+            ctx = ssl.create_default_context()
+        if not cfg["gitlab_url"]:
+            self.problems.append("GitLab-Adresse fehlt.")
+        elif not secrets.get("gitlab_token"):
+            self.problems.append("GitLab-Token fehlt.")
+        else:
+            self.client = GitLabClient(cfg, secrets["gitlab_token"], ctx)
+        if self.jc["url"]:
+            need = "jira_token" if self.jc["auth"] == "bearer" else "jira_password"
+            if not secrets.get(need):
+                self.problems.append("Jira-%s fehlt." % ("Token" if need == "jira_token" else "Passwort"))
+            else:
+                try:
+                    self.jira = JiraClient(self.jc, jira_auth_header(self.jc, secrets), ctx)
+                except SystemExit as e:
+                    self.problems.append(str(e))
+        for pr in self.problems:
+            log.warning("Konfiguration unvollständig: %s", pr)
+
+    @property
+    def configured(self):
+        return self.client is not None
+
+    def has(self, name):
+        return feature(self.cfg, name)
+
+    def reload(self):
+        """Config und Secrets neu von der Platte lesen (nach dem Speichern)."""
+        cfg = load_config(str(self.config_path) if self.config_path.exists() else None)
+        secrets = resolve_secrets(cfg, self.demo)
+        secrets["access_token"] = self.access_token or secrets.get("access_token", "")
+        self.apply(cfg, secrets)
+        log.info("Einstellungen neu geladen: GitLab %s, Jira %s, %d Projekt(e)", "ja" if self.client else "nein",
+                 "ja" if self.jira else "nein", len(cfg["projects"]))
 
     # -- Jira-Verknüpfung (läuft beim Auffrischen des Caches)
     def _jira_data(self, data):
@@ -869,6 +914,11 @@ class App:
 
     # -- Übersicht
     def overview(self):
+        if not self.configured:
+            return {"configured": False, "problems": list(self.problems), "me": "", "mine": [], "review": [], "assigned": [],
+                    "errors": [], "jira": None, "wip": 0, "wip_limit": self.cfg["wip_limit"], "stale_days": self.cfg["stale_days"],
+                    "demo": self.demo, "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
+                    "agent_enabled": False, "prompts": [], "fetched": time.time(), "helpdesk": None}
         with self.cache_lock:
             if self.cache is None or time.time() - self.cache_t > self.cfg["cache_seconds"]:
                 self.cache = self._refresh()
@@ -880,8 +930,9 @@ class App:
         data.update({
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
-            "prompts": self.prompt_names(), "fetched": time.time(),
-            "helpdesk": self.helpdesk(),
+            "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
+            "helpdesk": self.helpdesk(), "configured": True, "problems": list(self.problems),
+            "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
         })
         return data
 
@@ -983,8 +1034,30 @@ def _eq(a, b):
     return hmac.compare_digest(str(a).encode("utf-8"), str(b).encode("utf-8"))
 
 
+class _Cfg:
+    """Liest immer die aktuelle Config der App (sie ändert sich, wenn Einstellungen gespeichert werden)."""
+
+    def __init__(self, app):
+        self._app = app
+
+    def __getitem__(self, k):
+        return self._app.cfg[k]
+
+    def get(self, k, d=None):
+        return self._app.cfg.get(k, d)
+
+
+def _stored(app):
+    def stored(name):
+        try:
+            return store.resolve(name, (app.cfg.get("secrets") or {}).get(name), _env_hints(app.cfg).get(name, ()))
+        except store.SecretError:
+            return None, ""
+    return stored
+
+
 def make_handler(app):
-    cfg = app.cfg
+    cfg = _Cfg(app)
     html = (BASE / "static" / "index.html").read_bytes()
     token = app.access_token
     session = hashlib.sha256(("tinyops-session:" + token).encode("utf-8")).hexdigest() if token else ""
@@ -1080,11 +1153,19 @@ def make_handler(app):
             try:
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)
+                # -- Einstellungen: Anzeigen, Verbindung testen, Speichern
+                if path.startswith("/api/settings"):
+                    return self._settings(method, path)
+                # -- vorerst ausgeblendete Funktionen
+                needs = ("ideas" if path.startswith("/api/ideas") else
+                         "testenv" if path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/agent", "/api/prompt")) else "")
+                if needs and not app.has(needs):
+                    return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
                 if method == "GET" and path == "/api/overview":
                     data = app.overview()
-                    data["ideas"] = app.ideas.list()
+                    data["ideas"] = app.ideas.list() if app.has("ideas") and app.ideas else []
                     data["idea_cap"] = cfg["idea_cap"]
-                    data["jobs"] = app.jobs.summary()
+                    data["jobs"] = app.jobs.summary() if app.has("testenv") else []
                     return self._send(200, data)
                 if method == "GET" and path == "/api/log":
                     q = urllib.parse.parse_qs(parsed.query)
@@ -1135,6 +1216,47 @@ def make_handler(app):
                 hlog.exception("Unbehandelter Fehler bei %s %s", method, scrub(path))
                 return self._err(500, "Interner Fehler, siehe Konsole.")
 
+        def _settings(self, method, path):
+            stored = _stored(app)
+            if method == "GET" and path == "/api/settings":
+                return self._send(200, dict(settings.view(app.cfg if not app.demo else load_config(None), app.config_path),
+                                            demo=app.demo, problems=list(app.problems), configured=app.configured))
+            if method != "POST":
+                return self._err(404, "Nicht gefunden.")
+            body = self._body()
+            if path == "/api/settings/test/gitlab":
+                res = settings.test_gitlab(body, stored)
+                hlog.info("Test GitLab: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
+            if path == "/api/settings/test/jira":
+                res = settings.test_jira(body, stored)
+                hlog.info("Test Jira: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
+            if path == "/api/settings/projects":
+                return self._send(200, settings.search_projects(body, stored))
+            if path == "/api/settings/identity":
+                return self._send(200, settings.suggest_identity(body, stored))
+            if path == "/api/settings/save":
+                if app.demo:
+                    return self._err(400, "Im Demo-Modus werden keine Einstellungen gespeichert.")
+                disk = {}
+                if app.config_path.exists():
+                    with open(app.config_path, encoding="utf-8") as f:
+                        disk = json.load(f)
+                new, errors = settings.build_config(disk, body)
+                if errors:
+                    return self._send(400, {"error": "Einige Angaben sind ungültig.", "errors": errors})
+                where, serr = settings.save_secrets(body)
+                if serr:
+                    return self._send(400, {"error": "Secret konnte nicht gespeichert werden.", "errors": serr})
+                settings.write_config(app.config_path, new)
+                log.info("Einstellungen gespeichert: GitLab %s, Jira %s, %d Projekt(e), Secrets neu: %s",
+                         new.get("gitlab_url") or "-", (new.get("jira") or {}).get("url") or "-", len(new["projects"]),
+                         ", ".join(where) or "keine")
+                app.reload()
+                return self._send(200, {"saved": True, "secrets": where, "problems": list(app.problems), "configured": app.configured})
+            return self._err(404, "Nicht gefunden.")
+
         def do_GET(self):
             self._route("GET")
 
@@ -1155,26 +1277,31 @@ def _env_hints(cfg):
     return {"gitlab_token": [cfg.get("token_env")]}
 
 
-def resolve_all(cfg, demo):
-    """Löst alle nötigen Secrets auf und nennt die Quellen (nie die Werte)."""
+def resolve_secrets(cfg, demo, show=False):
+    """Löst die Secrets auf, die da sind. Fehlendes ist kein Abbruch (die Einstellungsseite behebt es).
+    Nennt auf Wunsch die Quellen, nie die Werte."""
     spec = cfg.get("secrets") or {}
     jc = jira_cfg(cfg)
-    needed = [] if demo else ["gitlab_token"]
+    names = [] if demo else ["gitlab_token"]
     if not demo and jc["url"]:
-        needed.append("jira_token" if jc["auth"] == "bearer" else "jira_password")
+        names.append("jira_token" if jc["auth"] == "bearer" else "jira_password")
+    names.append("access_token")
     out = {}
-    try:
-        for name in needed:
-            val, src = store.require(name, spec.get(name), _env_hints(cfg).get(name, ()))
-            out[name] = val
-            print("  %-14s ← %s" % (name, src))
-            log.info("Secret %s ← %s", name, src)
-        val, src = store.resolve("access_token", spec.get("access_token"))
+    for name in names:
+        try:
+            val, src = store.resolve(name, spec.get(name), _env_hints(cfg).get(name, ()))
+        except store.SecretError as e:
+            log.error("Secret %s: %s", name, e)
+            if show:
+                print("  %-14s FEHLER: %s" % (name, e))
+            continue
         if val:
-            out["access_token"] = val
-            print("  %-14s ← %s" % ("access_token", src))
-    except store.SecretError as e:
-        raise SystemExit(str(e))
+            out[name] = val
+            log.info("Secret %s ← %s", name, src)
+            if show:
+                print("  %-14s ← %s" % (name, src))
+        elif show and name != "access_token":
+            print("  %-14s nicht gesetzt (Einstellungen im Browser)" % name)
     return out
 
 
@@ -1221,24 +1348,25 @@ def main():
     except store.SecretError as e:
         raise SystemExit(str(e))
 
-    if not path and not args.demo:
-        raise SystemExit("config.json fehlt. Kopiere config.example.json oder starte mit --demo.")
     cfg = load_config(path)
+    config_path = Path(path) if path else Path(args.config)
     logfile = tlog.setup(cfg, level)
     log.info("tinyops %s startet (Python %s, %s)", VERSION, sys.version.split()[0], "Demo" if args.demo else "Echtbetrieb")
-    log.info("Config: %s, %d Projekt(e), Log: %s", path or "(keine, Demo)", len(cfg["projects"]), logfile or "nur Konsole")
+    log.info("Config: %s, %d Projekt(e), Log: %s", path or "(keine, Ersteinrichtung im Browser)", len(cfg["projects"]), logfile or "nur Konsole")
     print("Secrets:")
-    secrets = resolve_all(cfg, args.demo)
+    secrets = resolve_secrets(cfg, args.demo, show=True)
     if cfg["bind"] not in LOOPBACK and not secrets.get("access_token"):
         raise SystemExit("bind=%s ist nicht nur lokal erreichbar. Setze erst einen Zugriffstoken: "
                          "python3 server.py --set-secret access_token" % cfg["bind"])
     warn_plain_http(cfg["gitlab_url"], "GitLab")
     warn_plain_http(jira_cfg(cfg)["url"], "Jira")
-    app = App(cfg, args.demo, secrets, make_ssl(cfg))
+    app = App(cfg, args.demo, secrets, config_path)
     srv = ThreadingHTTPServer((cfg["bind"], cfg["port"]), make_handler(app))
     log.info("Lauscht auf http://%s:%d (Zugriffstoken: %s, erlaubte Hosts: %s)", cfg["bind"], cfg["port"],
              "ja" if secrets.get("access_token") else "nein", ", ".join(cfg["allowed_hosts"]) or "nur lokal")
     print("tinyops läuft auf http://%s:%d %s" % (cfg["bind"], cfg["port"], "(Demo)" if args.demo else ""))
+    if not app.configured and not args.demo:
+        print("Noch nicht eingerichtet: Öffne die Adresse im Browser, dort liegt die Seite «Einstellungen» (GitLab und Jira verbinden).")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

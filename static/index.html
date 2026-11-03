@@ -18,6 +18,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   header h1 { font-size: 16px; margin: 0; font-weight: 650; }
@@ -64,12 +65,49 @@
   pre.log { background: #111; color: #d8d8d2; padding: 8px; border-radius: 8px; max-height: 240px; overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
   dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); width: min(720px, 92vw); }
   dialog textarea { height: 300px; font-family: ui-monospace, monospace; font-size: 13px; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { border-radius: 8px; border: 1px solid transparent; background: transparent; font-weight: 600; }
+  .tab.on { background: var(--card); border-color: var(--line); }
+  main.single { grid-template-columns: minmax(0, 1fr); }
+  #viewSettings { max-width: 860px; margin: 0 auto; padding: 16px 16px 96px; }
+  #viewSettings h2 { margin-top: 0; }
+  .field { display: grid; gap: 3px; margin-bottom: 10px; }
+  .field > label { font-size: 13px; font-weight: 600; }
+  .field .help { font-size: 12.5px; color: var(--quiet); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  input[type=text], input[type=password], input[type=number], select.full, textarea.full {
+    width: 100%; font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea.full { font-family: ui-monospace, monospace; font-size: 13px; resize: vertical; }
+  .ferr { color: var(--bad); font-size: 12.5px; min-height: 0; }
+  .ferr:empty { display: none; }
+  .steps { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .step .ic { font-weight: 800; text-align: center; }
+  .step.ok .ic { color: var(--ok); } .step.fail .ic { color: var(--bad); } .step.warn .ic { color: var(--warn); } .step.skip { opacity: .6; }
+  .step .st { font-weight: 600; }
+  .step .sd { font-size: 13px; color: var(--quiet); white-space: pre-wrap; word-break: break-word; }
+  .step.fail { background: var(--badbg); }
+  .hint { margin-top: 4px; font-size: 13px; padding: 6px 9px; border-radius: 8px; background: var(--runbg); color: var(--ink); }
+  .step.fail .hint { background: var(--card); }
+  .verdict { padding: 8px 10px; font-weight: 650; }
+  .verdict.ok { background: var(--okbg); color: var(--ok); } .verdict.bad { background: var(--badbg); color: var(--bad); }
+  .chip { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--line); font-size: 13px; margin: 0 6px 6px 0; }
+  .chip button { border: 0; background: transparent; padding: 0 2px; font-size: 15px; line-height: 1; }
+  .chip input { width: 150px; padding: 2px 6px; font-size: 13px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 6; }
+  table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.mini td, table.mini th { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; z-index: 10; }
 </style>
 </head>
 <body>
 <header>
   <h1>Arbeitspanel</h1>
+  <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="settings">Einstellungen</button></nav>
+  <a id="pGl" class="pill neutral" href="#settings" style="display:none"></a>
+  <a id="pJi" class="pill neutral" href="#settings" style="display:none"></a>
   <span id="stories" class="pill neutral" style="display:none"></span>
   <span id="wip" class="pill ok">WIP –</span>
   <a id="helpdesk" class="pill neutral" style="display:none" target="_blank" rel="noopener"></a>
@@ -79,9 +117,10 @@
   <button id="logBtn">Log</button>
   <button id="refresh">Neu laden</button>
 </header>
-<main>
+<main id="viewOverview">
   <section id="left"></section>
-  <aside>
+  <aside id="aside">
+   <div id="ideasBox" hidden>
     <h2>Ideenbox <span id="ideaCount" class="quiet"></span></h2>
     <div class="card">
       <textarea id="ideaText" rows="2" placeholder="Idee kurz festhalten, Enter speichert (Shift+Enter = neue Zeile)"></textarea>
@@ -91,10 +130,14 @@
       </div>
       <div id="ideas"></div>
     </div>
+   </div>
+   <div id="jobsBox" hidden>
     <h2>Test-Jobs</h2>
     <div id="jobs"></div>
+   </div>
   </aside>
 </main>
+<div id="viewSettings" hidden></div>
 
 <dialog id="dlg">
   <div class="row" style="justify-content:space-between"><strong id="dlgTitle">Prompt</strong><button id="dlgClose">Schließen</button></div>
@@ -124,7 +167,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 async function api(method, path, body) {
   const r = await fetch(path, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  if (!r.ok) { const e = new Error(data.error || ('HTTP ' + r.status)); e.data = data; throw e; }
   return data;
 }
 
@@ -160,7 +203,8 @@ function card(it) {
   const age = it.age_days === 0 ? 'heute' : `${it.age_days} Tage ohne Änderung`;
   const mrLabel = it.iid ? ` !${it.iid}` : '';
   const parts = [];
-  if (it.iid && it.can_deploy) {
+  const F = (state && state.features) || {};
+  if (F.testenv && it.iid && it.can_deploy) {
     const opts = state.prompts.map(p => `<option>${esc(p)}</option>`).join('');
     const lock = it.agent_locked ? ' disabled title="Story-Limit überschritten: Agenten nur für Tickets, die schon in Arbeit sind"' : '';
     parts.push(`<button class="primary" data-act="deploy">Testumgebung starten</button>
@@ -170,8 +214,8 @@ function card(it) {
       ${state.agent_enabled ? `<button data-act="agent"${lock}>Agent starten</button>` : ''}`);
   }
   if (it.no_ticket) {
-    parts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>
-      <button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>`);
+    parts.push(`<a class="btn" href="${esc(it.create_url)}" target="_blank" rel="noopener">Ticket anlegen</a>`
+      + (F.ideas ? `<button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>` : ''));
   }
   const actions = parts.length ? `<div class="row" style="margin-top:8px" data-p="${it.project_id}" data-i="${it.iid ?? ''}">${parts.join('')}</div>` : '';
   return `<div class="card ${it.stale ? 'stale' : ''}">
@@ -207,6 +251,10 @@ function renderLeft() {
   const bereit = mine.filter(i => i.state === 'bereit' || i.state === 'offen');
   const waiting = review.concat(bereit);
   let html = '';
+  if (!state.configured) {
+    html += `<div class="banner warn"><strong>Noch nicht verbunden.</strong> ${state.problems.map(esc).join(' ')}
+      <div style="margin-top:8px"><button class="primary" onclick="setView('settings')">Einstellungen öffnen</button></div></div>`;
+  }
   if (state.errors.length) html += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
   if (j && j.ok && j.over) html += `<div class="banner bad"><strong>${j.count} Stories in Arbeit, Limit ${j.limit}.</strong> Schließe eine ab oder setze sie zurück, bevor etwas Neues beginnt. Agenten starten nur noch für Stories, die schon laufen.</div>`;
   else if (!(j && j.ok) && state.wip > state.wip_limit) html += `<div class="banner bad"><strong>${state.wip} offene Arbeiten, Limit ${state.wip_limit}.</strong> Erst abschließen oder parken, bevor etwas Neues startet.</div>`;
@@ -219,6 +267,7 @@ function renderLeft() {
   html += section('Rot', mine.filter(i => i.state === 'rot'), 'Nichts Rotes.');
   html += section('Draft', mine.filter(i => i.state === 'draft'), 'Keine Drafts.');
   html += section('Offene Branches mit meinen oder Agent-Commits (ohne MR)', mine.filter(i => i.state === 'kein-mr'), 'Keine offenen Branches von dir oder deinem Agenten.');
+  if (!state.configured) html = html.split('<h2>')[0];   // ohne Verbindung nur den Hinweis zeigen
   document.getElementById('left').innerHTML = html;
 }
 
@@ -274,6 +323,7 @@ function renderHeader() {
     w.textContent = `WIP ${state.wip}/${state.wip_limit}`;
     w.className = 'pill ' + (state.wip > state.wip_limit ? 'bad' : 'ok');
   }
+  if (!state.configured) w.style.display = 'none'; else w.style.display = '';
   const h = state.helpdesk, hd = document.getElementById('helpdesk');
   if (!h) { hd.style.display = 'none'; }
   else {
@@ -286,14 +336,34 @@ function renderHeader() {
       hd.href = h.url; hd.className = 'pill ' + (h.over_hours ? 'warn' : 'neutral');
     }
   }
+  const gl = document.getElementById('pGl'), ji = document.getElementById('pJi');
+  gl.style.display = ''; ji.style.display = '';
+  if (!state.configured) { gl.textContent = 'GitLab: nicht verbunden'; gl.className = 'pill bad'; }
+  else if (state.errors.some(e => !e.startsWith('Jira'))) { gl.textContent = 'GitLab: Fehler'; gl.className = 'pill bad'; gl.title = 'Details im Banner oder unter Einstellungen'; }
+  else { gl.textContent = 'GitLab ✓'; gl.className = 'pill ok'; }
+  if (state.jira && state.jira.ok) { ji.textContent = 'Jira ✓'; ji.className = 'pill ok'; }
+  else if (state.jira) { ji.textContent = 'Jira: Fehler'; ji.className = 'pill bad'; ji.title = state.jira.error; }
+  else { ji.textContent = 'Jira: aus'; ji.className = 'pill neutral'; }
   document.getElementById('demo').style.display = state.demo ? '' : 'none';
   document.getElementById('fetched').textContent = 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
 }
 
+function renderAside() {
+  const F = state.features || {};
+  document.getElementById('ideasBox').hidden = !F.ideas;
+  document.getElementById('jobsBox').hidden = !F.testenv;
+  document.getElementById('aside').hidden = !(F.ideas || F.testenv);
+  document.getElementById('viewOverview').classList.toggle('single', !(F.ideas || F.testenv));
+}
+
+let firstLoad = true;
 async function load() {
   try {
     state = await api('GET', '/api/overview');
-    renderHeader(); renderLeft(); renderIdeas(); renderJobs();
+    renderHeader(); renderLeft(); renderAside();
+    if (state.features.ideas) renderIdeas();
+    if (state.features.testenv) renderJobs();
+    if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
   } catch (e) { toast(e.message); }
 }
 
@@ -374,9 +444,308 @@ document.getElementById('dlgCopy').onclick = () => {
 };
 
 document.getElementById('refresh').onclick = load;
+// ---------------------------------------------------------------- Einstellungen
+let S = null;          // Antwort von /api/settings
+let P = [];            // Arbeitskopie der Projekte
+let view = 'overview';
+
+function setView(v) {
+  view = v;
+  document.getElementById('viewOverview').hidden = v !== 'overview';
+  document.getElementById('viewSettings').hidden = v !== 'settings';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  try { history.replaceState(null, '', '#' + v); } catch (e) { /* egal */ }
+  if (v === 'settings') loadSettings();
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
+document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
+if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
+
+const $ = id => document.getElementById(id);
+const val = id => ($(id) ? $(id).value : '').trim();
+const split = t => t.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+const uniq = a => [...new Set(a)];
+
+function field(id, label, value, opts = {}) {
+  const t = opts.type || 'text';
+  const input = opts.area
+    ? `<textarea class="full" id="${id}" rows="${opts.rows || 3}" spellcheck="false">${esc(value)}</textarea>`
+    : `<input type="${t}" id="${id}" value="${esc(value)}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} autocomplete="off" spellcheck="false">`;
+  return `<div class="field"><label for="${id}">${esc(label)}</label>${input}
+    ${opts.help ? `<div class="help">${opts.help}</div>` : ''}<div class="ferr" data-err="${esc(opts.err || '')}"></div></div>`;
+}
+
+function stepsHtml(res) {
+  const ic = { ok: '✓', fail: '✗', warn: '!', skip: '–' };
+  return '<div class="steps">' + res.steps.map(s => `
+    <div class="step ${esc(s.status)}"><span class="ic">${ic[s.status] || '?'}</span><div>
+      <div class="st">${esc(s.title)}</div>
+      ${s.detail ? `<div class="sd">${esc(s.detail)}</div>` : ''}
+      ${s.hint ? `<div class="hint">💡 ${esc(s.hint)}</div>` : ''}</div></div>`).join('')
+    + `<div class="verdict ${res.ok ? 'ok' : 'bad'}">${res.ok ? 'Verbindung in Ordnung.' : 'Nicht in Ordnung: Der erste rote Schritt zeigt, wo es hängt.'}</div></div>`;
+}
+
+function secretHelp(name, label) {
+  const st = S.secrets[name];
+  if (st.error) return `<span style="color:var(--bad)">${esc(st.error)}</span>`;
+  return st.set ? `Gespeichert (← ${esc(st.source)}). Feld leer lassen, um ihn zu behalten.` : `Noch kein ${label} gespeichert.`;
+}
+
+async function loadSettings() {
+  const box = $('viewSettings');
+  try { S = await api('GET', '/api/settings'); } catch (e) { box.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return; }
+  P = S.projects.map(p => ({ ...p }));
+  const g = S.gitlab, j = S.jira, b = S.branch_filter;
+  const glTokenUrl = g.url ? esc(g.url.replace(/\/+$/, '')) + '/-/user_settings/personal_access_tokens' : '';
+  box.innerHTML = `
+  ${S.demo ? '<div class="banner warn">Demo-Modus: Tests funktionieren, Speichern ist ausgeschaltet.</div>' : ''}
+  ${!S.configured && !S.demo ? `<div class="banner warn"><strong>Erst verbinden.</strong> Trage unten GitLab (und, wenn du magst, Jira) ein, drücke jeweils «Verbindung testen» und dann «Speichern».</div>` : ''}
+
+  <h2>1 · GitLab</h2>
+  <div class="card">
+    <div class="grid2">
+      ${field('gl-url', 'Adresse', g.url, { ph: 'https://gitlab.firma.example', err: 'gitlab.url', help: 'Nur die Basisadresse, ohne /api/v4 und ohne Projektpfad.' })}
+      ${field('gl-ca', 'CA-Datei (optional)', g.ca_bundle, { ph: '/pfad/zur/firmen-ca.pem', help: 'Nur bei einer Firmen-CA nötig. Gilt auch für Jira. Die Zertifikatsprüfung bleibt immer an.' })}
+    </div>
+    ${field('gl-token', 'Zugriffstoken', '', { type: 'password', ph: S.secrets.gitlab_token.set ? '•••••••• gespeichert' : 'glpat-…', err: 'gitlab_token',
+      help: secretHelp('gitlab_token', 'Token') + (glTokenUrl ? ` Neu anlegen: <a href="${glTokenUrl}" target="_blank" rel="noopener">Persönliche Zugriffstoken</a>, Scope nur <code>read_api</code>, Ablaufdatum setzen.` : '') })}
+    <div class="row">
+      <button class="primary" id="gl-test">Verbindung testen</button>
+      ${S.secrets.gitlab_token.set ? '<button id="gl-del">Gespeicherten Token löschen</button>' : ''}
+      <span class="quiet">Testet mit den Werten in den Feldern, auch ungespeicherten.</span>
+    </div>
+    <div id="gl-result"></div>
+
+    <h2 style="margin-top:18px">Projekte</h2>
+    <div class="quiet" style="margin-bottom:8px">Diese GitLab-Projekte beobachtet das Panel (MRs und Branches). Die Review-Queue und dir zugeteilte MRs kommen projektübergreifend.</div>
+    <div id="pj-list"></div>
+    <div class="row"><input type="text" id="pj-q" style="max-width:340px" placeholder="Name oder Projekt-ID suchen" autocomplete="off">
+      <button id="pj-search">Suchen</button></div>
+    <div id="pj-res" style="margin-top:8px"></div>
+    <div class="ferr" data-err="projects"></div>
+  </div>
+
+  <h2>2 · Meine Commits (für «offene Branches»)</h2>
+  <div class="card">
+    <div class="quiet" style="margin-bottom:8px">Branches ohne MR erscheinen, wenn mindestens ein Commit von dir oder deinem Agenten darauf liegt.</div>
+    <div class="row" style="margin-bottom:8px"><button id="id-suggest">Aus den letzten Commits vorschlagen</button>
+      <span class="quiet">Braucht eine funktionierende GitLab-Verbindung und ein Projekt.</span></div>
+    <div id="id-result"></div>
+    <div class="grid2">
+      ${field('bf-emails', 'Meine E-Mail-Adressen', b.emails.join(', '), { err: 'branch_filter.emails', help: 'Komma getrennt. Alle Adressen, unter denen du committest.' })}
+      ${field('bf-names', 'Meine Autorennamen', b.names.join(', '), { err: 'branch_filter.names' })}
+      ${field('bf-aemails', 'E-Mail-Adressen des Agenten', b.agent_emails.join(', '), { err: 'branch_filter.agent_emails', help: 'Nur, wenn der Agent unter einem eigenen Konto committet.' })}
+      ${field('bf-anames', 'Namen des Agenten', b.agent_names.join(', '), { err: 'branch_filter.agent_names' })}
+    </div>
+    ${field('bf-pat', 'Muster in Commit-Nachrichten, die den Agenten kennzeichnen', b.agent_message_patterns.join(', '), { err: 'branch_filter.agent_message_patterns',
+      help: 'Zum Beispiel <code>Co-Authored-By: Claude</code>. Markiert nur («Agent»); ein Branch erscheint nur wegen Commits von dir oder dem Agenten-Konto.' })}
+    <div class="grid2">
+      ${field('bf-max', 'Höchstens so viele Branches pro Projekt prüfen', b.max_branches, { type: 'number', err: 'branch_filter.max_branches' })}
+      ${field('bf-age', 'Branches älter als so viele Tage ignorieren (0 = nie)', b.max_age_days, { type: 'number', err: 'branch_filter.max_age_days' })}
+    </div>
+  </div>
+
+  <h2>3 · Jira</h2>
+  <div class="card">
+    <div class="quiet" style="margin-bottom:8px">Optional. Verknüpft MRs und Branches mit Tickets und zählt die Stories in Arbeit. Adresse leer lassen = Jira aus.</div>
+    <div class="grid2">
+      ${field('ji-url', 'Adresse', j.url, { ph: 'https://jira.firma.example', err: 'jira.url', help: 'Basisadresse (mit Kontextpfad, falls Jira unter /jira läuft).' })}
+      <div class="field"><label for="ji-auth">Anmeldeart</label>
+        <select class="full" id="ji-auth"><option value="bearer" ${j.auth === 'bearer' ? 'selected' : ''}>bearer: Personal Access Token (empfohlen)</option>
+          <option value="basic" ${j.auth === 'basic' ? 'selected' : ''}>basic: Benutzername + Passwort</option></select>
+        <div class="ferr" data-err="jira.auth"></div></div>
+    </div>
+    <div id="ji-userbox">${field('ji-user', 'Benutzername', j.username, { err: 'jira.username', help: 'Meist der Jira-Benutzername, nicht die E-Mail-Adresse.' })}</div>
+    <div id="ji-secbox"></div>
+    <div class="grid2">
+      ${field('ji-keys', 'Projekt-Keys', j.project_keys.join(', '), { err: 'jira.project_keys', ph: 'DLP, OPS', help: 'Damit erkennt das Panel Ticket-Nummern in Branch-Namen.' })}
+      ${field('ji-limit', 'Höchstens so viele Stories gleichzeitig in Arbeit', j.story_limit, { type: 'number', err: 'jira.story_limit' })}
+    </div>
+    ${field('ji-types', 'Vorgangstypen, die beim Limit zählen', j.wip_issue_types.join(', '), { err: 'jira.wip_issue_types', help: 'Deutsche Instanzen: oft «Aufgabe», «Fehler». Leer = alle Typen zählen.' })}
+    ${field('ji-jql', 'JQL für «in Arbeit»', j.jql_in_progress, { area: true, rows: 2, err: 'jira.jql_in_progress',
+      help: 'Zuerst im Jira-Suchfeld (Erweitert) probieren. Der Test unten zeigt die ersten Treffer.' })}
+    <div class="row"><button class="primary" id="ji-test">Verbindung testen</button>
+      ${(S.secrets.jira_token.set || S.secrets.jira_password.set) ? '<button id="ji-del">Gespeicherte Zugangsdaten löschen</button>' : ''}</div>
+    <div id="ji-result"></div>
+  </div>
+
+  <h2>4 · Weitere Funktionen</h2>
+  <div class="card">
+    <div class="quiet" style="margin-bottom:8px">Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.</div>
+    <label class="row"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}> Ideenbox</label>
+    <label class="row"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}> Testumgebungen, Prompts und Agenten-Knöpfe (braucht Helm-Angaben je Projekt in der config.json)</label>
+  </div>
+
+  <h2>Wo liegt was</h2>
+  <div class="card">
+    <div class="meta">Secrets: ${esc(S.storage.text)}</div>
+    ${S.storage.keyring ? '' : '<div class="hint">💡 Kein Schlüsselbund gefunden. Besser: <code>pip install keyring</code> in der Python-Umgebung von tinyops (siehe README). Bis dahin liegen Tokens in einer Datei, die nur dein Benutzer lesen kann.</div>'}
+    <div class="meta">Config: ${esc(S.server.config)} (enthält nie Secrets)</div>
+    <div class="meta">Log: ${esc(S.server.log)} · Adresse: ${esc(S.server.bind)}:${esc(S.server.port)} (nur per Neustart änderbar)</div>
+  </div>
+
+  <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
+    <span class="quiet" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
+  renderJiraSecret(); renderProjects();
+  $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
+  $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
+  $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
+  if ($('gl-del')) $('gl-del').onclick = () => delSecrets(['gitlab_token'], 'GitLab-Token');
+  if ($('ji-del')) $('ji-del').onclick = () => delSecrets(['jira_token', 'jira_password'], 'Jira-Zugangsdaten');
+}
+
+function renderJiraSecret() {
+  const basic = $('ji-auth').value === 'basic';
+  $('ji-userbox').hidden = !basic;
+  const name = basic ? 'jira_password' : 'jira_token';
+  const old = $('ji-secret') ? $('ji-secret').value : '';
+  $('ji-secbox').innerHTML = field('ji-secret', basic ? 'Passwort' : 'Personal Access Token', old, {
+    type: 'password', err: name, ph: S.secrets[name].set ? '•••••••• gespeichert' : '',
+    help: secretHelp(name, basic ? 'Passwort' : 'Token') + (basic ? ' Achtung: Mehrere falsche Passwörter in Folge können das Konto in Jira sperren; tinyops pausiert deshalb nach einem Fehlversuch 30 Sekunden.'
+      : ` Anlegen in Jira: Profil → Personal Access Tokens. Ein Jira-Token hat die Rechte deines Kontos.`) });
+}
+
+function clearErrors() { document.querySelectorAll('.ferr').forEach(e => e.textContent = ''); }
+function showErrors(errs) {
+  clearErrors();
+  Object.entries(errs || {}).forEach(([k, m]) => document.querySelectorAll(`.ferr[data-err="${k}"]`).forEach(e => e.textContent = m));
+}
+
+async function busy(btn, label, fn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+  try { return await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+}
+
+function glForm() { return { url: val('gl-url'), ca_bundle: val('gl-ca'), token: $('gl-token').value, projects: P.map(p => p.id) }; }
+function jiForm() {
+  return { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), secret: $('ji-secret').value, ca_bundle: val('gl-ca'),
+    project_keys: split(val('ji-keys')), issue_types: split(val('ji-types')), jql: val('ji-jql'), story_limit: val('ji-limit') };
+}
+
+async function testGitlab() {
+  const out = $('gl-result');
+  await busy($('gl-test'), 'Teste …', async () => {
+    try { const r = await api('POST', '/api/settings/test/gitlab', glForm()); out.innerHTML = stepsHtml(r); window.glUser = r.user; }
+    catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+
+async function testJira() {
+  const out = $('ji-result');
+  await busy($('ji-test'), 'Teste …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/test/jira', jiForm());
+      let extra = '';
+      if (r.projects && r.projects.length) extra += `<div style="margin-top:8px" class="quiet">Sichtbare Projekt-Keys (Klick = hinzufügen):</div><div>${r.projects.slice(0, 40).map(k => `<button class="chip" data-addkey="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
+      if (r.types && r.types.length) extra += `<div style="margin-top:4px" class="quiet">Vorgangstypen (Klick = hinzufügen):</div><div>${r.types.map(k => `<button class="chip" data-addtype="${esc(k)}">${esc(k)}</button>`).join('')}</div>`;
+      out.innerHTML = stepsHtml(r) + extra;
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+$('viewSettings').addEventListener('click', ev => {
+  const k = ev.target.closest('[data-addkey]'), t = ev.target.closest('[data-addtype]');
+  if (k) $('ji-keys').value = uniq(split(val('ji-keys')).concat(k.dataset.addkey)).join(', ');
+  if (t) $('ji-types').value = uniq(split(val('ji-types')).concat(t.dataset.addtype)).join(', ');
+});
+
+// Projekte
+function renderProjects() {
+  $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="chip"><span class="quiet">#${esc(p.id)}</span>
+    <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename"><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
+    : '<div class="empty">Noch kein Projekt.</div>';
+}
+$('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; });
+$('viewSettings').addEventListener('click', ev => {
+  const d = ev.target.closest('[data-pdel]');
+  if (d) { P.splice(+d.dataset.pdel, 1); renderProjects(); }
+  const a = ev.target.closest('[data-padd]');
+  if (a && !P.some(p => p.id === +a.dataset.padd)) { P.push({ id: +a.dataset.padd, name: a.dataset.name }); renderProjects(); a.disabled = true; a.textContent = 'hinzugefügt'; }
+});
+async function searchProjects() {
+  const q = val('pj-q'), out = $('pj-res');
+  await busy($('pj-search'), 'Suche …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/projects', { url: val('gl-url'), ca_bundle: val('gl-ca'), token: $('gl-token').value, q });
+      if (r.error) { out.innerHTML = `<div class="banner bad">${esc(r.error)}<br><span class="quiet">Erst oben die GitLab-Verbindung testen.</span></div>`; return; }
+      out.innerHTML = r.items.length ? `<table class="mini">${r.items.map(p => `<tr><td>${esc(p.full || p.name)}</td><td>#${esc(p.id)}</td>
+        <td><button data-padd="${esc(p.id)}" data-name="${esc(p.name)}">Hinzufügen</button></td></tr>`).join('')}</table>`
+        : '<div class="empty">Nichts gefunden (es werden nur Projekte gezeigt, in denen du Mitglied bist).</div>';
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+
+// Identität aus Commits vorschlagen
+async function suggestIdentity() {
+  const out = $('id-result');
+  if (!P.length) { out.innerHTML = '<div class="banner warn">Erst unter GitLab ein Projekt hinzufügen.</div>'; return; }
+  await busy($('id-suggest'), 'Lese Commits …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/identity', { url: val('gl-url'), ca_bundle: val('gl-ca'), token: $('gl-token').value, project_id: P[0].id });
+      if (r.error) { out.innerHTML = `<div class="banner bad">${esc(r.error)}</div>`; return; }
+      out.innerHTML = `<div class="quiet">Autoren der letzten ${r.commits} Commits in ${esc(P[0].name)}. Kreuze an, wer du bist und wer dein Agent ist.</div>
+        <table class="mini"><tr><th>Name</th><th>E-Mail</th><th>Commits</th><th>ich</th><th>Agent</th></tr>
+        ${r.authors.map((a, i) => `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${a.count}</td>
+          <td><input type="checkbox" data-me="${i}" ${a.is_me ? 'checked' : ''}></td><td><input type="checkbox" data-ag="${i}"></td></tr>`).join('')}</table>
+        ${r.trailers.length ? `<div class="quiet" style="margin-top:6px">Agent-Zeilen in Commit-Nachrichten (nur der stabile Anfang wird übernommen):</div>
+          ${r.trailers.map((t, i) => `<label class="row"><input type="checkbox" data-tr="${i}" ${/claude|bot/i.test(t.pattern) ? 'checked' : ''}> ${esc(t.pattern)} <span class="quiet">(${t.count}×)</span></label>`).join('')}` : ''}
+        <div class="row" style="margin:8px 0"><button class="primary" id="id-apply">Übernehmen</button></div>`;
+      $('id-apply').onclick = () => {
+        const sel = (attr) => r.authors.filter((a, i) => out.querySelector(`[${attr}="${i}"]`).checked);
+        const me = sel('data-me'), ag = sel('data-ag');
+        $('bf-emails').value = uniq(split(val('bf-emails')).concat(me.map(a => a.email).filter(Boolean))).join(', ');
+        $('bf-names').value = uniq(split(val('bf-names')).concat(me.map(a => a.name).filter(Boolean))).join(', ');
+        $('bf-aemails').value = uniq(split(val('bf-aemails')).concat(ag.map(a => a.email).filter(Boolean))).join(', ');
+        $('bf-anames').value = uniq(split(val('bf-anames')).concat(ag.map(a => a.name).filter(Boolean))).join(', ');
+        const pats = r.trailers.filter((t, i) => out.querySelector(`[data-tr="${i}"]`).checked).map(t => t.pattern);
+        $('bf-pat').value = uniq(split(val('bf-pat')).concat(pats)).join(', ');
+        toast('Übernommen. Noch speichern.');
+      };
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+
+// Speichern
+function collect() {
+  const secrets = {};
+  if ($('gl-token').value.trim()) secrets.gitlab_token = $('gl-token').value;
+  if ($('ji-secret').value.trim()) secrets[val('ji-auth') === 'basic' ? 'jira_password' : 'jira_token'] = $('ji-secret').value;
+  return {
+    gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
+    projects: P,
+    branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
+      agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age') },
+    jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
+      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql') },
+    features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked },
+    secrets,
+  };
+}
+async function saveSettings() {
+  clearErrors();
+  await busy($('st-save'), 'Speichere …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/save', collect());
+      const where = Object.entries(r.secrets || {}).map(([k, v]) => `${k}: ${v}`).join('; ');
+      toast('Gespeichert' + (where ? ' (' + where + ')' : ''));
+      await loadSettings(); await load();
+      if (S.gitlab.url) testGitlab();
+      if (S.jira.url) testJira();
+    } catch (e) {
+      showErrors(e.data && e.data.errors);
+      toast(e.message);
+      const first = document.querySelector('.ferr:not(:empty)'); if (first) first.scrollIntoView({ block: 'center' });
+    }
+  });
+}
+async function delSecrets(names, label) {
+  if (!confirm(label + ' wirklich aus dem Speicher löschen?')) return;
+  try { await api('POST', '/api/settings/save', { ...collect(), secrets: {}, delete_secrets: names }); toast('Gelöscht'); await loadSettings(); await load(); }
+  catch (e) { showErrors(e.data && e.data.errors); toast(e.message); }
+}
+
 load();
 setInterval(load, 60000);
-setInterval(() => { if (state && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
+setInterval(() => { if (state && state.jobs && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
 </script>
 </body>
 </html>

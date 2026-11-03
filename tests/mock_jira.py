@@ -38,6 +38,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         auth = self.headers.get("Authorization", "")
+        if self.path.startswith("/rest/api/2/serverInfo"):
+            return self._json(200, {"version": "9.4.14", "serverTitle": "Mock Jira"})
         if auth not in ("Bearer jtoken", BASIC):
             return self._json(401, {"errorMessages": ["Unauthorized"]})
         u = urlparse(self.path)

@@ -1,4 +1,4 @@
-# tinyops 1.3: Arbeitspanel
+# tinyops 1.4: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -14,29 +14,41 @@ führen, pro MR eine Testumgebung im Cluster starten und fertige Prompts füllen
 
 ## 2. Mit deinem GitLab und Jira
 
-**Am einfachsten: `python3 setup.py`.** Der Assistent geht in 8 Schritten vor. Jeder Schritt erklärt, was er braucht,
-fragt ab, **prüft das Ergebnis sofort gegen dein System** und speichert die `config.json`. Bricht du ab, bleibt der
-Fortschritt erhalten.
+**Start:** `./run.sh` und im Browser `http://localhost:8765` öffnen. Ohne `config.json` öffnet sich die Seite
+**«Einstellungen»** von selbst. Dort verbindest du GitLab und Jira, und jede Verbindung lässt sich direkt testen:
 
-| Schritt | Was passiert | Was dabei geprüft wird |
+| Abschnitt | Was du eingibst | Was der Test Schritt für Schritt prüft |
 | --- | --- | --- |
-| 1 Voraussetzungen | Python, git, Schlüsselbund, kubectl, helm | Schreib-/Lesetest im Schlüsselbund |
-| 2 GitLab | URL, Firmen-CA, Token (unsichtbar) | Anmeldung, Token-Scopes (warnt bei mehr als `read_api`), Ablaufdatum |
-| 3 Projekte | Suche nach Name oder Eingabe der ID | Projekt existiert, Default-Branch; optional Helm-Angaben |
-| 4 Commits | Zeigt die Autoren der letzten Commits zur Auswahl: «ich» und «Agenten-Konto»; erkennt `Co-Authored-By`-Zeilen | **Vorschau**: Welche Branches würde das Panel jetzt zeigen? |
-| 5 Jira | URL, Anmeldeart, Token, Projekt-Keys aus deiner Liste, Vorgangstypen, Status | Anmeldung, **JQL-Testlauf mit den ersten Treffern** |
-| 6 Cluster | Wählt den kubectl-Kontext aus der Liste | Cluster erreichbar (nur lesend), warnt bei «prod» |
-| 7 Zugriff | Adresse, Port, auf Wunsch zufälliger Zugriffstoken | – |
-| 8 Abschlusstest | Alles nochmal gegen das echte System | Secrets, GitLab, Projekte, Jira, Vorschau |
+| GitLab | Adresse, optional Firmen-CA, Token (Feld unsichtbar) | Adresse gültig → Name auflösbar → Port erreichbar → Zertifikat (Aussteller, Restlaufzeit) → ist es GitLab → Anmeldung → Token-Scopes und Ablaufdatum → Version → jedes gewählte Projekt |
+| Projekte | Suche nach Name oder Projekt-ID | Projekt existiert und ist lesbar |
+| Meine Commits | Auswahl aus den echten Autoren der letzten Commits («ich», «Agent») | – |
+| Jira | Adresse, Anmeldeart (Token oder Benutzer+Passwort), Projekt-Keys, Vorgangstypen, JQL | wie GitLab, dazu: Anmeldung, sichtbare Projekt-Keys, Vorgangstypen, **JQL-Testlauf mit den ersten Treffern** |
 
-    python3 setup.py --list           # Schritte anzeigen
-    python3 setup.py --step jira      # nur einen Schritt wiederholen
-    python3 setup.py --from identity  # ab einem Schritt weitermachen
-    python3 setup.py --doctor         # nur prüfen, nichts ändern (Exit-Code 1 bei Problemen)
+Jeder Test zeigt pro Schritt ✓, ! oder ✗ und bei Problemen, **woran es liegt und was du tun kannst**:
 
-Die bestehende Config liefert die Vorgaben, die alte kommt nach `config.json.bak`. Eigene `secrets`-Einträge
-(Passwortmanager-Befehle) bleiben erhalten. Alles, was der Assistent tut, steht im Log.
+| Meldung | Typische Ursache und Hinweis |
+| --- | --- |
+| Name lässt sich nicht auflösen | Tippfehler oder VPN fehlt |
+| Verbindung abgelehnt / Zeitüberschreitung | falscher Port, Firewall |
+| Zertifikat nicht vertrauenswürdig | Firmen-CA: PEM-Datei bei «CA-Datei» eintragen (die Prüfung lässt sich absichtlich nicht abschalten) |
+| Zertifikat gilt für anderen Namen | Adresse muss dem Namen im Zertifikat entsprechen |
+| HTTP 404 auf die API | Kontextpfad fehlt (`https://host/gitlab`, `https://host/jira`) |
+| Weiterleitung | Zieladresse wird genannt; oft http→https |
+| HTTP 401 | Token ungültig/abgelaufen; bei Jira Hinweis auf Anmeldeart bearer ↔ basic |
+| HTTP 403 | fehlender Scope `read_api`, gesperrtes Konto, Firewall |
+| Jira verlangt CAPTCHA | einmal im Browser anmelden und das CAPTCHA lösen |
+| JQL fehlerhaft / 0 Treffer | Jiras Fehlermeldung plus die Status deiner Instanz zur Hilfe |
 
+Die Tests laufen mit den Werten **in den Feldern**, auch ungespeicherten. «Speichern» schreibt die `config.json` (Rechte 600,
+nie mit Secrets) und legt Tokens im Schlüsselbund (sonst in der 600er-Datei) ab; danach gilt alles **sofort ohne Neustart**
+und prüft sich nochmal selbst. Gespeicherte Secrets werden nie zurück an den Browser geschickt; das Feld zeigt nur
+«gespeichert (← Quelle)». Bei «basic» pausiert tinyops nach einem falschen Passwort 30 Sekunden, damit Jira dein Konto
+nicht sperrt.
+
+**Vorerst ausgeblendet** (Ideenbox, Testumgebungen mit Prompts und Agenten-Knöpfen, Helpdesk) bleibt alles, was nicht GitLab
+oder Jira ist. Einschalten: Einstellungen → «Weitere Funktionen». Ausgeschaltete Funktionen sind auch serverseitig gesperrt.
+
+Tokens besorgen und Hintergründe stehen darunter; von Hand geht es auch:
 Von Hand:
 
 1. `cp config.example.json config.json` und anpassen (URLs, Projekt-IDs, `jira.project_keys`, `kube_context`).
@@ -63,13 +75,13 @@ Rotation, ausserhalb des Projektordners). Secrets werden in jeder Zeile geschwä
 | Knopf «Log» im Panel | letzte 400 Zeilen, filterbar nach Stufe |
 | `log_level`, `log_dir`, `log_max_mb`, `log_backups` | in der `config.json` |
 
-Der Assistent `setup.py` schreibt immer auf `debug` in dasselbe Log. Zugriffs-Log: GET-Abfragen im Takt nur bei `debug`,
+Jeder Verbindungstest der Einstellungsseite steht mit Ergebnis im Log. Zugriffs-Log: GET-Abfragen im Takt nur bei `debug`,
 Aktionen (POST) und alle Fehler (ab HTTP 400) immer. Die Adresse mit `?token=` taucht nie auf, nur der Pfad.
 
 ## 2c. Mit Git installieren und aktualisieren
 
     git clone <adresse-deines-gitlab-repos> tinyops && cd tinyops
-    python3 setup.py                 # einmal einrichten
+    # beim ersten Start im Browser unter «Einstellungen» einrichten
     ./run.sh
     # später: Neues holen, Einstellungen bleiben
     git pull && ./run.sh
@@ -119,18 +131,18 @@ Das Panel nutzt das Python-Paket `keyring`, das über D-Bus mit dem **Secret-Ser
 
 1. **Paket besorgen** (dasselbe Python, das auch `server.py` startet):
    - Debian/Ubuntu: `sudo apt install python3-keyring` (gilt nur für `/usr/bin/python3`), oder
-   - venv: `python3 -m venv .venv && .venv/bin/pip install keyring`. `run.sh` nimmt `.venv` automatisch, `setup.py` startest du dann mit `.venv/bin/python setup.py`.
+   - venv: `python3 -m venv .venv && .venv/bin/pip install keyring`. `run.sh` nimmt `.venv` automatisch.
      (Ein venv ist die sauberere Wahl, wenn `pip` sonst `externally-managed-environment` meldet.)
-2. **Prüfen:** `python3 setup.py --check` macht einen echten Schreib-/Lesetest mit einem Wegwerf-Eintrag und nennt das Backend.
-   Gewünscht: `keyring.backends.SecretService.Keyring`. Zeigt es `fail.Keyring`, läuft kein Secret-Service.
-3. **Speichern:** `python3 setup.py` (oder nur `--secrets`). Einträge liegen unter Dienst `tinyops`, Namen wie `gitlab_token`.
+2. **Prüfen:** Unter «Einstellungen → Wo liegt was» steht, ob der Schlüsselbund gefunden wurde, sonst «Datei … (Klartext)».
+   Nach dem ersten Speichern zeigt «Gespeichert (← Schlüsselbund)», dass es geklappt hat.
+3. **Speichern:** über die Einstellungsseite (oder `python3 server.py --set-secret gitlab_token`). Einträge liegen unter Dienst `tinyops`, Namen wie `gitlab_token`.
    Ansehen und löschen kannst du sie in «Passwörter und Schlüssel» (Seahorse) oder mit `secret-tool search service tinyops`.
 4. **Gesperrter Schlüsselbund:** Beim Start entsperrt der Desktop ihn meist automatisch beim Login. Sonst erscheint beim ersten Zugriff ein Dialog.
 
 **Ohne Desktop-Sitzung (SSH, headless VM)** gibt es keinen Secret-Service, `keyring` meldet `fail.Keyring`. Optionen:
 - Secrets stattdessen aus einem Passwortmanager holen: `"secrets": {"gitlab_token": {"cmd": ["pass", "show", "tinyops/gitlab"]}}`
   (oder `op read`, `gpg -d`, `secret-tool lookup ...`). Das ist für VMs meist die beste Lösung.
-- Oder die 600er-Datei akzeptieren (`setup.py` fragt vorher nach).
+- Oder die 600er-Datei akzeptieren (die Einstellungsseite weist darauf hin).
 - Wer unbedingt einen Schlüsselbund auf der VM will: `gnome-keyring` plus `dbus-run-session -- sh -c 'echo -n "$PW" | gnome-keyring-daemon --unlock; ./run.sh'`.
   Das ist fummelig und ich habe es nicht getestet.
 
@@ -209,7 +221,8 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 ## 10. Dateien
 
     server.py            Server, GitLab- und Jira-Client, Jobs, Ideen (SQLite in data/)
-    setup.py             Einrichtung in 8 Schritten mit Prüfung, --doctor, --step
+    settings.py          Einstellungsseite: Verbindungstests, Speichern
+    net.py               Netzwerk: TLS, Fehlerarten, keine Weiterleitungen
     tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher
     static/index.html    Oberfläche
@@ -218,7 +231,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 
 ## 11. Ehrliche Grenzen
 
-- Getestet: 28 Tests (darunter der komplette Einrichtungsassistent gegen Fake-GitLab und Fake-Jira), Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
+- Getestet: 54 Tests (darunter die Verbindungstests gegen Fake-GitLab/Jira inkl. TLS, Weiterleitung, 401/403/404/503, CAPTCHA, und der ganze Weg über den Server), Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
   Zugriffsschutz, Secret-Rechte, Schwärzung, Oberfläche im Headless-Browser.
   **Nicht getestet:** dein echtes Jira 9.4 und GitLab 19.2, `helm`/`kubectl` gegen dein Cluster, der Schlüsselbund,
   Windows, Python unter 3.13.
