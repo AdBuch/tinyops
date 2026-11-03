@@ -547,17 +547,27 @@ class GitLabClient:
     def _pname(self, project_id):
         return self.proj_cfg.get(project_id, {}).get("name", "Projekt %s" % project_id)
 
-    def fetch(self):
-        errors = []
+    def fetch(self, sink=None, step=None):
+        """Holt alles von GitLab. Ergebnisse landen schon während des Abrufs in `sink` (Liste für Liste), und `step(id, Titel, Status, Detail)`
+        meldet den Fortschritt, damit die Oberfläche nicht auf das Ende warten muss."""
+        step = step or (lambda *a, **k: None)
+        sink = sink if sink is not None else {}
+        errors = sink.setdefault("errors", [])
+        step("gl-user", "Bei GitLab anmelden", "run")
         me = self.http.get("/user")
         username = me["username"]
+        sink["me"] = username
+        step("gl-user", "Bei GitLab anmelden", "ok", username)
         ident = self._identity(me)
         glog.debug("Angemeldet als %s, %d E-Mails und %d Namen für die Branch-Erkennung", username,
                    len(ident["emails"]), len(ident["names"]))
         bf = branch_cfg(self.cfg)
         ignore = list(bf.get("ignore_branches") or [])
-        mine, review, assigned = [], [], []
-        for p in self.cfg["projects"]:
+        mine = sink.setdefault("mine", [])
+        review = sink.setdefault("review", [])
+        assigned = sink.setdefault("assigned", [])
+
+        def one(p):
             pid, name = p["id"], p.get("name", str(p["id"]))
             try:
                 proj = self.http.get("/projects/%s" % pid)
@@ -619,16 +629,41 @@ class GitLabClient:
                     })
                 glog.info("%s: %d eigene MRs (%d ignoriert), %d Branches geprüft, %d angezeigt, %d zu alt", name, len(mrs),
                           ignored_mrs, checked, shown_b, skipped)
+                return "ok", "%d MR, %d Branches" % (len(mrs) - ignored_mrs, shown_b)
             except UserError as e:
                 glog.error("%s: %s", name, e)
                 errors.append("%s: %s" % (name, e))
+                return "err", str(e)
+
+        def run_one(p):
+            name = p.get("name", str(p["id"]))
+            sid = "gl-%s" % p["id"]
+            step(sid, "Projekt " + name, "run")
+            status, detail = one(p)
+            step(sid, "Projekt " + name, status, detail)
+
+        projects = list(self.cfg["projects"])
+        for p in projects:
+            step("gl-%s" % p["id"], "Projekt " + p.get("name", str(p["id"])), "wait")
+        step("gl-review", "Review-Queue", "wait")
+        step("gl-assigned", "Mir zugeteilte MRs", "wait")
+        if projects:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(3, len(projects))) as pool:
+                list(pool.map(run_one, projects))
+        order = {p["id"]: i for i, p in enumerate(projects)}
+        mine.sort(key=lambda it: order.get(it["project_id"], 99))   # stabil: innerhalb eines Projekts bleibt die Reihenfolge
+        step("gl-review", "Review-Queue", "run")
         try:
             rmrs = self.http.get("/merge_requests", {"state": "opened", "scope": "all",
                                                      "reviewer_username": username, "per_page": 50})
             for mr in rmrs:
                 review.append(self._mr_item(mr, "review", self._pname(mr["project_id"])))
+            step("gl-review", "Review-Queue", "ok", "%d MR" % len(review))
         except UserError as e:
             errors.append("Review-Queue: %s" % e)
+            step("gl-review", "Review-Queue", "err", str(e))
+        step("gl-assigned", "Mir zugeteilte MRs", "run")
         try:
             seen = {(m["project_id"], m["iid"]) for m in review}
             seen |= {(m["project_id"], m["iid"]) for m in mine if m["kind"] == "mr"}
@@ -638,9 +673,11 @@ class GitLabClient:
                 if (mr["project_id"], mr["iid"]) in seen:
                     continue
                 assigned.append(self._mr_item(mr, "assigned", self._pname(mr["project_id"])))
+            step("gl-assigned", "Mir zugeteilte MRs", "ok", "%d MR" % len(assigned))
         except UserError as e:
             errors.append("Zugeteilte MRs: %s" % e)
-        return {"me": username, "mine": mine, "review": review, "assigned": assigned, "errors": errors}
+            step("gl-assigned", "Mir zugeteilte MRs", "err", str(e))
+        return sink
 
     def mr(self, project_id, iid):
         mr = self.http.get("/projects/%s/merge_requests/%s" % (project_id, iid))
@@ -797,7 +834,19 @@ class DemoClient:
         item["state"] = derive_state(item) if kind == "mr" else "review"
         return item
 
-    def fetch(self):
+    def fetch(self, sink=None, step=None):
+        step = step or (lambda *a, **k: None)
+        sink = sink if sink is not None else {}
+        delay = float(os.environ.get("TINYOPS_DEMO_DELAY", "0"))   # nur zum Ansehen des Fortschritts
+
+        def pause(sid, title, detail):
+            step(sid, title, "run")
+            time.sleep(delay)
+            step(sid, title, "ok", detail)
+        for sid, title in (("gl-user", "Bei GitLab anmelden"), ("gl-1", "Projekt dlp-core"), ("gl-2", "Projekt dlp-ui"),
+                           ("gl-review", "Review-Queue"), ("gl-assigned", "Mir zugeteilte MRs")):
+            step(sid, title, "wait")
+        pause("gl-user", "Bei GitLab anmelden", "demo")
         mine = [
             self._item("mr", 41, "Vendex-Adapter: Retry bei 429", "feature/DLP-101-vendex-retry", 0, "running"),
             self._item("mr", 38, "Helm: Resource Limits setzen", "feature/DLP-102-helm-limits", 1, "success"),
@@ -819,7 +868,16 @@ class DemoClient:
         assigned = [self._item("assigned", 47, "Sonar: Quality Gate anpassen", "feature/DLP-150-sonar-gate", 4, "success")]
         for r in review + assigned:
             r["author"] = "kollege"
-        return {"me": "demo", "mine": mine, "review": review, "assigned": assigned, "errors": []}
+        sink.update(me="demo", errors=[])
+        sink.setdefault("mine", []).extend(mine[:4])
+        pause("gl-1", "Projekt dlp-core", "4 MR")
+        sink["mine"].extend(mine[4:])
+        sink.setdefault("review", []).extend(review)
+        pause("gl-2", "Projekt dlp-ui", "3 Branches")
+        pause("gl-review", "Review-Queue", "%d MR" % len(review))
+        sink.setdefault("assigned", []).extend(assigned)
+        pause("gl-assigned", "Mir zugeteilte MRs", "%d MR" % len(assigned))
+        return sink
 
     def mr(self, project_id, iid):
         return {"title": "Demo-MR %s" % iid, "branch": "feature/DLP-101-demo-%s" % iid,
@@ -944,6 +1002,9 @@ class App:
         self.config_path = Path(config_path) if config_path else default_config_path()
         self.access_token = secrets.get("access_token") or ""
         self.cache_lock = threading.Lock()
+        self.sync_lock = threading.Lock()
+        self.sync = {"running": False, "steps": [], "started": 0.0, "finished": 0.0, "n": 0}
+        self.partial, self.early_stories, self._sync_thread = None, None, None
         self.hd_lock = threading.Lock()
         self.ideas = None
         self.jobs = None
@@ -1016,7 +1077,7 @@ class App:
                  "ja" if self.jira else "nein", len(cfg["projects"]))
 
     # -- Jira-Verknüpfung (läuft beim Auffrischen des Caches)
-    def _jira_data(self, data):
+    def _jira_data(self, data, pre=None):
         j = self.jira
         if not j:
             return None
@@ -1025,7 +1086,7 @@ class App:
                "stories": [], "url": j.base, "error": ""}
         items = data["mine"] + data["review"] + data["assigned"]
         try:
-            inprog = j.in_progress()
+            inprog = pre() if pre else j.in_progress()
             types = {t.lower() for t in (self.jc.get("wip_issue_types") or [])}
             if types:
                 inprog = [i for i in inprog if i["type"].lower() in types]
@@ -1083,22 +1144,126 @@ class App:
         self.over_limit, self.inprogress_keys = over, progress_keys
         return out
 
-    def _refresh(self):
+    # -- Synchronisation: läuft im Hintergrund, Teilergebnisse sind sofort sichtbar
+    def _step(self, sid, title, status, detail=""):
+        now = time.time()
+        with self.sync_lock:
+            st = next((x for x in self.sync["steps"] if x["id"] == sid), None)
+            if st is None:
+                st = {"id": sid, "title": title, "status": "wait", "detail": "", "t0": 0.0, "secs": None}
+                self.sync["steps"].append(st)
+            if status == "run" and not st["t0"]:
+                st["t0"] = now
+            if status in ("ok", "err") and st["t0"]:
+                st["secs"] = round(now - st["t0"], 1)
+            st["status"], st["detail"] = status, str(detail)[:120]
+
+    def start_sync(self):
+        """Startet eine Synchronisation im Hintergrund, falls nicht schon eine läuft. Gibt True zurück, wenn eine neu begann."""
+        with self.sync_lock:
+            if self.sync["running"]:
+                return False
+            self.sync = {"running": True, "steps": [], "started": time.time(), "finished": 0.0, "n": self.sync["n"] + 1}
+            self.partial = {"mine": [], "review": [], "assigned": [], "errors": [], "me": ""}
+            self.early_stories = None
+            t = threading.Thread(target=self._run_sync, name="sync", daemon=True)
+            self._sync_thread = t
+        t.start()
+        return True
+
+    def _run_sync(self):
+        data = None
+        try:
+            data = self._refresh(self.partial, self._step)
+        except Exception as e:   # der Hintergrund-Thread darf nie still sterben
+            rlog.exception("Synchronisation abgebrochen: %s", e)
+            data = {"me": "", "mine": [], "review": [], "assigned": [], "errors": ["Synchronisation abgebrochen: %s" % e], "jira": None}
+        finally:
+            with self.cache_lock:
+                if data is not None:
+                    self.cache, self.cache_t = data, time.time()
+            with self.sync_lock:
+                self.sync["running"] = False
+                self.sync["finished"] = time.time()
+
+    def sync_view(self):
+        with self.sync_lock:
+            sy = self.sync
+            steps = sorted((dict(x) for x in sy["steps"]), key=lambda x: x["id"] == "ji-link")   # Verknüpfen kommt zuletzt
+            return {"running": sy["running"], "n": sy["n"], "started": sy["started"], "finished": sy["finished"],
+                    "steps": steps, "done": sum(1 for x in steps if x["status"] in ("ok", "err")), "total": len(steps),
+                    "secs": round((sy["finished"] or time.time()) - sy["started"], 1) if sy["started"] else 0}
+
+    def _refresh(self, sink=None, step=None):
         t0 = time.time()
+        step = step or (lambda *a, **k: None)
         self.refresh_no = getattr(self, "refresh_no", 0) + 1
         rlog.info("Auffrischen #%d beginnt", self.refresh_no)
+        pre_holder = {}
+        pre_thread = None
+        if self.jira:
+            step("ji-stories", "Jira: Stories in Arbeit", "run")
+
+            def early():
+                try:
+                    r = self.jira.in_progress()
+                    pre_holder["v"] = r
+                    self.early_stories = r
+                    step("ji-stories", "Jira: Stories in Arbeit", "ok", "%d Tickets" % len(r))
+                except UserError as e:
+                    pre_holder["e"] = e
+                    step("ji-stories", "Jira: Stories in Arbeit", "err", str(e))
+            pre_thread = threading.Thread(target=early, daemon=True)
+            pre_thread.start()
+            step("ji-link", "Tickets mit Branches verknüpfen", "wait")
+
+        def pre():
+            pre_thread.join()
+            if "e" in pre_holder:
+                raise pre_holder["e"]
+            return pre_holder["v"]
         try:
-            data = self.client.fetch()
+            data = self.client.fetch(sink, step)
         except UserError as e:
             rlog.error("GitLab-Abfrage fehlgeschlagen: %s", e)
-            data = {"me": "", "mine": [], "review": [], "assigned": [], "errors": [str(e)]}
-        self._by_key = {}
+            step("gl-user", "Bei GitLab anmelden", "err", str(e))
+            data = sink if sink is not None else {}
+            data.setdefault("me", "")
+            for k in ("mine", "review", "assigned"):
+                data.setdefault(k, [])
+            data.setdefault("errors", []).append(str(e))
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["ref"] = links.ref_of(it["project_id"], it["branch"])
-        data["jira"] = self._jira_data(data)
+        if self.jira:
+            step("ji-link", "Tickets mit Branches verknüpfen", "run")
+            data["jira"] = self._jira_data(data, pre)
+            j = data["jira"]
+            step("ji-link", "Tickets mit Branches verknüpfen", "err" if not j["ok"] else "ok", j.get("error", "") if not j["ok"] else "")
+            if not j["ok"]:
+                self._by_key = {}
+        else:
+            data["jira"] = None
         rlog.info("Auffrischen #%d fertig in %.1f s: %d eigene Einträge, %d Review, %d zugeteilt, %d Fehler",
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
+        return data
+
+    def _partial_view(self):
+        """Zwischenstand während der ersten Synchronisation: schon geladene Listen, Jira-Stories ohne Zuordnung."""
+        p = self.partial or {}
+        data = {"me": p.get("me", ""), "mine": [dict(i) for i in p.get("mine", [])], "review": [dict(i) for i in p.get("review", [])],
+                "assigned": [dict(i) for i in p.get("assigned", [])], "errors": list(p.get("errors", [])), "partial": True}
+        for it in data["mine"] + data["review"] + data["assigned"]:
+            it["ref"] = links.ref_of(it["project_id"], it["branch"])
+            it["keys"] = extract_keys("%s %s" % (it["branch"], it["title"]), self.jc.get("project_keys")) if self.jira else []
+        if self.jira:
+            st = self.early_stories
+            data["jira"] = {"enabled": True, "ok": st is not None, "loading": st is None, "partial": True, "limit": int(self.jc["story_limit"]),
+                            "count": len(st or []), "over": False, "url": self.jira.base, "error": "", "sprints": [],
+                            "only_active": bool(self.jc.get("only_active_sprints", True)),
+                            "stories": [dict(x, items=[], no_mr=False, in_progress=True) for x in (st or [])]}
+        else:
+            data["jira"] = None
         return data
 
     def helpdesk(self):
@@ -1271,17 +1436,27 @@ class App:
         return res
 
     # -- Übersicht
-    def overview(self):
+    def overview(self, wait=True):
+        """wait=True wartet auf eine frische Synchronisation (Tests, Skripte). wait=False liefert sofort, was da ist: den Zwischenspeicher
+        oder, solange noch nichts vollständig geladen ist, den Zwischenstand."""
         if not self.configured:
             return {"configured": False, "problems": list(self.problems), "me": "", "mine": [], "review": [], "assigned": [],
                     "errors": [], "jira": None, "wip": 0, "wip_limit": self.cfg["wip_limit"], "stale_days": self.cfg["stale_days"],
                     "demo": self.demo, "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
                     "agent_enabled": False, "prompts": [], "fetched": time.time(), "helpdesk": None}
         with self.cache_lock:
-            if self.cache is None or time.time() - self.cache_t > self.cfg["cache_seconds"]:
-                self.cache = self._refresh()
-                self.cache_t = time.time()
-            data = dict(self.cache)
+            expired = self.cache is None or time.time() - self.cache_t > self.cfg["cache_seconds"]
+        if expired:
+            self.start_sync()
+        if wait:
+            t = self._sync_thread
+            if t is not None and expired:
+                t.join()
+        with self.cache_lock:
+            cached = self.cache
+        data = dict(cached) if cached is not None else self._partial_view()
+        data["loading"] = cached is None
+        data["sync"] = self.sync_view()
         stale = self.cfg["stale_days"]
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["stale"] = it["age_days"] >= stale
@@ -1540,8 +1715,12 @@ def make_handler(app):
                     return self._send(200, app.ticket_draft(self._body()))
                 if method == "POST" and path == "/api/ticket/create":
                     return self._send(200, app.ticket_create(self._body()))
+                if method == "POST" and path == "/api/refresh":
+                    with app.cache_lock:
+                        app.cache_t = 0.0
+                    return self._send(200, {"started": app.start_sync(), "sync": app.sync_view()})
                 if method == "GET" and path == "/api/overview":
-                    data = app.overview()
+                    data = app.overview(wait=False)
                     data["ideas"] = app.ideas.list() if app.has("ideas") and app.ideas else []
                     data["idea_cap"] = cfg["idea_cap"]
                     data["jobs"] = app.jobs.summary() if app.has("testenv") else []

@@ -1,4 +1,4 @@
-# tinyops 2.1: Arbeitspanel
+# tinyops 2.2: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -224,6 +224,17 @@ sind schon aus Branch, MR-Titel, MR-Beschreibung und Commit-Titeln vorbereitet (
 - **Pools** sind benannte Arbeitsbereiche ausserhalb von Sprint und Story-Limit, zum Beispiel «Agenten-VM» oder ein Produkt. Du legst sie in der Kachel «Pools» an
   und ziehst Zeilen (Branch/MR), Stories oder Ticket-Chips hinein. Ein Ticket, das nicht in den Listen steht, fügst du über den Key hinzu (Jira liefert Titel und Status).
 - **Nur lokal:** Alles liegt in `~/.config/tinyops/data/tinyops.db`. In Jira und GitLab wird nichts geändert.
+
+## 4h. Sync-Status und Teilergebnisse (neu in 2.2)
+
+Das Panel wartet nicht mehr, bis alles geladen ist. Der Server synchronisiert im Hintergrund, die Seite fragt alle 0,9 s nach, solange das läuft.
+
+* Eine Leiste über den Kacheln zeigt, was gerade abgeglichen wird: GitLab-Anmeldung, jedes Projekt, Review-Queue, zugeteilte MRs, Jira-Stories und das Verknüpfen. Pro Schritt siehst du Ergebnis und Dauer. Danach bleibt eine einzeilige Zusammenfassung («Synchronisiert um 17:06:21 in 6 s»), die sich aufklappen lässt.
+* Schon geladene Projekte erscheinen sofort. Leere Kacheln zeigen «lädt …», bis der Abruf durch ist. Jira-Stories kommen früh (parallel zu GitLab), ihre Zuordnung zu Branches folgt am Ende.
+* Beim Auffrischen bleiben die alten Daten stehen, bis die neuen komplett sind. «Neu laden» startet den Abgleich und blockiert nicht.
+* GitLab-Projekte werden mit bis zu 3 Anfragen parallel geladen (nur lesend). Ein Fehler in einem Projekt stoppt die anderen nicht.
+* Für Skripte: `POST /api/refresh` startet den Abgleich, `GET /api/overview` liefert sofort und enthält `sync` und `loading`.
+* Zum Ansehen mit künstlicher Verzögerung: `TINYOPS_DEMO_DELAY=1.2 ./run.sh --demo`.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

@@ -42,6 +42,15 @@ class Flow(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
 
+    def overview(self):
+        """/api/overview antwortet sofort; hier warten, bis die Synchronisation durch ist."""
+        end = time.time() + 20
+        while True:
+            code, ov = self.call("GET", "/api/overview")
+            if code != 200 or not ov.get("sync", {}).get("running") or time.time() > end:
+                return code, ov
+            time.sleep(0.1)
+
     def test_flow(self):
         gp, jp, self.port = free_port(), free_port(), free_port()
         procs = [subprocess.Popen([sys.executable, str(ROOT / "tests" / "mock_gitlab.py"), str(gp)]),
@@ -62,7 +71,7 @@ class Flow(unittest.TestCase):
                 wait(gp)
                 wait(jp)
 
-                code, ov = self.call("GET", "/api/overview")
+                code, ov = self.overview()
                 self.assertEqual(code, 200)
                 self.assertFalse(ov["configured"])
                 self.assertTrue(ov["problems"])
@@ -99,7 +108,7 @@ class Flow(unittest.TestCase):
                 self.assertEqual(stat.S_IMODE(cfgfile.stat().st_mode), 0o600)
                 self.assertEqual(json.loads(raw)["port"], self.port)   # Fremdes bleibt erhalten
 
-                code, ov = self.call("GET", "/api/overview")
+                code, ov = self.overview()
                 self.assertTrue(ov["configured"], ov)
                 self.assertEqual(ov["me"], "me")
                 self.assertTrue(ov["jira"]["ok"])
@@ -136,7 +145,7 @@ class Flow(unittest.TestCase):
                     "jira": {"url": jiurl, "auth": "bearer", "project_keys": ["DLP"], "wip_issue_types": ["Story"],
                              "only_active_sprints": False}})
                 self.assertEqual(code, 200)
-                code, ov = self.call("GET", "/api/overview")
+                code, ov = self.overview()
                 names = [(i["kind"], i["branch"]) for i in ov["mine"]]
                 self.assertIn(("branch", "release/2.0"), names)
                 self.assertIn(("mr", "release/1.5"), names)
@@ -148,14 +157,14 @@ class Flow(unittest.TestCase):
                 self.assertEqual(code, 200)
                 code, r = self.call("POST", "/api/ideas", {"text": "Test"})
                 self.assertEqual(code, 200, r)
-                code, ov = self.call("GET", "/api/overview")
+                code, ov = self.overview()
                 self.assertEqual(len(ov["ideas"]), 1)
                 self.assertTrue(ov["configured"])   # gespeicherter Token blieb erhalten
 
                 # Secret löschen
                 code, _ = self.call("POST", "/api/settings/save", {"gitlab": {"url": glurl}, "delete_secrets": ["gitlab_token"]})
                 self.assertEqual(code, 200)
-                code, ov = self.call("GET", "/api/overview")
+                code, ov = self.overview()
                 self.assertFalse(ov["configured"])
 
                 log = Path(tmp, "home", "logs", "tinyops.log").read_text()

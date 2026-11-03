@@ -125,6 +125,24 @@
   .chip.agent { background: transparent; border-color: var(--focus); color: var(--focus); }
   .chip.draft { background: var(--warn-bg); color: var(--warn); }
   .empty { color: var(--quiet); padding: 16px 18px; }
+  .empty.busy::before, .sy-dot.run { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%;
+    border: 2px solid var(--quiet); border-top-color: transparent; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .empty.busy::before, .sy-dot.run { animation: none; } }
+  #syncbar { margin: 0 0 12px; border: 1px solid var(--line, #d9d9d9); border-radius: 8px; padding: 8px 12px; font-size: 13px; background: var(--card, transparent); }
+  #syncbar[hidden] { display: none; }
+  #syncbar summary { cursor: pointer; display: flex; gap: 10px; align-items: center; list-style: none; }
+  #syncbar summary::-webkit-details-marker { display: none; }
+  #syncbar .sy-prog { flex: 0 0 120px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--quiet) 25%, transparent); overflow: hidden; }
+  #syncbar .sy-prog i { display: block; height: 100%; background: var(--ok, #2a8); transition: width .25s; }
+  #syncbar .sy-steps { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
+  #syncbar .sy-step { display: inline-flex; align-items: center; gap: 4px; color: var(--quiet); }
+  #syncbar .sy-step.run { color: inherit; font-weight: 600; }
+  #syncbar .sy-step.err { color: var(--bad); }
+  #syncbar .sy-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--quiet); box-sizing: border-box; }
+  #syncbar .sy-dot.ok { background: var(--ok, #2a8); border-color: var(--ok, #2a8); }
+  #syncbar .sy-dot.err { background: var(--bad); border-color: var(--bad); }
+  #syncbar .sy-dot.run { margin-right: 0; width: 10px; height: 10px; }
   .nomatch { color: var(--quiet); padding: 28px 8px; text-align: center; }
 
   /* Seitenspalte (Ideenbox, Jobs: vorerst aus) */
@@ -347,6 +365,7 @@
 <div id="viewOverview">
   <section id="left">
     <div id="banners"></div>
+    <div id="syncbar" hidden></div>
         <div class="toolbar" id="toolbar" hidden>
       <input type="search" id="fq" placeholder="Suchen: Titel, Branch, Ticket   ( / )" aria-label="Suchen" autocomplete="off">
       <select id="fproj" aria-label="Projekt"></select>
@@ -553,6 +572,7 @@ function group(title, items, empty, hint) {
 function storiesTile() {
   const j = state.jira;
   if (!j) return null;
+  if (j.loading) return { title: 'Stories in Arbeit', count: '', hint: '', body: '<div class="empty busy">lädt …</div>' };
   if (!j.ok) return { title: 'Stories in Arbeit', count: '', hint: 'Jira antwortet nicht', body: '<div class="empty">Jira ist eingerichtet, antwortet aber nicht. Details im Banner und unter Einstellungen.</div>' };
   const slots = [];
   const n = Math.max(j.limit, j.stories.length);
@@ -589,7 +609,29 @@ function tileHtml(id, t, open, mini) {
     <div class="tbody">${body}</div></section>`;
 }
 function listBody(items, empty) {
-  return items.length ? `<div class="list">${items.map(row).join('')}</div>` : `<div class="empty">${esc(empty)}</div>`;
+  if (items.length) return `<div class="list">${items.map(row).join('')}</div>`;
+  if (state.sync && state.sync.running) return '<div class="empty busy">lädt …</div>';
+  return `<div class="empty">${esc(empty)}</div>`;
+}
+
+// Sync-Anzeige: was wird gerade abgeglichen, danach eine ruhige Zusammenfassung
+let syncOpen = LS.get('syncOpen', false);
+function renderSync() {
+  const el = $('syncbar'), sy = state.sync;
+  if (!sy || !sy.total || !state.configured) { el.hidden = true; return; }
+  const errs = sy.steps.filter(x => x.status === 'err').length;
+  const cur = sy.steps.filter(x => x.status === 'run').map(x => x.title);
+  const pct = Math.round(100 * sy.done / sy.total);
+  const when = sy.finished ? new Date(sy.finished * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  const head = sy.running
+    ? `<span class="sy-dot run"></span><span><b>Synchronisiere</b> ${sy.done} von ${sy.total}${cur.length ? ': ' + esc(cur.join(', ')) : ''}</span><span class="sy-prog"><i style="width:${pct}%"></i></span>`
+    : `<span class="sy-dot ${errs ? 'err' : 'ok'}"></span><span>${errs ? `Synchronisiert mit ${errs} Fehler${errs > 1 ? 'n' : ''}` : 'Synchronisiert'} um ${when} in ${sy.secs} s</span>`;
+  const steps = sy.steps.map(x => `<span class="sy-step ${x.status}" title="${esc(x.detail)}"><span class="sy-dot ${x.status}"></span>${esc(x.title)}${x.detail && x.status !== 'run' ? ' · ' + esc(x.detail) : ''}${x.secs != null ? ` (${x.secs} s)` : ''}</span>`).join('');
+  const open = sy.running || syncOpen;
+  el.hidden = false;
+  el.innerHTML = `<details ${open ? 'open' : ''}><summary>${head}</summary><div class="sy-steps">${steps}</div></details>`;
+  const d = el.querySelector('details');
+  d.addEventListener('toggle', () => { if (!sy.running) { syncOpen = d.open; LS.set('syncOpen', syncOpen); } });
 }
 
 function renderLeft() {
@@ -600,6 +642,7 @@ function renderLeft() {
   }
   if (state.errors.length) banners += `<div class="banner bad">${state.errors.map(esc).join('<br>')}</div>`;
   $('banners').innerHTML = banners;
+  renderSync();
   const tb = $('toolbar');
   if (!state.configured) { $('board').innerHTML = ''; tb.hidden = true; return; }
 
@@ -693,7 +736,9 @@ function renderHeader() {
   else if (state.jira) { ji.innerHTML = dot('bad', 'Jira'); ji.title = state.jira.error; }
   else { ji.innerHTML = dot('off', 'Jira'); ji.title = 'Nicht eingerichtet'; }
   $('demo').style.display = state.demo ? '' : 'none';
-  $('fetched').textContent = 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  const syncing = state.sync && state.sync.running;
+  $('fetched').textContent = syncing ? 'synchronisiert …' : 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  $('refresh').disabled = !!syncing;
 }
 
 function renderAside() {
@@ -707,8 +752,9 @@ function renderAside() {
   $('viewOverview').classList.toggle('withaside', on);
 }
 
-let firstLoad = true;
+let firstLoad = true, pollT = null;
 async function load() {
+  clearTimeout(pollT);
   try {
     state = await api('GET', '/api/overview');
     renderHeader(); renderLeft(); renderAside();
@@ -716,6 +762,8 @@ async function load() {
     if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
   } catch (e) { toast(e.message); }
+  // Solange synchronisiert wird, schnell nachfragen: Teilergebnisse erscheinen, ohne dass man warten muss
+  if (state && state.sync && state.sync.running) pollT = setTimeout(load, 900);
 }
 
 // Kacheln öffnen (höchstens zwei, jede nimmt die halbe Breite)
@@ -1006,7 +1054,10 @@ document.getElementById('dlgCopy').onclick = () => {
   document.execCommand('copy'); toast('Kopiert');
 };
 
-document.getElementById('refresh').onclick = load;
+document.getElementById('refresh').onclick = async () => {
+  try { await api('POST', '/api/refresh', {}); } catch (e) { toast(e.message); }
+  load();
+};
 // ---------------------------------------------------------------- Einstellungen
 let S = null;          // Antwort von /api/settings
 let P = [];            // Arbeitskopie der Projekte
@@ -1364,7 +1415,7 @@ async function delSecrets(names, label) {
 }
 
 load();
-setInterval(load, 60000);
+setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 60000);
 setInterval(() => { if (state && state.jobs && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
 </script>
 </body>
