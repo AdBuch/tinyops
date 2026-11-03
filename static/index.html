@@ -286,6 +286,8 @@
   /* Herkunft: Jira = violett, GitLab = orange */
   .src { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
   .src::before { content: ""; width: 7px; height: 7px; flex: none; }
+  .src img.logo { height: 13px; width: auto; max-width: 40px; }
+  .src img.logo + .tx { }
   .src.jira { background: var(--jira-bg); color: var(--jira); }
   .src.jira::before { background: currentColor; transform: rotate(45deg); }
   .src.gl { background: var(--gl-bg); color: var(--gl); }
@@ -527,6 +529,7 @@ function storiesTile() {
     body: `<div class="slots">${slots.join('')}</div>${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}` };
 }
 
+const logo = n => `<img class="logo" src="/logo/${n}" alt="" onerror="this.remove()">`;
 let openTiles = LS.get('open', []);
 function applyLayout(l) {
   document.body.classList.toggle('layout-list', l === 'list');
@@ -539,7 +542,7 @@ function tileHtml(id, t, open, mini) {
   const body = t.body;
   return `<section class="tile t-${src} ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
     <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
-      <h2>${esc(t.title)}</h2><span class="src ${src}">${src === 'jira' ? 'Jira' : 'GitLab'}</span><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
+      <h2>${esc(t.title)}</h2><span class="src ${src}">${logo(src)}${src === 'jira' ? 'Jira' : 'GitLab'}</span><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
       <span class="thint">${t.hint || ''}</span><button class="expand quiet-btn" tabindex="-1" aria-hidden="true">${open ? '⤡' : '⤢'}</button></div>
     <div class="tbody">${body}</div></section>`;
 }

@@ -269,3 +269,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
   (100 Treffer, bei Überschreitung zeigt die Helpdesk-Pille ein «+»).
 - Pipeline-Status gibt es nicht für Branches ohne MR. Mehr als 100 Branches pro Projekt werden nicht gelesen. Der Branch-Filter ist gegen den Fake-GitLab getestet, nicht gegen dein 19.2.
 - Stop-Regel für dich: Wenn du das Panel nach vier Wochen nicht täglich öffnest, lösche es.
+
+### Logos
+Aus Markenrechtsgründen liegen keine Logos im Projekt. Eigene Dateien (offizielle Logos aus eurem Brand-Bereich) legst du hin als
+`~/.config/tinyops/logos/jira.svg` und `gitlab.svg` (oder `.png`, höchstens 256 KB); sie erscheinen dann in den Kachelköpfen. Fehlt eine Datei, bleibt es beim Text.

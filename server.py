@@ -1253,6 +1253,14 @@ def make_handler(app):
             try:
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)
+                if method == "GET" and path in ("/logo/jira", "/logo/gitlab"):
+                    # Eigene Logo-Dateien des Nutzers: ~/.config/tinyops/logos/jira.svg|png (gitlab.svg|png). Fehlt eine, bleibt es beim Text.
+                    name = path.rsplit("/", 1)[1]
+                    for ext, ctype in (("svg", "image/svg+xml"), ("png", "image/png")):
+                        f = store.home_dir() / "logos" / ("%s.%s" % (name, ext))
+                        if f.is_file() and f.stat().st_size < 262144:
+                            return self._send(200, f.read_bytes(), ctype, extra)
+                    return self._err(404, "kein Logo hinterlegt")
                 # -- Einstellungen: Anzeigen, Verbindung testen, Speichern
                 if path.startswith("/api/settings"):
                     return self._settings(method, path)
