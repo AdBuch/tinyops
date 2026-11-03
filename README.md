@@ -1,4 +1,4 @@
-# tinyops 2.3: Arbeitspanel
+# tinyops 2.4: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -236,7 +236,9 @@ Das Panel wartet nicht mehr, bis alles geladen ist. Der Server synchronisiert im
 * Für Skripte: `POST /api/refresh` startet den Abgleich, `GET /api/overview` liefert sofort und enthält `sync` und `loading`.
 * Zum Ansehen mit künstlicher Verzögerung: `TINYOPS_DEMO_DELAY=1.2 ./run.sh --demo`.
 
-## 4i. KI-Konten: Rest im Zeitfenster (neu in 2.3)
+## 4i. KI-Konten: Rest im Zeitfenster (neu in 2.3, ab 2.4 standardmässig aus)
+
+Einschalten unter Einstellungen → Weitere Funktionen → «KI-Konten» (`features.ai` in der config.json). Ausgeschaltet bleibt die Kachel weg und `/api/ai/*` antwortet mit 404; gespeicherte Konten bleiben erhalten.
 
 Kachel «KI-Konten». Claude.ai, ChatGPT und Mistral Vibe (Abos) bieten **keine offizielle Abfrage** für das Restlimit. Das Panel liest deshalb nichts von dort (und braucht dafür keine Zugangsdaten), sondern rechnet mit dem, was du einträgst:
 
@@ -245,6 +247,17 @@ Kachel «KI-Konten». Claude.ai, ChatGPT und Mistral Vibe (Abos) bieten **keine 
 * **Lokales Modell:** Art «Lokal» zählt die Anfragen des Panels (KI-Entwurf) automatisch, ohne Limit.
 * Gespeichert wird nur lokal in `tinyops.db`, nichts geht an einen Anbieter. API: `POST /api/ai/save|set|delete`, `ai` im `/api/overview`.
 * Grenze: Der Stand ist nur so aktuell wie dein letzter Eintrag. Verbrauch ausserhalb des Panels (Web, Handy) siehst du erst, wenn du ihn nachträgst.
+
+## 4j. Board: Workflow und eine Karte pro Aufgabe (neu in 2.4)
+
+Zweite Seite «Board» mit den Spalten **Ideenpool → Geplant → Umsetzung → Review → Test → Getestet → Fertig**.
+
+* **Eine Karte pro Aufgabe.** Alles mit demselben Ticket-Key wird zu einer Karte zusammengeführt. Ein Ticket kann beliebig viele MRs und Branches haben, sie erscheinen als Chips auf der Karte. MRs und Branches ohne Ticket (nur deine) haben eine eigene Karte «ohne Ticket» und lassen sich ausblenden.
+* **Quellen:** Jira-Tickets in Arbeit, Pool-Tickets, Tickets, die du aufs Board holst (Jira-Key ins Feld oben eintragen), **lokale Aufgaben** (Text eintragen, sie heissen `LOC-1`, `LOC-2` …) und offene Ideen aus der Ideenbox (Spalte Ideenpool, Knopf «Planen» macht daraus eine Aufgabe in Geplant).
+* **Verschieben:** Karte in eine andere Spalte ziehen oder ◀ ▶ benutzen. Die Stufe gilt nur im Panel, in Jira wird nichts geändert. Ohne eigene Stufe gilt: in Jira in Arbeit → Umsetzung, mit offenem MR (kein Draft) → Review, sonst Geplant. ✕ löscht lokale Aufgaben oder setzt die eigene Stufe zurück.
+* **Verbinden:** einen MR-/Branch-Chip auf eine andere Karte ziehen, dann gehört er zu deren Ticket (wie das Verknüpfen aus 4g, auch mit `LOC-…`-Aufgaben).
+* **Jira-Panel:** Umsetzung, Review und Test zählen als «in Arbeit». Solche Aufgaben erscheinen zusätzlich zu den Jira-Stories im Panel «Stories in Arbeit», zählen für das Limit und tragen dort ihre Stufe. Jira-Stories in Arbeit bleiben immer sichtbar, auch wenn du sie im Board woandershin schiebst (sonst würde das Limit etwas verstecken).
+* «Fertig» zeigt die 12 neuesten Karten. API: `POST /api/board/stage|add|remove|plan_idea`, `board` im `/api/overview`.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

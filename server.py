@@ -89,7 +89,7 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
-    "features": {"ideas": True, "testenv": False},   # Testumgebung vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
+    "features": {"ideas": True, "testenv": False, "ai": False},   # Testumgebung vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
     "data_dir": "",               # leer = ./data (Ideenbox)
     "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
     "log_dir": "",                # leer = ~/.config/tinyops/logs
@@ -1099,7 +1099,8 @@ class App:
                 if m:
                     it["keys"] = [m]   # eine von Hand gesetzte Verknüpfung gilt vor der Erkennung aus dem Namen
             progress_keys = {i["key"] for i in inprog}
-            wanted = sorted(({k for it in items for k in it["keys"]} | set(self.store.pool_tickets())) - progress_keys)
+            cand = {k for it in items for k in it["keys"]} | set(self.store.pool_tickets()) | set(self.store.staged_tickets())
+            wanted = sorted(k for k in cand if not links.is_local_key(k) and k not in progress_keys)
             known = j.lookup(wanted) if wanted else {}
         except UserError as e:
             jlog.error("Jira-Abfrage fehlgeschlagen: %s", e)
@@ -1108,6 +1109,7 @@ class App:
             return out
         by_key = {k: dict(v, in_progress=False) for k, v in known.items()}
         by_key.update({i["key"]: dict(i, in_progress=True) for i in inprog})
+        by_key.update({t["key"]: self._local_ticket(t) for t in self.store.tasks()})   # Aufgaben ohne Jira-Ticket zählen wie Tickets
         self._by_key = by_key
         over = len(inprog) > limit
         for it in items:
@@ -1118,9 +1120,7 @@ class App:
             it["create_url"] = j.create_url(it["title"]) if it["no_ticket"] else ""
             it["agent_locked"] = bool(over and not (tk and tk["in_progress"]))
         for s in inprog:
-            linked = [{"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"],
-                       "kind": it["kind"], "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link"))}
-                      for it in items if s["key"] in it["keys"]]
+            linked = self._linked(s["key"], items)
             s["items"] = linked
             s["no_mr"] = not any(x["kind"] in ("mr", "assigned") for x in linked)
         sprints = {}
@@ -1193,6 +1193,150 @@ class App:
             return {"running": sy["running"], "n": sy["n"], "started": sy["started"], "finished": sy["finished"],
                     "steps": steps, "done": sum(1 for x in steps if x["status"] in ("ok", "err")), "total": len(steps),
                     "secs": round((sy["finished"] or time.time()) - sy["started"], 1) if sy["started"] else 0}
+
+    @staticmethod
+    def _local_ticket(t):
+        return {"key": t["key"], "summary": t["title"], "status": "", "type": "Aufgabe", "url": "", "sprint": "", "sprint_end": "",
+                "in_sprint": None, "in_progress": False, "local": True}
+
+    @staticmethod
+    def _linked(key, items):
+        """Alle MRs und Branches eines Tickets: ein Ticket kann beliebig viele haben."""
+        return [{"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"],
+                 "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link")),
+                 "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", "")}
+                for it in items if key in it.get("keys", [])]
+
+    def _board(self, data):
+        """Board und Jira-Panel aus einer Quelle: jede Aufgabe (Jira-Ticket, lokale Aufgabe, Idee, MR/Branch ohne Ticket) ist eine Karte;
+        alles mit demselben Ticket-Key wird zusammengeführt. Läuft bei jeder Anfrage auf dem Zwischenspeicher, damit Verschieben sofort wirkt."""
+        stages = self.store.stages()
+        items = data["mine"] + data["review"] + data["assigned"]
+        j = data.get("jira")
+        known = dict(self._by_key)
+        for t in self.store.tasks():
+            known[t["key"]] = self._local_ticket(t)
+        pools = {}
+        for p in self.store.pools():
+            for i in p["items"]:
+                pools.setdefault(i["value"], []).append(p["name"])
+        jira_prog = {st["key"] for st in (j or {}).get("stories", [])}
+        keys = set(jira_prog) | set(known) | {k for k in stages if not links.is_ref_key(k)} | set(self.store.pool_tickets())
+
+        mine_keys = {k for it in data["mine"] for k in it.get("keys", [])}
+
+        def derive(tk, linked):
+            if tk and tk.get("in_progress"):
+                return "review" if any(x["kind"] == "mr" and not x["draft"] for x in linked) else "impl"
+            return "planned"
+        cards = []
+        for k in sorted(keys):
+            tk = known.get(k)
+            if k not in stages and k not in pools and k not in jira_prog and k not in mine_keys and not (tk and tk.get("local")):
+                continue   # Tickets nur, wenn sie in Arbeit, im Pool, auf dem Board oder mit eigenem MR/Branch verbunden sind
+            linked = self._linked(k, items)
+            st = stages.get(k)
+            card = {"id": k, "key": k, "title": (tk or {}).get("summary", ""), "status": (tk or {}).get("status", ""), "url": (tk or {}).get("url", ""),
+                    "local": bool(tk and tk.get("local")), "known": tk is not None, "type": (tk or {}).get("type", ""), "items": linked,
+                    "stage": st["stage"] if st else derive(tk, linked), "manual_stage": bool(st), "updated": st["updated"] if st else 0,
+                    "pools": pools.get(k, []), "jira_in_progress": k in jira_prog, "sprint": (tk or {}).get("sprint", "")}
+            cards.append(card)
+        for it in data["mine"]:   # MRs/Branches ohne Ticket: eigene Karten, damit nichts fehlt
+            if it["kind"] in ("mr", "branch") and not it.get("keys") and it.get("ref"):
+                st = stages.get(it["ref"])
+                linked = self._linked_ref(it)
+                cards.append({"id": it["ref"], "key": "", "title": it["title"], "status": "", "url": it["url"], "local": False, "known": True, "type": "",
+                              "items": [linked], "stage": st["stage"] if st else ("review" if it["kind"] == "mr" and not it.get("draft") else "impl"),
+                              "manual_stage": bool(st), "updated": st["updated"] if st else 0, "pools": pools.get(it["ref"], []),
+                              "jira_in_progress": False, "sprint": "", "orphan": True})
+        if self.ideas is not None and self.has("ideas"):
+            for i in self.ideas.list():
+                if i["status"] in ("neu", "geparkt") and not i["expired"]:
+                    cards.append({"id": "idea:%d" % i["id"], "key": "", "title": i["text"], "status": "", "url": "", "local": True, "known": True, "type": "Idee",
+                                  "items": [], "stage": "idea", "manual_stage": True, "updated": 0, "pools": [], "jira_in_progress": False, "sprint": "",
+                                  "idea_id": i["id"]})
+        done = sorted((c for c in cards if c["stage"] == "done"), key=lambda c: -c["updated"])
+        hide = {c["id"] for c in done[12:]}
+        board = {"cards": [c for c in cards if c["id"] not in hide], "done_hidden": len(hide), "stages": list(links.STAGES)}
+        if j and j.get("ok") is not None and "stories" in j:
+            j = dict(j)
+            stories = [dict(st) for st in j["stories"]]
+            have = {st["key"] for st in stories}
+            for c in cards:
+                if c["stage"] in links.PROGRESS and c["key"] and c["key"] not in have:
+                    base = dict(known.get(c["key"]) or {"key": c["key"], "summary": "", "status": "", "type": "", "url": ""})
+                    base.update(in_progress=True, via_board=True, items=c["items"], no_mr=not any(x["kind"] in ("mr", "assigned") for x in c["items"]))
+                    stories.append(base)
+            by_id = {c["id"]: c for c in cards}
+            for st in stories:
+                st["stage"] = (by_id.get(st["key"]) or {}).get("stage", "impl")
+            if not j.get("partial"):
+                j["stories"], j["count"] = stories, len(stories)
+                j["over"] = len(stories) > int(j.get("limit", 2))
+                prog_keys = {st["key"] for st in stories}
+                for it in items:
+                    tk = it.get("ticket")
+                    it["agent_locked"] = bool(j["over"] and not (tk and tk["key"] in prog_keys))
+                self.over_limit, self.inprogress_keys = j["over"], prog_keys
+            data["jira"] = j
+        return board
+
+    @staticmethod
+    def _linked_ref(it):
+        return {"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"], "pipeline": it["pipeline"],
+                "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", "")}
+
+    def board_action(self, action, body):
+        st = self.store
+        if action == "stage":
+            key = body.get("key") or body.get("ref")
+            if str(key or "").startswith("idea:"):
+                raise UserError("Ideen werden mit «Planen» übernommen.")
+            if key and not links.is_ref_key(key):
+                key = self._local(links.norm_ticket, key)
+                self._check_ticket_exists(key)
+                if not links.is_local_key(key):
+                    self._learn(key)
+            return {"key": self._local(st.stage_set, key, body.get("stage"))}
+        if action == "add":
+            title = str(body.get("title") or "").strip()
+            stage = body.get("stage") or "planned"
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{1,19}-\d{1,9}", title):   # ein Jira-Key: Ticket aufs Board holen
+                key = self._local(links.norm_ticket, title)
+                self._check_ticket_exists(key)
+                self._learn(key)
+                return {"key": self._local(st.stage_set, key, stage)}
+            self.cache_t = 0.0
+            return {"key": self._local(st.task_add, title, stage)}
+        if action == "remove":
+            key = str(body.get("key") or "")
+            if links.is_local_key(key):
+                self._local(st.task_delete, key)
+            else:
+                st.stage_clear(key)
+            self.cache_t = 0.0
+            return {}
+        if action == "plan_idea":
+            if not (self.ideas and self.has("ideas")):
+                raise UserError("Die Ideenbox ist ausgeschaltet.")
+            iid = int(body.get("id"))
+            idea = next((i for i in self.ideas.list() if i["id"] == iid), None)
+            if not idea:
+                raise UserError("Idee nicht gefunden.")
+            key = self._local(st.task_add, idea["text"].split("\n")[0][:200], body.get("stage") or "planned")
+            self.ideas.set_status(iid, "erledigt")
+            self.cache_t = 0.0
+            return {"key": key}
+        raise UserError("Unbekannte Aktion.")
+
+    def _learn(self, key):
+        """Ein frisch aufs Board geholtes Jira-Ticket sofort bekannt machen, ohne auf den nächsten Abgleich zu warten."""
+        if self.jira and key not in self._by_key:
+            try:
+                self._by_key.update({k: dict(v, in_progress=False) for k, v in self.jira.lookup([key]).items()})
+            except UserError:
+                pass
+        self.cache_t = 0.0
 
     def _refresh(self, sink=None, step=None):
         t0 = time.time()
@@ -1287,6 +1431,10 @@ class App:
             raise UserError(str(e))
 
     def _check_ticket_exists(self, key):
+        if links.is_local_key(key):
+            if key not in {t["key"] for t in self.store.tasks()}:
+                raise UserError("Die Aufgabe %s gibt es nicht." % key)
+            return
         if self.jira:
             try:
                 if key not in self.jira.lookup([key]):
@@ -1415,7 +1563,8 @@ class App:
                 out["draft"] = llm.draft_ticket(self.lc, self.llm_key, ctx, str(body.get("hint") or ""))
                 out["source"] = "ki"
                 try:
-                    self.store.ai_bump("local")   # Zähler der eigenen Anfragen an das lokale Modell
+                    if self.has("ai"):
+                        self.store.ai_bump("local")   # Zähler der eigenen Anfragen an das lokale Modell
                 except Exception as e:
                     log.debug("Zähler nicht aktualisiert: %s", e)
                 log.info("KI-Entwurf von %s (%s) in %.1f s, %d Commit-Titel gesendet", self.lc["provider"], self.lc.get("model") or "-",
@@ -1473,10 +1622,12 @@ class App:
             cached = self.cache
         data = dict(cached) if cached is not None else self._partial_view()
         data["loading"] = cached is None
+        data["board"] = None
         data["sync"] = self.sync_view()
         stale = self.cfg["stale_days"]
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["stale"] = it["age_days"] >= stale
+        data["board"] = self._board(data)
         data.update({
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
@@ -1486,7 +1637,7 @@ class App:
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
             "pools": self.pools_view(data),
-            "ai": self.store.ai_accounts(),
+            "ai": self.store.ai_accounts() if self.has("ai") else [],
         })
         return data
 
@@ -1720,6 +1871,7 @@ def make_handler(app):
                     return self._settings(method, path)
                 # -- vorerst ausgeblendete Funktionen
                 needs = ("ideas" if path.startswith("/api/ideas") else
+                         "ai" if path.startswith("/api/ai/") else
                          "testenv" if path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/agent", "/api/prompt")) else "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
@@ -1729,6 +1881,8 @@ def make_handler(app):
                     return self._send(200, app.unlink_ticket(self._body()))
                 if method == "POST" and path.startswith("/api/pools"):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
+                if method == "POST" and path.startswith("/api/board/"):
+                    return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/ai/"):
                     return self._send(200, app.ai_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path == "/api/ticket/draft":

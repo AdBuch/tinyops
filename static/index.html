@@ -330,6 +330,31 @@
   .item[draggable=true], .slot[draggable=true] { cursor: grab; }
   .dragging { opacity: .45; }
   .dropok { outline: 2px dashed var(--focus); outline-offset: -3px; background: var(--focus-bg) !important; }
+  #viewBoard { padding: 18px 24px 40px; }
+  #viewBoard[hidden] { display: none; }
+  .btool { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .btool input[type=text] { flex: 1 1 260px; min-width: 0; max-width: 520px; }
+  .bnote { color: var(--quiet); font-size: 13px; margin: 0 0 10px; }
+  .bcols { display: grid; grid-template-columns: repeat(7, minmax(230px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 10px; align-items: start; }
+  .bgroup { grid-column: 3 / 6; grid-row: 1; font-size: 13px; color: var(--quiet); border-bottom: 2px solid #7a55d8; padding: 0 2px 4px; }
+  .bcol { grid-row: 2; background: color-mix(in srgb, var(--quiet) 8%, transparent); border-radius: 12px; padding: 8px; min-height: 160px; display: grid; gap: 8px; align-content: start; border: 2px solid transparent; }
+  .bcol.dropok { border-color: #7a55d8; }
+  .bcol.work { background: color-mix(in srgb, #7a55d8 9%, transparent); }
+  .bcolhead { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px; }
+  .bcolhead h3 { margin: 0; font-size: 14px; flex: 1; }
+  .bcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; display: grid; gap: 6px; cursor: grab; }
+  .bcard.dropok { outline: 2px solid #7a55d8; }
+  .bcard.dragging { opacity: .45; }
+  .bcard .btop { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .bcard .bkey { font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 700; }
+  .bcard .bkey.jira { color: #6a45c8; } .bcard .bkey.loc { color: var(--quiet); }
+  .bcard .bsum { font-weight: 600; overflow-wrap: anywhere; }
+  .bcard .bsum a { color: inherit; text-decoration: none; }
+  .bcard .bact { display: flex; gap: 4px; justify-content: flex-end; }
+  .bcard .bact button { padding: 2px 9px; }
+  .bcard .links { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bempty { color: var(--quiet); font-size: 13px; padding: 6px 4px; }
+  @media (max-width: 960px) { #viewBoard { padding: 14px 16px 100px; } .bcols { grid-template-columns: repeat(7, 78vw); scroll-snap-type: x mandatory; } .bcol { scroll-snap-align: start; } .bgroup { display: none; } }
   .aiacc { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
   .aiacc .aihead { display: flex; gap: 8px; align-items: baseline; }
   .aiacc .aihead b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -362,7 +387,7 @@
 <body>
 <header>
   <h1>Arbeitspanel</h1>
-  <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="settings">Einstellungen</button></nav>
+  <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="board">Board</button><button class="tab" data-view="settings">Einstellungen</button></nav>
   <span class="spacer"></span>
   <span class="legend"><span class="src jira">Jira: Tickets, Stories</span><span class="src gl">GitLab: MRs, Branches</span></span>
   <a id="pGl" class="conn" href="#settings" style="display:none"></a>
@@ -407,10 +432,21 @@
    </div>
   </aside>
 </div>
+<div id="viewBoard" hidden>
+  <div class="btool">
+    <input type="text" id="bAddText" placeholder="Neue Aufgabe oder Jira-Key, z. B. DLP-123" maxlength="200" autocomplete="off">
+    <select id="bAddStage" title="In welche Spalte"></select>
+    <button id="bAdd" class="primary">Hinzufügen</button>
+    <label class="check"><input type="checkbox" id="bOrph"><span>MRs und Branches ohne Ticket zeigen</span></label>
+  </div>
+  <p class="bnote">Umsetzung, Review und Test zählen als «in Arbeit» und erscheinen im Jira-Panel. Die Spalten gelten nur hier im Panel: In Jira wird nichts verändert.</p>
+  <div class="bcols" id="bcols"></div>
+</div>
 <div id="viewSettings" hidden></div>
 
 <nav id="bottomnav" aria-label="Hauptmenü">
   <button class="bn on" data-view="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Übersicht</button>
+  <button class="bn" data-view="board"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1.5"/><rect x="10" y="3" width="5" height="12" rx="1.5"/><rect x="17" y="3" width="4" height="8" rx="1.5"/></svg>Board</button>
   <button class="bn" data-view="ideas"><span class="nb"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg><b id="ideaBadge" hidden></b></span>Ideen</button>
   <button class="bn" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
 </nav>
@@ -520,7 +556,7 @@ function ticketChip(it) {
     const cls = out ? 'chip out' : 'chip tk';  // Jira-Ticket
     const hint = esc(t.summary) + (t.sprint ? ' · ' + esc(t.sprint) : out ? ' · nicht in einem aktiven Sprint' : '');
     const man = it.manual_link ? ` <button class="x" data-unlink="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : '';
-    return `<a class="${cls}" data-key="${esc(t.key)}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}${it.manual_link ? ' · von Hand verknüpft' : ''}"><span style="opacity:.75">Jira</span> ${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}${it.manual_link ? ' · manuell' : ''}</a>${man}`;
+    return `<a class="${cls}" data-key="${esc(t.key)}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}${it.manual_link ? ' · von Hand verknüpft' : ''}"><span style="opacity:.75">${t.local ? 'Lokal' : 'Jira'}</span> ${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}${it.manual_link ? ' · manuell' : ''}</a>${man}`;
   }
   if (it.ticket_unknown) return `<span class="chip warn" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>${it.manual_link ? ` <button class="x" data-unlink="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" title="Verknüpfung lösen">×</button>` : ''}`;
   if (it.no_ticket) return '<span class="chip warn">ohne Ticket</span>';
@@ -593,8 +629,8 @@ function storiesTile() {
     if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
     const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>`).join('');
     slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
-      <div class="top"><span class="key">${esc(s.key)}</span><span class="chip">${esc(s.status)}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
-      <a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>
+      <div class="top"><span class="key">${esc(s.key)}</span>${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
+      ${s.url ? `<a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>` : `<span class="sum">${esc(s.summary)}</span>`}
       <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
     </div>`);
   }
@@ -683,7 +719,7 @@ function renderLeft() {
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
   tiles.pools = { title: 'Pools', count: (state.pools || []).length, hint: 'ausserhalb von Sprint und Story-Limit', body: poolsBody() };
-  tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
+  if (F().ai) tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
@@ -770,7 +806,7 @@ async function load() {
   clearTimeout(pollT);
   try {
     state = await api('GET', '/api/overview');
-    renderHeader(); renderLeft(); renderAside();
+    renderHeader(); renderLeft(); renderAside(); renderBoard();
     if (state.features.ideas) renderIdeas();
     if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
@@ -937,6 +973,70 @@ document.addEventListener('change', ev => {
   }
 });
 
+// ---- Board: eine Karte pro Aufgabe, alle MRs und Branches eines Tickets zusammengeführt
+const STAGES = ['idea', 'planned', 'impl', 'review', 'test', 'tested', 'done'];
+const STAGE_LABEL = { idea: 'Ideenpool', planned: 'Geplant', impl: 'Umsetzung', review: 'Review', test: 'Test', tested: 'Getestet', done: 'Fertig' };
+$('bAddStage').innerHTML = STAGES.filter(x => x !== 'idea' || true).map(x => `<option value="${x}" ${x === 'planned' ? 'selected' : ''}>${STAGE_LABEL[x]}</option>`).join('');
+let showOrph = LS.get('bOrph', true);
+$('bOrph').checked = showOrph;
+$('bOrph').addEventListener('change', ev => { showOrph = ev.target.checked; LS.set('bOrph', showOrph); renderBoard(); });
+
+function boardCard(c) {
+  const i = STAGES.indexOf(c.stage);
+  const isIdea = !!c.idea_id;
+  const key = c.key ? `<span class="bkey ${c.local ? 'loc' : 'jira'}">${esc(c.key)}</span>` : `<span class="bkey loc">${c.orphan ? 'ohne Ticket' : 'Idee'}</span>`;
+  const chips = [c.local && c.key ? '<span class="chip">Lokal</span>' : '', c.status && !c.local ? `<span class="chip" title="Status in Jira">${esc(c.status)}</span>` : '',
+    c.jira_in_progress && c.stage !== 'impl' && c.stage !== 'review' && c.stage !== 'test' ? '<span class="chip warn" title="In Jira noch in Arbeit">Jira: in Arbeit</span>' : '',
+    ...c.pools.map(p => `<span class="chip" title="Pool">${esc(p)}</span>`)].join('');
+  const title = c.title || (c.known === false ? '(Ticket nicht lesbar)' : '');
+  const sum = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}</a>`).join('');
+  const act = isIdea
+    ? `<button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen">Planen</button>`
+    : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
+  return `<div class="bcard" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''}>
+    <div class="btop">${key}${chips}</div><div class="bsum">${sum}</div>${mrs ? `<div class="links">${mrs}</div>` : ''}<div class="bact">${act}</div></div>`;
+}
+function renderBoard() {
+  const b = state && state.board, el = $('bcols');
+  if (!b || !state.configured) { el.innerHTML = '<div class="bempty">Noch nicht verbunden.</div>'; return; }
+  const cards = b.cards.filter(c => showOrph || !c.orphan);
+  const col = st => cards.filter(c => c.stage === st).sort((a, z) => (a.key || a.title).localeCompare(z.key || z.title, 'de', { numeric: true }));
+  const wip = state.jira ? ` · ${state.jira.count} von ${state.jira.limit} im Jira-Panel` : '';
+  el.innerHTML = `<div class="bgroup">In Arbeit${esc(wip)}</div>` + STAGES.map((st, n) => {
+    const cs = col(st), work = ['impl', 'review', 'test'].includes(st);
+    return `<div class="bcol ${work ? 'work' : ''}" data-stage="${st}" style="grid-column:${n + 1}"><div class="bcolhead"><h3>${STAGE_LABEL[st]}</h3><span class="count">${cs.length}</span></div>
+      ${cs.map(boardCard).join('') || '<div class="bempty">Leer</div>'}${st === 'done' && b.done_hidden ? `<div class="bempty">+ ${b.done_hidden} ältere nicht angezeigt</div>` : ''}</div>`;
+  }).join('');
+}
+async function boardAdd() {
+  const i = $('bAddText'), v = i.value.trim();
+  if (!v) return;
+  i.value = '';
+  await act(() => post('/api/board/add', { title: v, stage: $('bAddStage').value }), 'Hinzugefügt');
+}
+$('bAdd').onclick = boardAdd;
+$('bAddText').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); boardAdd(); } });
+$('viewBoard').addEventListener('click', async ev => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  const find = id => (state.board.cards.find(c => c.id === id) || {});
+  if (b.dataset.bmove) {
+    const c = find(b.dataset.bmove), to = STAGES[STAGES.indexOf(c.stage) + (+b.dataset.dir)];
+    if (to) await moveCard(c, to);
+  } else if (b.dataset.bplan) {
+    await act(() => post('/api/board/plan_idea', { id: +b.dataset.bplan }), 'Geplant');
+  } else if (b.dataset.brem) {
+    if (b.dataset.local === '1' && !confirm('Aufgabe «' + b.dataset.t + '» löschen?')) return;
+    await act(() => post('/api/board/remove', { key: b.dataset.brem }), b.dataset.local === '1' ? 'Gelöscht' : 'Zurückgesetzt');
+  }
+});
+function moveCard(c, stage) {
+  if (!c || c.stage === stage || c.idea_id) return Promise.resolve();
+  const body = c.key ? { key: c.key, stage } : { ref: c.id, stage };
+  return act(() => post('/api/board/stage', body), STAGE_LABEL[stage]);
+}
+
 function poolsBody() {
   const pools = state.pools || [];
   const bar = `<div class="poolbar"><input type="text" id="poolName" placeholder="Neuer Pool, z. B. Agenten-VM" maxlength="60" autocomplete="off"><button id="poolAdd">Anlegen</button></div>`;
@@ -958,6 +1058,15 @@ const post = (path, body) => api('POST', path, body);
 
 // Ziehen
 document.addEventListener('dragstart', ev => {
+  const bc = ev.target.closest && ev.target.closest('.bcard[data-bid]');
+  const mc = ev.target.closest && ev.target.closest('.mrchip[data-rp]');
+  if (mc || bc) {
+    ev.dataTransfer.setData(MIME, JSON.stringify(mc ? { t: 'ref', p: +mc.dataset.rp, b: mc.dataset.rb } : { t: 'card', id: bc.dataset.bid }));
+    ev.dataTransfer.effectAllowed = 'copyMove';
+    dragKind = mc ? 'ref' : 'card';
+    (mc ? mc : bc).classList.add('dragging');
+    return;
+  }
   const chip = ev.target.closest && ev.target.closest('a.chip[data-key]');
   const slot = ev.target.closest && ev.target.closest('.slot[data-skey]');
   const item = ev.target.closest && ev.target.closest('.item[data-dp]');
@@ -970,8 +1079,13 @@ document.addEventListener('dragstart', ev => {
   ev.dataTransfer.effectAllowed = 'copyLink';
   (slot || item || chip).classList.add('dragging');
 });
-document.addEventListener('dragend', () => document.querySelectorAll('.dragging, .dropok').forEach(e => e.classList.remove('dragging', 'dropok')));
-function target(ev) { return ev.target.closest && (ev.target.closest('.slot[data-skey]') || ev.target.closest('.poolcard[data-pool]')); }
+document.addEventListener('dragend', () => { dragKind = ''; document.querySelectorAll('.dragging, .dropok').forEach(e => e.classList.remove('dragging', 'dropok')); });
+let dragKind = '';
+function target(ev) {
+  const c = x => ev.target.closest && ev.target.closest(x);
+  if (dragKind === 'card') return c('.bcol[data-stage]');
+  return c('.bcard[data-bkey]') || c('.slot[data-skey]') || c('.poolcard[data-pool]');
+}
 document.addEventListener('dragover', ev => {
   if (!ev.dataTransfer || !ev.dataTransfer.types.includes(MIME)) return;
   const t = target(ev);
@@ -984,6 +1098,12 @@ document.addEventListener('drop', async ev => {
   ev.preventDefault();
   document.querySelectorAll('.dropok, .dragging').forEach(e => e.classList.remove('dropok', 'dragging'));
   const d = JSON.parse(ev.dataTransfer.getData(MIME));
+  if (t.dataset.bkey || t.dataset.stage) {                // Board
+    if (d.t === 'card' && t.dataset.stage) { await moveCard(state.board.cards.find(c => c.id === d.id), t.dataset.stage); return; }
+    if (d.t === 'ref' && t.dataset.bkey) { await act(() => post('/api/links', { project_id: d.p, branch: d.b, ticket: t.dataset.bkey }), `Mit ${t.dataset.bkey} verknüpft`); return; }
+    if (d.t === 'ref' && t.dataset.stage) { toast('Branches und MRs auf eine Karte ziehen, nicht in eine Spalte.'); }
+    return;
+  }
   if (t.dataset.skey) {                                  // auf eine Story: Branch/MR verknüpfen
     if (d.t !== 'ref') { toast('Auf eine Story lassen sich nur Branches und MRs ziehen.'); return; }
     await act(() => post('/api/links', { project_id: d.p, branch: d.b, ticket: t.dataset.skey }), `Mit ${t.dataset.skey} verknüpft`);
@@ -1131,7 +1251,8 @@ let view = 'overview';
 function setView(v) {
   if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'overview';
   view = v;
-  document.getElementById('viewOverview').hidden = v === 'settings';
+  document.getElementById('viewOverview').hidden = v === 'settings' || v === 'board';
+  document.getElementById('viewBoard').hidden = v !== 'board';
   document.getElementById('viewSettings').hidden = v !== 'settings';
   $('viewOverview').classList.toggle('showideas', v === 'ideas');
   document.querySelectorAll('.tab, .bn').forEach(t => t.classList.toggle('on', t.dataset.view === v));
@@ -1141,6 +1262,7 @@ function setView(v) {
 document.querySelectorAll('.tab, .bn').forEach(t => t.onclick = () => setView(t.dataset.view));
 document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
 if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
+if (location.hash === '#board') setTimeout(() => setView('board'), 0);
 
 const val = id => ($(id) ? $(id).value : '').trim();
 const split = t => t.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
@@ -1276,7 +1398,8 @@ async function loadSettings() {
 
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
-    <label class="check"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}><span>Testumgebungen, Prompts und Agenten-Knöpfe <span class="quiet small">(braucht Helm-Angaben je Projekt in der config.json)</span></span></label>`)}
+    <label class="check"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}><span>Testumgebungen, Prompts und Agenten-Knöpfe <span class="quiet small">(braucht Helm-Angaben je Projekt in der config.json)</span></span></label>
+    <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>`)}
 
   ${sect('where', 'Ablage', 'Wo Zugangsdaten, Konfiguration und Log liegen.', `
     <div class="small">Zugangsdaten: ${esc(S.storage.text)}</div>
@@ -1452,7 +1575,7 @@ function collect() {
       wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
-    features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked },
+    features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     secrets,
   };
 }

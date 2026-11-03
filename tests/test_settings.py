@@ -389,7 +389,7 @@ class BuildAndSave(unittest.TestCase):
         self.assertEqual(cfg["projects"][0], {"id": 5, "name": "neu", "chart": "./helm/x", "repo_path": "/r"})
         self.assertEqual(cfg["jira"]["project_keys"], ["DLP"])
         self.assertEqual(cfg["jira"]["wip_issue_types"], ["Story", "Bug"])
-        self.assertEqual(cfg["features"], {"ideas": True, "testenv": False})
+        self.assertEqual(cfg["features"], {"ideas": True, "testenv": False, "ai": False})
         self.assertEqual(json.dumps(disk).count("projects"), 1)   # Eingabe unverändert
 
     def test_new_options_roundtrip(self):

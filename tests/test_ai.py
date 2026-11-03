@@ -84,6 +84,7 @@ class AiApp(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             cfg = server.load_config(None)
             cfg["data_dir"] = d
+            cfg["features"] = dict(cfg["features"], ai=True)
             app = server.App(cfg, True, {}, Path("/nonexistent/c.json"))
             r = app.ai_action("save", {"name": "Mistral Vibe", "kind": "mistral", "window_hours": 5, "budget": 100, "unit": "%"})
             app.ai_action("set", {"id": r["id"], "used": 40, "resets_in_min": 60})
@@ -95,6 +96,15 @@ class AiApp(unittest.TestCase):
                 app.ai_action("boom", {})
             app.ai_action("delete", {"id": r["id"]})
             self.assertEqual(app.overview()["ai"], [])
+
+    def test_off_by_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = server.load_config(None)
+            cfg["data_dir"] = d
+            app = server.App(cfg, True, {}, Path("/nonexistent/c.json"))
+            app.ai_action("save", {"name": "X", "kind": "claude", "window_hours": 5, "budget": 100})
+            self.assertEqual(app.overview()["ai"], [])        # Konten bleiben gespeichert, aber unsichtbar
+            self.assertFalse(app.overview()["features"]["ai"])
 
 
 if __name__ == "__main__":

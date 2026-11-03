@@ -25,7 +25,7 @@ COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
 SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
-CONFIG_KEYS_FEATURES = ("ideas", "testenv")
+CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
 
 # ------------------------------------------------------------ Bericht

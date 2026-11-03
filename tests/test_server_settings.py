@@ -75,7 +75,7 @@ class Flow(unittest.TestCase):
                 self.assertEqual(code, 200)
                 self.assertFalse(ov["configured"])
                 self.assertTrue(ov["problems"])
-                self.assertEqual(ov["features"], {"ideas": True, "testenv": False})
+                self.assertEqual(ov["features"], {"ideas": True, "testenv": False, "ai": False})
 
                 code, st = self.call("GET", "/api/settings")
                 self.assertEqual(code, 200)

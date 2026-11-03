@@ -130,7 +130,88 @@ class _AiMixin:
                 c.execute("update ai_accounts set used=?, window_start=? where id=?", (cur + n, start or now, row["id"]))
 
 
-class Store(_AiMixin):
+# ---- Board: Workflow-Stufen pro Aufgabe. Nur lokal; nach Jira wird nichts geschrieben (kein Statuswechsel)
+STAGES = ("idea", "planned", "impl", "review", "test", "tested", "done")
+PROGRESS = ("impl", "review", "test")        # «in Arbeit»: erscheint im Jira-Panel
+LOCAL_PREFIX = "LOC"                         # Aufgaben ohne Jira-Ticket heissen LOC-1, LOC-2 …
+
+
+def is_local_key(key):
+    return str(key).startswith(LOCAL_PREFIX + "-")
+
+
+def is_ref_key(key):
+    return bool(re.match(r"^\d+:.+", str(key)))
+
+
+class _BoardMixin:
+    def stages(self):
+        with self._conn() as c:
+            return {} if c is None else {r["key"]: {"stage": r["stage"], "updated": r["updated"]} for r in c.execute("select key, stage, updated from task_stage")}
+
+    def tasks(self):
+        with self._conn() as c:
+            return [] if c is None else [{"key": "%s-%d" % (LOCAL_PREFIX, r["id"]), "title": r["title"]} for r in c.execute("select id, title from tasks order by id")]
+
+    def staged_tickets(self):
+        """Jira-Tickets, die einen eigenen Board-Status haben (müssen in Jira nachgeschlagen werden)."""
+        return sorted(k for k in self.stages() if not is_local_key(k) and not is_ref_key(k))
+
+    def _stage_key(self, c, key):
+        key = str(key or "").strip()
+        if is_ref_key(key):
+            if len(key) > 300:
+                raise LinkError("Ungültiger Branch-Verweis.")
+            return key
+        key = norm_ticket(key)
+        if is_local_key(key) and not c.execute("select 1 from tasks where id=?", (int(key.split("-", 1)[1]),)).fetchone():
+            raise LinkError("Aufgabe %s gibt es nicht." % key)
+        return key
+
+    @staticmethod
+    def _check_stage(stage):
+        if stage not in STAGES:
+            raise LinkError("Unbekannte Stufe.")
+        return stage
+
+    def stage_set(self, key, stage):
+        self._check_stage(stage)
+        with self._conn(True) as c:
+            key = self._stage_key(c, key)
+            c.execute("insert into task_stage(key, stage, updated) values(?,?,?) on conflict(key) do update set stage=excluded.stage, updated=excluded.updated",
+                      (key, stage, time.time()))
+        return key
+
+    def stage_clear(self, key):
+        with self._conn(True) as c:
+            return c.execute("delete from task_stage where key=?", (str(key),)).rowcount > 0
+
+    def task_add(self, title, stage="planned"):
+        title = " ".join(str(title or "").split())
+        if not title or len(title) > 200:
+            raise LinkError("Der Titel fehlt oder ist länger als 200 Zeichen.")
+        self._check_stage(stage)
+        with self._conn(True) as c:
+            if c.execute("select count(*) from tasks").fetchone()[0] >= 500:
+                raise LinkError("Höchstens 500 lokale Aufgaben.")
+            tid = c.execute("insert into tasks(title, created) values(?,?)", (title, self._now())).lastrowid
+            key = "%s-%d" % (LOCAL_PREFIX, tid)
+            c.execute("insert into task_stage(key, stage, updated) values(?,?,?)", (key, stage, time.time()))
+        return key
+
+    def task_delete(self, key):
+        key = norm_ticket(key)
+        if not is_local_key(key):
+            raise LinkError("Nur lokale Aufgaben (LOC-…) lassen sich löschen.")
+        with self._conn(True) as c:
+            if not c.execute("delete from tasks where id=?", (int(key.split("-", 1)[1]),)).rowcount:
+                raise LinkError("Aufgabe %s gibt es nicht." % key)
+            c.execute("delete from task_stage where key=?", (key,))
+            c.execute("delete from links where ticket=?", (key,))
+            c.execute("delete from pool_items where kind='ticket' and value=?", (key,))
+
+
+class Store(_AiMixin, _BoardMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -150,6 +231,8 @@ class Store(_AiMixin):
                              " primary key(pool_id, kind, value))")
                 conn.execute("create table if not exists ai_accounts(id integer primary key autoincrement, name text not null unique, kind text not null,"
                              " window_hours real not null, budget real not null, unit text not null, used real not null default 0, window_start real not null default 0)")
+                conn.execute("create table if not exists tasks(id integer primary key autoincrement, title text not null, created text not null)")
+                conn.execute("create table if not exists task_stage(key text primary key, stage text not null, updated real not null)")
                 yield conn
         finally:
             conn.close()
