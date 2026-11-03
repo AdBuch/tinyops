@@ -1,4 +1,4 @@
-# tinyops 1.7: Arbeitspanel
+# tinyops 1.8: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -189,6 +189,12 @@ Config, Ideenbox und Log liegen jetzt **beim Nutzer**, nicht mehr im Projektordn
 Ein neues Auspacken des Bundles, ein frischer Klon oder `git pull` verliert also nichts. Eine alte `config.json` (und `data/tinyops.db`) aus dem
 Projektordner wird beim ersten Start automatisch dorthin kopiert; bestehende Dateien werden nie überschrieben. Anderer Ort: `TINYOPS_HOME=/pfad` oder `--config /pfad/config.json`.
 Die Ansicht «Kacheln» oder «Liste» (wie in 1.5) schaltest du über den Umschalter neben den Filtern; der Browser merkt sie sich.
+
+## 4e. Jira oder GitLab? Ideen-Drop (neu in 1.8)
+
+- **Farben:** Jira ist violett (Raute), GitLab orange (Punkt). Kachel «Stories in Arbeit» trägt das Jira-Zeichen, die anderen das GitLab-Zeichen.
+  In den Zeilen steht «MR !52» oder «Branch» in Orange (GitLab) und das Ticket als «Jira DLP-140 · In Review» in Violett.
+- **Ideen-Drop:** Taste `i` oder Knopf «+ Idee» oben öffnet ein kleines Fenster, Enter speichert. Die Ideenbox rechts (am Handy: Tab «Ideen») zeigt alles.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

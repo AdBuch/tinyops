@@ -9,6 +9,7 @@
     color-scheme: light dark;
     --ground: #eceef1; --surface: #ffffff; --raised: #f4f5f8; --ink: #161a21; --quiet: #596271; --line: #d8dce3;
     --focus: #2747d6; --focus-bg: #e3e8fb;
+    --jira: #6b3fc4; --jira-bg: #ece6fa; --gl: #b4530b; --gl-bg: #fbe9d8;
     --ok: #12744a; --ok-bg: #dcf1e6; --bad: #bc2d26; --bad-bg: #fbe3e1; --warn: #94560a; --warn-bg: #faebcf;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     --sans: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -17,6 +18,7 @@
     :root {
       --ground: #0f1217; --surface: #171b22; --raised: #1e232c; --ink: #e8ebf1; --quiet: #9aa3b2; --line: #29303b;
       --focus: #86a2ff; --focus-bg: #1c2540;
+      --jira: #b99cff; --jira-bg: #2a2147; --gl: #f2a15f; --gl-bg: #3a2616;
       --ok: #62d4a0; --ok-bg: #16302a; --bad: #ff8f87; --bad-bg: #36201f; --warn: #f2bc5c; --warn-bg: #33290f;
     }
   }
@@ -281,6 +283,24 @@
     body.layout-list aside { position: sticky; top: 70px; align-self: start; max-height: calc(100vh - 90px); }
   }
   @media (max-width: 960px) { .seg { display: none; } }
+  /* Herkunft: Jira = violett, GitLab = orange */
+  .src { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
+  .src::before { content: ""; width: 7px; height: 7px; flex: none; }
+  .src.jira { background: var(--jira-bg); color: var(--jira); }
+  .src.jira::before { background: currentColor; transform: rotate(45deg); }
+  .src.gl { background: var(--gl-bg); color: var(--gl); }
+  .src.gl::before { background: currentColor; border-radius: 50%; }
+  .tile.t-jira { box-shadow: inset 0 3px 0 var(--jira); }
+  .tile.t-gl { box-shadow: inset 0 3px 0 var(--gl); }
+  .chip.tk { background: var(--jira-bg); color: var(--jira); }
+  .slot { box-shadow: inset 0 3px 0 var(--jira); }
+  .slot.free { box-shadow: none; }
+  .slot .key { white-space: nowrap; }
+  .mrchip { border-color: var(--gl); }
+  .mrchip b { color: var(--gl); font-weight: 700; font-size: 12px; }
+  .idea-btn { background: var(--focus); border-color: var(--focus); color: var(--ground); font-weight: 650; }
+  .legend { display: flex; gap: 12px; align-items: center; font-size: 12.5px; color: var(--quiet); }
+  @media (max-width: 1500px) { .legend { display: none; } }
 </style>
 </head>
 <body>
@@ -288,10 +308,12 @@
   <h1>Arbeitspanel</h1>
   <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="settings">Einstellungen</button></nav>
   <span class="spacer"></span>
+  <span class="legend"><span class="src jira">Jira: Tickets, Stories</span><span class="src gl">GitLab: MRs, Branches</span></span>
   <a id="pGl" class="conn" href="#settings" style="display:none"></a>
   <a id="pJi" class="conn" href="#settings" style="display:none"></a>
   <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
   <span id="fetched"></span>
+  <button id="ideaBtn" class="idea-btn" title="Idee festhalten (Taste i)" hidden>+ Idee</button>
   <button id="logBtn" class="quiet-btn">Log</button>
   <button id="refresh">Neu laden</button>
 </header>
@@ -340,6 +362,13 @@
   <div class="row" style="justify-content:space-between"><strong id="dlgTitle">Prompt</strong><button id="dlgClose">Schließen</button></div>
   <textarea id="dlgText" readonly></textarea>
   <div class="row" style="margin-top:8px"><button class="primary" id="dlgCopy">Kopieren</button></div>
+</dialog>
+
+<dialog id="ideaDlg" style="width:min(520px,94vw)">
+  <strong>Idee festhalten</strong>
+  <div class="quiet small" style="margin:4px 0 8px">Nur erfassen, gestartet wird nichts. Enter speichert, Esc bricht ab.</div>
+  <textarea id="ideaQuick" rows="3" placeholder="Was geht dir gerade durch den Kopf?"></textarea>
+  <div class="row" style="margin-top:8px"><button class="primary" id="ideaSave">Speichern</button><button id="ideaCancel">Abbrechen</button></div>
 </dialog>
 
 <dialog id="logDlg" style="width:min(1000px,96vw)">
@@ -415,9 +444,9 @@ function ticketChip(it) {
   if (it.ticket) {
     const t = it.ticket;
     const out = j.only_active && t.in_sprint === false;
-    const cls = out ? 'chip out' : 'chip tk';
+    const cls = out ? 'chip out' : 'chip tk';  // Jira-Ticket
     const hint = esc(t.summary) + (t.sprint ? ' · ' + esc(t.sprint) : out ? ' · nicht in einem aktiven Sprint' : '');
-    return `<a class="${cls}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}">${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}</a>`;
+    return `<a class="${cls}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}"><span style="opacity:.75">Jira</span> ${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}</a>`;
   }
   if (it.ticket_unknown) return `<span class="chip warn" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>`;
   if (it.no_ticket) return '<span class="chip warn">ohne Ticket</span>';
@@ -453,7 +482,7 @@ function row(it) {
     <div class="rail ${railOf(it)}"></div>
     <div>
       <div class="l1">${pipe}<a class="t" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${chips.join('')}</div>
-      <div class="l2"><span class="reason ${r.c}">${esc(r.t)}</span><span>${esc(it.project)}${mr ? ' ' + mr : ''}</span><code title="${esc(it.branch)}">${esc(it.branch)}</code>${ageHtml(it)}</div>
+      <div class="l2"><span class="reason ${r.c}">${esc(r.t)}</span><span class="src gl" title="GitLab">${it.kind === 'branch' ? 'Branch' : 'MR ' + mr}</span><span>${esc(it.project)}</span><code title="${esc(it.branch)}">${esc(it.branch)}</code>${ageHtml(it)}</div>
     </div>
     <div class="acts">${acts.join('')}</div>
     ${parts.length ? `<div class="l3" data-p="${it.project_id}" data-i="${it.iid ?? ''}">${parts.join('')}</div>` : ''}
@@ -486,7 +515,7 @@ function storiesTile() {
   for (let i = 0; i < n; i++) {
     const s = j.stories[i];
     if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
-    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span>${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join('');
+    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join('');
     slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}">
       <div class="top"><span class="key">${esc(s.key)}</span><span class="chip">${esc(s.status)}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       <a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>
@@ -506,10 +535,11 @@ function applyLayout(l) {
 applyLayout(LS.get('layout', 'tiles'));
 $('layoutSeg').addEventListener('click', ev => { const b = ev.target.closest('button[data-layout]'); if (b) { LS.set('layout', b.dataset.layout); applyLayout(b.dataset.layout); } });
 function tileHtml(id, t, open, mini) {
+  const src = id === 'stories' ? 'jira' : 'gl';
   const body = t.body;
-  return `<section class="tile ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
+  return `<section class="tile t-${src} ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
     <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
-      <h2>${esc(t.title)}</h2><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
+      <h2>${esc(t.title)}</h2><span class="src ${src}">${src === 'jira' ? 'Jira' : 'GitLab'}</span><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
       <span class="thint">${t.hint || ''}</span><button class="expand quiet-btn" tabindex="-1" aria-hidden="true">${open ? '⤡' : '⤢'}</button></div>
     <div class="tbody">${body}</div></section>`;
 }
@@ -621,6 +651,7 @@ function renderHeader() {
 function renderAside() {
   const f = F();
   $('ideasBox').hidden = !f.ideas;
+  $('ideaBtn').hidden = !f.ideas;
   $('jobsBox').hidden = !f.testenv;
   const on = !!(f.ideas || f.testenv);
   $('aside').hidden = !on;
@@ -681,6 +712,18 @@ document.getElementById('board').addEventListener('click', async ev => {
     }
     await load();
   } catch (e) { toast(e.message); }
+});
+
+// Ideen-Drop: überall ein Tastendruck oder Klick entfernt
+function openIdeaDrop() { const d = $('ideaDlg'); if (!d.open) d.showModal(); $('ideaQuick').focus(); }
+async function saveIdeaDrop() {
+  const el = $('ideaQuick'); if (!el.value.trim()) return;
+  try { await api('POST', '/api/ideas', { text: el.value }); el.value = ''; $('ideaDlg').close(); toast('In der Ideenbox'); await load(); } catch (e) { toast(e.message); }
+}
+$('ideaBtn').onclick = openIdeaDrop; $('ideaSave').onclick = saveIdeaDrop; $('ideaCancel').onclick = () => $('ideaDlg').close();
+$('ideaQuick').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); saveIdeaDrop(); } });
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'i' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && state && state.features.ideas && !document.querySelector('dialog[open]')) { ev.preventDefault(); openIdeaDrop(); }
 });
 
 // Ideen
