@@ -244,7 +244,7 @@
     body { font-size: 15.5px; }
     .l1 .t { font-size: 15.5px; }
     .slot .sum { font-size: 18px; }
-    #left .board { grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 20px; }
+    #left .board { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
   }
   @media (max-width: 960px) {
     .tile .expand { display: none; }
@@ -303,6 +303,30 @@
   .idea-btn { background: var(--focus); border-color: var(--focus); color: var(--ground); font-weight: 650; }
   .legend { display: flex; gap: 12px; align-items: center; font-size: 12.5px; color: var(--quiet); }
   @media (max-width: 1500px) { .legend { display: none; } }
+  /* Verknüpfen und Pools */
+  .src.local { background: var(--raised); color: var(--quiet); }
+  .src.local::before { background: currentColor; border-radius: 2px; }
+  .tile.t-local { box-shadow: inset 0 3px 0 var(--quiet); }
+  button.x { border: 0; background: transparent; color: inherit; padding: 0 3px; font-size: 15px; line-height: 1; cursor: pointer; opacity: .7; border-radius: 4px; }
+  button.x:hover { opacity: 1; background: var(--raised); border: 0; }
+  .item[draggable=true], .slot[draggable=true] { cursor: grab; }
+  .dragging { opacity: .45; }
+  .dropok { outline: 2px dashed var(--focus); outline-offset: -3px; background: var(--focus-bg) !important; }
+  .poolbar { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .poolbar input { flex: 1; min-width: 0; }
+  .poolcard { margin: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .poolhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+  .poolhead h3 { margin: 0; font-size: 14.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .poolhead .count { color: var(--quiet); font-weight: 700; font-size: 13px; }
+  .pitems { padding: 0 12px 8px; display: grid; gap: 6px; }
+  .pitem { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 6px 8px; border-radius: 8px; background: var(--raised); font-size: 13.5px; }
+  .pitem .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pitem.missing { opacity: .6; }
+  .pempty { color: var(--quiet); padding: 6px 12px 12px; font-size: 13px; }
+  .padd { display: flex; gap: 6px; padding: 0 12px 12px; }
+  .padd input { flex: 1; min-width: 0; padding: 4px 8px; font-size: 13px; }
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+  .pick button { display: inline-flex; gap: 6px; align-items: center; }
 </style>
 </head>
 <body>
@@ -370,6 +394,16 @@
   <div class="row" style="justify-content:space-between"><strong>Ticket anlegen <span class="src jira">Jira</span></strong><button id="tkClose" class="quiet-btn">Schließen</button></div>
   <div class="quiet small" id="tkSrc" style="margin:4px 0 10px"></div>
   <div id="tkBody"></div>
+</dialog>
+
+<dialog id="linkDlg" style="width:min(560px,96vw)">
+  <div class="row" style="justify-content:space-between"><strong>Ticket zuordnen <span class="src jira">Jira</span></strong><button id="lkClose" class="quiet-btn">Schließen</button></div>
+  <div class="quiet small" id="lkSrc" style="margin:4px 0 10px"></div>
+  <div class="small quiet">Wähle eine Story in Arbeit oder gib einen Key ein (zum Beispiel ein Sammel-Ticket für Bugs). Die Zuordnung gilt nur im Panel und lässt sich wieder lösen. In Jira wird nichts geändert.</div>
+  <div class="pick" id="lkPick"></div>
+  <div class="row"><input type="text" id="lkKey" placeholder="DLP-123" style="width:160px" autocomplete="off" spellcheck="false"><button class="primary" id="lkSave">Verknüpfen</button><button id="lkUnlink" hidden>Verknüpfung lösen</button></div>
+  <div id="lkPools"></div>
+  <div id="lkMsg"></div>
 </dialog>
 
 <dialog id="ideaDlg" style="width:min(520px,94vw)">
@@ -454,9 +488,10 @@ function ticketChip(it) {
     const out = j.only_active && t.in_sprint === false;
     const cls = out ? 'chip out' : 'chip tk';  // Jira-Ticket
     const hint = esc(t.summary) + (t.sprint ? ' · ' + esc(t.sprint) : out ? ' · nicht in einem aktiven Sprint' : '');
-    return `<a class="${cls}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}"><span style="opacity:.75">Jira</span> ${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}</a>`;
+    const man = it.manual_link ? ` <button class="x" data-unlink="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : '';
+    return `<a class="${cls}" data-key="${esc(t.key)}" href="${esc(t.url)}" target="_blank" rel="noopener" title="${hint}${it.manual_link ? ' · von Hand verknüpft' : ''}"><span style="opacity:.75">Jira</span> ${esc(t.key)} · ${esc(t.status)}${out ? ' · außerhalb Sprint' : ''}${it.manual_link ? ' · manuell' : ''}</a>${man}`;
   }
-  if (it.ticket_unknown) return `<span class="chip warn" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>`;
+  if (it.ticket_unknown) return `<span class="chip warn" title="Dieser Key wurde in Jira nicht gefunden">${esc(it.ticket_unknown)}?</span>${it.manual_link ? ` <button class="x" data-unlink="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" title="Verknüpfung lösen">×</button>` : ''}`;
   if (it.no_ticket) return '<span class="chip warn">ohne Ticket</span>';
   return '';
 }
@@ -476,6 +511,7 @@ function row(it) {
   const acts = [];
   if (it.pipeline_url) acts.push(`<a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>`);
   if (it.no_ticket) acts.push(`<button data-tk="1" data-p="${it.project_id}" data-i="${it.iid ?? ''}" data-b="${esc(it.branch)}" data-cu="${esc(it.create_url || '')}">Ticket anlegen</button>`);
+  if (state.jira && state.jira.ok) acts.push(`<button class="quiet-btn" data-assign="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" data-t="${esc(it.title)}" data-iid="${it.iid ?? ''}" title="Ticket von Hand zuordnen (oder die Zeile auf eine Story ziehen)">${it.ticket || it.ticket_unknown ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Öffnen</a>`);
   const parts = [];
   if (F().testenv && it.iid && it.can_deploy) {
@@ -486,7 +522,7 @@ function row(it) {
       ${state.agent_enabled ? `<button data-act="agent"${lock}>Agent starten</button>` : ''}`);
   }
   if (it.no_ticket && F().ideas) parts.push(`<button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>`);
-  return `<div class="item">
+  return `<div class="item" draggable="true" data-dp="${it.project_id}" data-db="${esc(it.branch)}">
     <div class="rail ${railOf(it)}"></div>
     <div>
       <div class="l1">${pipe}<a class="t" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${chips.join('')}</div>
@@ -523,8 +559,8 @@ function storiesTile() {
   for (let i = 0; i < n; i++) {
     const s = j.stories[i];
     if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
-    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}</a>`).join('');
-    slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}">
+    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>`).join('');
+    slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
       <div class="top"><span class="key">${esc(s.key)}</span><span class="chip">${esc(s.status)}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       <a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>
       <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
@@ -544,11 +580,11 @@ function applyLayout(l) {
 applyLayout(LS.get('layout', 'tiles'));
 $('layoutSeg').addEventListener('click', ev => { const b = ev.target.closest('button[data-layout]'); if (b) { LS.set('layout', b.dataset.layout); applyLayout(b.dataset.layout); } });
 function tileHtml(id, t, open, mini) {
-  const src = id === 'stories' ? 'jira' : 'gl';
+  const src = id === 'stories' ? 'jira' : id === 'pools' ? 'local' : 'gl';
   const body = t.body;
   return `<section class="tile t-${src} ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
     <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
-      <h2>${esc(t.title)}</h2><span class="src ${src}">${logo(src)}${src === 'jira' ? 'Jira' : 'GitLab'}</span><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
+      <h2>${esc(t.title)}</h2><span class="src ${src}">${logo(src)}${src === 'jira' ? 'Jira' : src === 'local' ? 'Lokal' : 'GitLab'}</span><span class="count" ${t.bad ? 'style="color:var(--bad)"' : ''}>${esc(t.count)}</span>
       <span class="thint">${t.hint || ''}</span><button class="expand quiet-btn" tabindex="-1" aria-hidden="true">${open ? '⤡' : '⤢'}</button></div>
     <div class="tbody">${body}</div></section>`;
 }
@@ -591,10 +627,12 @@ function renderLeft() {
   tiles.mrs = { title: 'Meine MRs', count: mrs.length, body: listBody(mrs, 'Keine weiteren offenen MRs.') };
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
+  tiles.pools = { title: 'Pools', count: (state.pools || []).length, hint: 'ausserhalb von Sprint und Story-Limit', body: poolsBody() };
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
   const board = $('board');
+  const keep = [...document.querySelectorAll('#poolName, [data-pkey]')].map(e => ({ sel: e.id ? '#' + e.id : `[data-pkey="${e.dataset.pkey}"]`, v: e.value, f: e === document.activeElement }));
   board.className = 'board o' + open.length;
   if (open.length === 2) {
     const closed = ids.filter(id => !open.includes(id));
@@ -602,6 +640,7 @@ function renderLeft() {
   } else {
     board.innerHTML = ids.map(id => tileHtml(id, tiles[id], open.includes(id), false)).join('');
   }
+  keep.forEach(k => { const e = document.querySelector(k.sel); if (e && k.v) { e.value = k.v; if (k.f) e.focus(); } });
 }
 
 function renderIdeas() {
@@ -797,6 +836,113 @@ function renderTicket(r) {
 }
 $('tkClose').onclick = () => $('tkDlg').close();
 $('board').addEventListener('click', ev => { const b = ev.target.closest('button[data-tk]'); if (b) openTicket(b); });
+
+
+// ---------------------------------------------------------------- Verknüpfen (Drag and drop) und Pools
+const MIME = 'application/x-tinyops';
+function poolsBody() {
+  const pools = state.pools || [];
+  const bar = `<div class="poolbar"><input type="text" id="poolName" placeholder="Neuer Pool, z. B. Agenten-VM" maxlength="60" autocomplete="off"><button id="poolAdd">Anlegen</button></div>`;
+  if (!pools.length) return bar + '<div class="empty">Ein Pool sammelt Tickets und Branches, die nicht zum Sprint gehören, etwa für ein Produkt oder deine Agenten-VM. Ziehe danach Zeilen oder Stories hinein.</div>';
+  return bar + pools.map(p => {
+    const t = p.tickets.map(x => `<div class="pitem"><span class="src jira">Jira</span><a class="grow" href="${esc(x.url || '#')}" target="_blank" rel="noopener" title="${esc(x.summary)}"><b>${esc(x.key)}</b> ${x.known ? esc(x.summary) : '<span class="quiet">(nicht lesbar)</span>'}</a>${x.status ? `<span class="chip">${esc(x.status)}</span>` : ''}<button class="x" data-prem="ticket" data-pid="${p.id}" data-v="${esc(x.key)}" title="Aus dem Pool nehmen">×</button></div>`).join('');
+    const r = p.refs.map(x => `<div class="pitem ${x.missing ? 'missing' : ''}"><span class="src gl">${x.iid ? 'MR !' + esc(x.iid) : 'Branch'}</span><${x.missing ? 'span' : 'a'} class="grow" ${x.missing ? '' : `href="${esc(x.url)}" target="_blank" rel="noopener"`} title="${esc(x.branch)}">${esc(x.title)}${x.missing ? ' <span class="quiet">(nicht mehr offen)</span>' : ''}</${x.missing ? 'span' : 'a'}><button class="x" data-prem="ref" data-pid="${p.id}" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Aus dem Pool nehmen">×</button></div>`).join('');
+    return `<div class="poolcard" data-pool="${p.id}"><div class="poolhead"><h3 title="${esc(p.name)}">${esc(p.name)}</h3><span class="count">${p.tickets.length + p.refs.length}</span>
+      <button class="quiet-btn" data-pren="${p.id}" data-name="${esc(p.name)}" title="Umbenennen">Umbenennen</button><button class="quiet-btn" data-pdel="${p.id}" data-name="${esc(p.name)}" title="Pool löschen">Löschen</button></div>
+      <div class="pitems">${t}${r}</div>${p.tickets.length + p.refs.length ? '' : '<div class="pempty">Leer. Zeile, Story oder Ticket hierher ziehen.</div>'}
+      <div class="padd"><input type="text" data-pkey="${p.id}" placeholder="Ticket-Key hinzufügen, z. B. OPS-7" autocomplete="off" spellcheck="false"><button data-padd="${p.id}">Hinzufügen</button></div></div>`;
+  }).join('');
+}
+
+async function act(fn, ok) {
+  try { const r = await fn(); if (ok) toast(ok); await load(); return r; } catch (e) { toast(e.message); }
+}
+const post = (path, body) => api('POST', path, body);
+
+// Ziehen
+document.addEventListener('dragstart', ev => {
+  const chip = ev.target.closest && ev.target.closest('a.chip[data-key]');
+  const slot = ev.target.closest && ev.target.closest('.slot[data-skey]');
+  const item = ev.target.closest && ev.target.closest('.item[data-dp]');
+  let payload = null;
+  if (chip) payload = { t: 'ticket', key: chip.dataset.key };
+  else if (slot) payload = { t: 'ticket', key: slot.dataset.skey };
+  else if (item) payload = { t: 'ref', p: +item.dataset.dp, b: item.dataset.db };
+  if (!payload) return;
+  ev.dataTransfer.setData(MIME, JSON.stringify(payload));
+  ev.dataTransfer.effectAllowed = 'copyLink';
+  (slot || item || chip).classList.add('dragging');
+});
+document.addEventListener('dragend', () => document.querySelectorAll('.dragging, .dropok').forEach(e => e.classList.remove('dragging', 'dropok')));
+function target(ev) { return ev.target.closest && (ev.target.closest('.slot[data-skey]') || ev.target.closest('.poolcard[data-pool]')); }
+document.addEventListener('dragover', ev => {
+  if (!ev.dataTransfer || !ev.dataTransfer.types.includes(MIME)) return;
+  const t = target(ev);
+  document.querySelectorAll('.dropok').forEach(e => { if (e !== t) e.classList.remove('dropok'); });
+  if (t) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; t.classList.add('dropok'); }
+});
+document.addEventListener('drop', async ev => {
+  const t = target(ev);
+  if (!t || !ev.dataTransfer.types.includes(MIME)) return;
+  ev.preventDefault();
+  document.querySelectorAll('.dropok, .dragging').forEach(e => e.classList.remove('dropok', 'dragging'));
+  const d = JSON.parse(ev.dataTransfer.getData(MIME));
+  if (t.dataset.skey) {                                  // auf eine Story: Branch/MR verknüpfen
+    if (d.t !== 'ref') { toast('Auf eine Story lassen sich nur Branches und MRs ziehen.'); return; }
+    await act(() => post('/api/links', { project_id: d.p, branch: d.b, ticket: t.dataset.skey }), `Mit ${t.dataset.skey} verknüpft`);
+  } else {                                               // in einen Pool
+    const id = +t.dataset.pool;
+    await act(() => post('/api/pools/add', d.t === 'ticket' ? { id, kind: 'ticket', value: d.key } : { id, kind: 'ref', project_id: d.p, branch: d.b }), 'Im Pool');
+  }
+});
+
+// Klicks: lösen, zuordnen, Pools
+document.addEventListener('click', async ev => {
+  const un = ev.target.closest('[data-unlink]');
+  if (un) { ev.preventDefault(); ev.stopPropagation(); await act(() => post('/api/links/delete', { project_id: +un.dataset.p, branch: un.dataset.b }), 'Verknüpfung gelöst'); return; }
+  const as = ev.target.closest('[data-assign]');
+  if (as) { openLink(as); return; }
+  if (ev.target.id === 'poolAdd') { const i = $('poolName'); if (i.value.trim()) { const v = i.value; i.value = ''; await act(() => post('/api/pools', { name: v }), 'Pool angelegt'); } return; }
+  const prem = ev.target.closest('[data-prem]');
+  if (prem) { await act(() => post('/api/pools/remove', prem.dataset.prem === 'ticket' ? { id: +prem.dataset.pid, kind: 'ticket', value: prem.dataset.v } : { id: +prem.dataset.pid, kind: 'ref', project_id: +prem.dataset.p, branch: prem.dataset.b })); return; }
+  const pd = ev.target.closest('[data-pdel]');
+  if (pd) { if (confirm(`Pool «${pd.dataset.name}» löschen? Die Tickets und Branches selbst bleiben unberührt.`)) await act(() => post('/api/pools/delete', { id: +pd.dataset.pdel }), 'Pool gelöscht'); return; }
+  const pr = ev.target.closest('[data-pren]');
+  if (pr) { const n = prompt('Neuer Name', pr.dataset.name); if (n && n.trim()) await act(() => post('/api/pools/rename', { id: +pr.dataset.pren, name: n })); return; }
+  const pa = ev.target.closest('[data-padd]');
+  if (pa) { const i = document.querySelector(`[data-pkey="${pa.dataset.padd}"]`); if (i.value.trim()) { const v = i.value; i.value = ''; await act(() => post('/api/pools/add', { id: +pa.dataset.padd, kind: 'ticket', value: v }), 'Im Pool'); } }
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Enter') return;
+  if (ev.target.id === 'poolName') { ev.preventDefault(); $('poolAdd').click(); }
+  if (ev.target.dataset && ev.target.dataset.pkey) { ev.preventDefault(); document.querySelector(`[data-padd="${ev.target.dataset.pkey}"]`).click(); }
+});
+
+// Dialog «Ticket zuordnen» (auch für Touch-Geräte, wo Ziehen nicht geht)
+let LK = null;
+function openLink(btn) {
+  const item = state.review.concat(state.assigned, state.mine).find(i => String(i.project_id) === btn.dataset.p && i.branch === btn.dataset.b);
+  LK = { p: +btn.dataset.p, b: btn.dataset.b };
+  $('lkSrc').innerHTML = `<span class="src gl">${btn.dataset.iid ? 'MR !' + esc(btn.dataset.iid) : 'Branch'}</span> ${esc(btn.dataset.t)} <code>${esc(btn.dataset.b)}</code>`;
+  const stories = (state.jira && state.jira.stories) || [];
+  $('lkPick').innerHTML = stories.map(s => `<button data-lkpick="${esc(s.key)}" title="${esc(s.summary)}"><b>${esc(s.key)}</b> ${esc(s.summary.slice(0, 34))}</button>`).join('') || '<span class="quiet small">Keine Story in Arbeit.</span>';
+  $('lkPools').innerHTML = (state.pools || []).length ? `<div class="small quiet" style="margin-top:12px">Oder in einen Pool legen:</div><div class="pick">${state.pools.map(p => `<button data-lkpool="${p.id}">${esc(p.name)}</button>`).join('')}</div>` : '';
+  $('lkKey').value = (item && item.manual_link) || '';
+  $('lkUnlink').hidden = !(item && item.manual_link);
+  $('lkMsg').innerHTML = '';
+  $('linkDlg').showModal(); $('lkKey').focus();
+}
+async function lkDo(fn, ok) {
+  try { await fn(); toast(ok); $('linkDlg').close(); await load(); } catch (e) { $('lkMsg').innerHTML = `<div class="banner bad" style="margin-top:10px">${esc(e.message)}</div>`; }
+}
+$('lkClose').onclick = () => $('linkDlg').close();
+$('lkSave').onclick = () => lkDo(() => post('/api/links', { project_id: LK.p, branch: LK.b, ticket: $('lkKey').value }), 'Verknüpft');
+$('lkKey').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); $('lkSave').click(); } });
+$('lkUnlink').onclick = () => lkDo(() => post('/api/links/delete', { project_id: LK.p, branch: LK.b }), 'Verknüpfung gelöst');
+$('linkDlg').addEventListener('click', ev => {
+  const k = ev.target.closest('[data-lkpick]'); if (k) { $('lkKey').value = k.dataset.lkpick; $('lkSave').click(); }
+  const pl = ev.target.closest('[data-lkpool]'); if (pl) lkDo(() => post('/api/pools/add', { id: +pl.dataset.lkpool, kind: 'ref', project_id: LK.p, branch: LK.b }), 'Im Pool');
+});
 
 // Ideen-Drop: überall ein Tastendruck oder Klick entfernt
 function openIdeaDrop() { const d = $('ideaDlg'); if (!d.open) d.showModal(); $('ideaQuick').focus(); }

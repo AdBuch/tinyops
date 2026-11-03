@@ -1,4 +1,4 @@
-# tinyops 1.9: Arbeitspanel
+# tinyops 2.0: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -212,6 +212,15 @@ sind schon aus Branch, MR-Titel, MR-Beschreibung und Commit-Titeln vorbereitet (
   Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel, nie Diffs oder Code. Antwortet das Modell nicht brauchbar, bleibt die Vorlage.
 - **Weitere APIs:** In `llm.py` eine Klasse mit `models()` und `chat()` schreiben und mit `register()` eintragen; sie erscheint dann in der Auswahl.
   Ein optionaler Zugangsschlüssel liegt wie alle Secrets im Schlüsselbund (`llm_key`).
+
+## 4g. Verknüpfen per Drag and drop und Pools (neu in 2.0)
+
+- **Ticket und Branch passen nicht zusammen** (zum Beispiel Sammel-Tickets für Bugs): Ziehe die Zeile eines Branches oder MRs auf eine Story in der Kachel
+  «Stories in Arbeit». Oder drücke bei der Zeile «Zuordnen» bzw. «Ticket ändern» und gib einen Key ein; das geht auch am Handy.
+  Die Zuordnung überstimmt die Erkennung aus dem Branch-Namen, ist mit «manuell» gekennzeichnet und lässt sich mit dem × wieder lösen; dann gilt wieder der Name.
+- **Pools** sind benannte Arbeitsbereiche ausserhalb von Sprint und Story-Limit, zum Beispiel «Agenten-VM» oder ein Produkt. Du legst sie in der Kachel «Pools» an
+  und ziehst Zeilen (Branch/MR), Stories oder Ticket-Chips hinein. Ein Ticket, das nicht in den Listen steht, fügst du über den Key hinzu (Jira liefert Titel und Status).
+- **Nur lokal:** Alles liegt in `~/.config/tinyops/data/tinyops.db`. In Jira und GitLab wird nichts geändert.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

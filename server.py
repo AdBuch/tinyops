@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import fnmatch
+import links
 import llm
 import net
 import secretstore as store
@@ -710,7 +711,7 @@ class JiraClient:
     def lookup(self, keys):
         """Einzelabfragen: ein unbekannter Key bricht sonst die ganze JQL-Suche ab."""
         out = {}
-        for key in keys[:30]:
+        for key in keys[:60]:
             try:
                 out[key] = self._issue(self.http.get("/issue/" + urllib.parse.quote(key),
                                                      {"fields": ",".join(self._fields())}))
@@ -955,7 +956,9 @@ class App:
         self.jc = jira_cfg(cfg)
         self.lc = llm_cfg(cfg)
         self.llm_key = secrets.get("llm_key", "")
+        self.store = links.Store(data_dir(cfg) / "tinyops.db")
         self._types_cache = {}
+        self._by_key = {}
         self.problems = []
         self.client, self.jira = None, None
         self.cache, self.cache_t = None, 0.0
@@ -1027,10 +1030,15 @@ class App:
             if types:
                 inprog = [i for i in inprog if i["type"].lower() in types]
             allowed = self.jc.get("project_keys")
+            manual = self.store.links()
             for it in items:
                 it["keys"] = extract_keys("%s %s" % (it["branch"], it["title"]), allowed)
+                m = manual.get(it["ref"])
+                it["manual_link"] = m or ""
+                if m:
+                    it["keys"] = [m]   # eine von Hand gesetzte Verknüpfung gilt vor der Erkennung aus dem Namen
             progress_keys = {i["key"] for i in inprog}
-            wanted = sorted({k for it in items for k in it["keys"]} - progress_keys)
+            wanted = sorted(({k for it in items for k in it["keys"]} | set(self.store.pool_tickets())) - progress_keys)
             known = j.lookup(wanted) if wanted else {}
         except UserError as e:
             jlog.error("Jira-Abfrage fehlgeschlagen: %s", e)
@@ -1039,6 +1047,7 @@ class App:
             return out
         by_key = {k: dict(v, in_progress=False) for k, v in known.items()}
         by_key.update({i["key"]: dict(i, in_progress=True) for i in inprog})
+        self._by_key = by_key
         over = len(inprog) > limit
         for it in items:
             tk = next((by_key[k] for k in it["keys"] if k in by_key), None)
@@ -1049,7 +1058,7 @@ class App:
             it["agent_locked"] = bool(over and not (tk and tk["in_progress"]))
         for s in inprog:
             linked = [{"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"],
-                       "kind": it["kind"], "pipeline": it["pipeline"]}
+                       "kind": it["kind"], "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link"))}
                       for it in items if s["key"] in it["keys"]]
             s["items"] = linked
             s["no_mr"] = not any(x["kind"] in ("mr", "assigned") for x in linked)
@@ -1083,6 +1092,9 @@ class App:
         except UserError as e:
             rlog.error("GitLab-Abfrage fehlgeschlagen: %s", e)
             data = {"me": "", "mine": [], "review": [], "assigned": [], "errors": [str(e)]}
+        self._by_key = {}
+        for it in data["mine"] + data["review"] + data["assigned"]:
+            it["ref"] = links.ref_of(it["project_id"], it["branch"])
         data["jira"] = self._jira_data(data)
         rlog.info("Auffrischen #%d fertig in %.1f s: %d eigene Einträge, %d Review, %d zugeteilt, %d Fehler",
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
@@ -1101,6 +1113,91 @@ class App:
                     self.hd_cache = {"error": str(e)}
                 self.hd_t = time.time()
             return self.hd_cache
+
+    # -- Verknüpfungen und Pools (nur lokal gespeichert)
+    def _local(self, fn, *a):
+        try:
+            return fn(*a)
+        except links.LinkError as e:
+            raise UserError(str(e))
+
+    def _check_ticket_exists(self, key):
+        if self.jira:
+            try:
+                if key not in self.jira.lookup([key]):
+                    raise UserError("Das Ticket %s gibt es in Jira nicht (oder du darfst es nicht sehen)." % key)
+            except HttpStatus as e:
+                raise UserError("Jira konnte %s nicht prüfen: %s" % (key, e))
+
+    def _ref(self, body):
+        try:
+            return int(body.get("project_id")), str(body.get("branch") or "")
+        except (TypeError, ValueError):
+            raise UserError("project_id muss eine Zahl sein.")
+
+    def link_ticket(self, body):
+        pid, branch = self._ref(body)
+        key = self._local(links.norm_ticket, body.get("ticket"))
+        self._check_ticket_exists(key)
+        self._local(self.store.link, pid, branch, key)
+        log.info("Verknüpfung gesetzt: %s:%s → %s", pid, branch, key)
+        self.cache_t = 0.0
+        return {"ticket": key}
+
+    def unlink_ticket(self, body):
+        pid, branch = self._ref(body)
+        removed = self._local(self.store.unlink, pid, branch)
+        log.info("Verknüpfung gelöst: %s:%s", pid, branch)
+        self.cache_t = 0.0
+        return {"removed": removed}
+
+    def pool_action(self, action, body):
+        st = self.store
+        if action == "create":
+            return {"id": self._local(st.add_pool, body.get("name"))}
+        if action == "rename":
+            self._local(st.rename_pool, body.get("id"), body.get("name"))
+            return {}
+        if action == "delete":
+            self._local(st.delete_pool, body.get("id"))
+            return {}
+        if action in ("add", "remove"):
+            kind = body.get("kind")
+            value = body.get("value")
+            if kind == "ref":
+                pid, branch = self._ref(body)
+                value = links.ref_of(pid, branch)
+            if action == "add":
+                if kind == "ticket":
+                    value = self._local(links.norm_ticket, value)
+                    self._check_ticket_exists(value)
+                value = self._local(st.add_item, body.get("id"), kind, value)
+                if kind == "ticket":
+                    self.cache_t = 0.0   # Jira-Daten des Tickets beim nächsten Abruf holen
+                return {"value": value}
+            return {"removed": self._local(st.remove_item, body.get("id"), kind, value)}
+        raise UserError("Unbekannte Aktion.")
+
+    def pools_view(self, data):
+        items = {it["ref"]: it for it in data["mine"] + data["review"] + data["assigned"] if it.get("ref")}
+        out = []
+        for p in self.store.pools():
+            tickets, refs = [], []
+            for i in p["items"]:
+                if i["kind"] == "ticket":
+                    t = self._by_key.get(i["value"])
+                    tickets.append(dict(t, known=True) if t else {"key": i["value"], "summary": "", "status": "", "url": (self.jira.base + "/browse/" + i["value"]) if self.jira else "", "known": False})
+                else:
+                    it = items.get(i["value"])
+                    if it:
+                        refs.append({"ref": i["value"], "missing": False, "project_id": it["project_id"], "branch": it["branch"], "title": it["title"], "kind": it["kind"],
+                                     "iid": it["iid"], "url": it["url"], "project": it["project"], "pipeline": it["pipeline"], "draft": it["draft"]})
+                    else:
+                        pid, _, br = i["value"].partition(":")
+                        refs.append({"ref": i["value"], "missing": True, "project_id": int(pid), "branch": br, "title": br, "kind": "branch", "iid": None,
+                                     "url": "", "project": self.proj_cfg.get(int(pid), {}).get("name", "Projekt %s" % pid), "pipeline": "none", "draft": False})
+            out.append({"id": p["id"], "name": p["name"], "tickets": tickets, "refs": refs})
+        return out
 
     # -- Tickets anlegen (Schreibzugriff: nur auf ausdrückliche Aktion, nur mit jira.allow_create)
     def ticket_meta(self):
@@ -1196,6 +1293,7 @@ class App:
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
+            "pools": self.pools_view(data),
         })
         return data
 
@@ -1432,6 +1530,12 @@ def make_handler(app):
                          "testenv" if path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/agent", "/api/prompt")) else "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
+                if method == "POST" and path == "/api/links":
+                    return self._send(200, app.link_ticket(self._body()))
+                if method == "POST" and path == "/api/links/delete":
+                    return self._send(200, app.unlink_ticket(self._body()))
+                if method == "POST" and path.startswith("/api/pools"):
+                    return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path == "/api/ticket/draft":
                     return self._send(200, app.ticket_draft(self._body()))
                 if method == "POST" and path == "/api/ticket/create":
