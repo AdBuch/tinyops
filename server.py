@@ -39,6 +39,39 @@ from secretstore import scrub
 
 VERSION = "1.5"
 BASE = Path(__file__).resolve().parent
+
+
+def default_config_path():
+    """Config, Ideen und Log liegen beim Nutzer (~/.config/tinyops), nicht im Projektordner:
+    So überlebt alles ein neues Auspacken, ein git pull oder einen frischen Klon."""
+    return store.home_dir() / "config.json"
+
+
+def migrate_legacy(config_path):
+    """Übernimmt eine alte config.json (und Ideen-DB) aus dem Projektordner, wenn am neuen Ort noch nichts liegt.
+    Gibt Hinweistexte zurück. Die alten Dateien bleiben unangetastet."""
+    import shutil
+    notes = []
+    config_path = Path(config_path)
+    old = BASE / "config.json"
+    if not config_path.exists() and old.is_file() and old.resolve() != config_path.resolve():
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(config_path.parent, 0o700)
+        shutil.copy2(old, config_path)
+        os.chmod(config_path, 0o600)
+        notes.append("config.json aus dem Projektordner nach %s übernommen (die alte Datei kannst du löschen)." % config_path)
+    return notes
+
+
+def data_dir(cfg):
+    d = Path(cfg["data_dir"]).expanduser() if cfg.get("data_dir") else store.home_dir() / "data"
+    old = BASE / "data" / "tinyops.db"
+    if not cfg.get("data_dir") and not (d / "tinyops.db").exists() and old.is_file():
+        import shutil
+        d.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(old, d / "tinyops.db")
+        log.info("Ideen-Datenbank aus %s nach %s übernommen", old, d)
+    return d
 log = tlog.get("app")
 hlog = tlog.get("http")
 glog = tlog.get("gitlab")
@@ -819,7 +852,7 @@ class Jobs:
 class App:
     def __init__(self, cfg, demo, secrets, config_path=None):
         self.demo = demo
-        self.config_path = Path(config_path) if config_path else BASE / "config.json"
+        self.config_path = Path(config_path) if config_path else default_config_path()
         self.access_token = secrets.get("access_token") or ""
         self.cache_lock = threading.Lock()
         self.hd_lock = threading.Lock()
@@ -842,8 +875,7 @@ class App:
         if self.jobs is None:
             self.jobs = Jobs(cfg["job_timeout"])
         if (self.demo or feature(cfg, "ideas")) and self.ideas is None:
-            self.ideas = Ideas(Path(cfg["data_dir"]).expanduser() / "tinyops.db" if cfg.get("data_dir") else BASE / "data" / "tinyops.db",
-                              cfg["idea_cap"], cfg["idea_expire_days"])
+            self.ideas = Ideas(data_dir(cfg) / "tinyops.db", cfg["idea_cap"], cfg["idea_expire_days"])
         if self.demo:
             self.client = DemoClient(cfg)
             self.jira = DemoJira(self.jc)
@@ -1375,7 +1407,7 @@ def resolve_secrets(cfg, demo, show=False):
 
 def main():
     ap = argparse.ArgumentParser(description="tinyops Arbeitspanel")
-    ap.add_argument("--config", default=str(BASE / "config.json"))
+    ap.add_argument("--config", default=str(default_config_path()), help="Standard: ~/.config/tinyops/config.json (oder $TINYOPS_HOME)")
     ap.add_argument("--demo", action="store_true", help="erfundene Daten, weder GitLab noch Jira nötig")
     ap.add_argument("--set-secret", metavar="NAME", help="Secret sicher speichern (%s)" % ", ".join(store.NAMES))
     ap.add_argument("--delete-secret", metavar="NAME", help="Secret löschen")
@@ -1384,6 +1416,7 @@ def main():
     ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
     ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
     args = ap.parse_args()
+    migrated = migrate_legacy(args.config) if args.config == str(default_config_path()) else []
     path = args.config if Path(args.config).exists() else None
     level = "debug" if args.verbose else args.log_level
 
@@ -1419,6 +1452,9 @@ def main():
     cfg = load_config(path)
     config_path = Path(path) if path else Path(args.config)
     logfile = tlog.setup(cfg, level)
+    for n in migrated:
+        log.info(n)
+        print(n)
     log.info("tinyops %s startet (Python %s, %s)", VERSION, sys.version.split()[0], "Demo" if args.demo else "Echtbetrieb")
     log.info("Config: %s, %d Projekt(e), Log: %s", path or "(keine, Ersteinrichtung im Browser)", len(cfg["projects"]), logfile or "nur Konsole")
     print("Secrets:")

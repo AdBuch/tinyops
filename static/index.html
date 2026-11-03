@@ -88,7 +88,7 @@
   .tog:has(input:checked) { background: var(--focus-bg); border-color: var(--focus); color: var(--focus); font-weight: 600; }
   .tog input { position: absolute; opacity: 0; pointer-events: none; }
   .tog:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-  #fcount { margin-left: auto; font-size: 13px; color: var(--quiet); }
+  #fcount { margin-left: 4px; font-size: 13px; color: var(--quiet); }
 
   /* Listen */
   .group { margin-bottom: 26px; }
@@ -264,6 +264,23 @@
     #bottomnav .nb { position: relative; }
     #bottomnav .nb b { position: absolute; top: -4px; right: -12px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--focus); color: var(--ground); font-size: 11px; text-align: center; }
   }
+  .seg { margin-left: auto; display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; border-radius: 0; background: transparent; color: var(--quiet); padding: 5px 11px; }
+  .seg button.on { background: var(--focus-bg); color: var(--focus); font-weight: 650; }
+  @media (min-width: 961px) {
+    body.layout-list #viewOverview { height: auto; overflow: visible; max-width: 1560px; margin: 0 auto; padding-bottom: 64px; }
+    body.layout-list #left .board { display: flex; flex-direction: column; flex: none; }
+    body.layout-list .tbody { overflow: visible; }
+    body.layout-list .tile .expand { display: none; }
+    body.layout-list .thead { cursor: default; }
+    body.layout-list .tile.mini .tbody { display: block; }
+    body.layout-list .strip { display: contents; }
+    body.layout-list .tile.mini { flex-direction: column; }
+    body.layout-list .tile.mini .thead { padding: 14px 16px 10px; }
+    body.layout-list .tile.mini .thint { display: inline; }
+    body.layout-list aside { position: sticky; top: 70px; align-self: start; max-height: calc(100vh - 90px); }
+  }
+  @media (max-width: 960px) { .seg { display: none; } }
 </style>
 </head>
 <body>
@@ -288,6 +305,7 @@
       <label class="tog"><input type="checkbox" id="fagent"> Nur Agent</label>
       <label class="tog"><input type="checkbox" id="fnotk"> Ohne Ticket</label>
       <label class="tog"><input type="checkbox" id="fstale"> Liegt schon lange</label>
+      <span class="seg" id="layoutSeg" role="group" aria-label="Ansicht"><button data-layout="tiles">Kacheln</button><button data-layout="list">Liste</button></span>
       <span id="fcount"></span>
     </div>
     <div class="board" id="board"></div>
@@ -481,6 +499,12 @@ function storiesTile() {
 }
 
 let openTiles = LS.get('open', []);
+function applyLayout(l) {
+  document.body.classList.toggle('layout-list', l === 'list');
+  document.querySelectorAll('#layoutSeg button').forEach(b => b.classList.toggle('on', b.dataset.layout === l));
+}
+applyLayout(LS.get('layout', 'tiles'));
+$('layoutSeg').addEventListener('click', ev => { const b = ev.target.closest('button[data-layout]'); if (b) { LS.set('layout', b.dataset.layout); applyLayout(b.dataset.layout); } });
 function tileHtml(id, t, open, mini) {
   const body = t.body;
   return `<section class="tile ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">

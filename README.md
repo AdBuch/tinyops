@@ -1,4 +1,4 @@
-# tinyops 1.6: Arbeitspanel
+# tinyops 1.7: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -182,6 +182,13 @@ Eigene Firmen-CA: `"ca_bundle": "/pfad/zur/firmen-ca.pem"`. Das Prüfen der Zert
 - **Kachel anklicken:** sie nimmt die halbe Breite ein. Zwei Kacheln gleichzeitig (z. B. Jira-Stories links, Branches rechts); die übrigen schrumpfen zu einer Leiste. Nochmal klicken schließt. Der Browser merkt sich die Wahl.
 - **Handy:** eine Spalte und unten ein Menü wie in einer App: Übersicht, Ideen, Einstellungen.
 - Die Ideenbox ist jetzt standardmäßig an (`features.ideas`), Testumgebungen bleiben aus.
+
+## 4d. Wo die Config liegt (neu in 1.7)
+
+Config, Ideenbox und Log liegen jetzt **beim Nutzer**, nicht mehr im Projektordner: `~/.config/tinyops/` (`config.json`, `data/`, `logs/`, dazu die Secrets).
+Ein neues Auspacken des Bundles, ein frischer Klon oder `git pull` verliert also nichts. Eine alte `config.json` (und `data/tinyops.db`) aus dem
+Projektordner wird beim ersten Start automatisch dorthin kopiert; bestehende Dateien werden nie überschrieben. Anderer Ort: `TINYOPS_HOME=/pfad` oder `--config /pfad/config.json`.
+Die Ansicht «Kacheln» oder «Liste» (wie in 1.5) schaltest du über den Umschalter neben den Filtern; der Browser merkt sie sich.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

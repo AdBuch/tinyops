@@ -218,3 +218,37 @@ class LogFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfigLocationTests(unittest.TestCase):
+    def test_default_path_is_in_home_and_legacy_is_migrated(self):
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as base:
+            old_env = os.environ.get("TINYOPS_HOME")
+            old_base = server.BASE
+            os.environ["TINYOPS_HOME"] = home
+            server.BASE = Path(base)
+            try:
+                target = server.default_config_path()
+                self.assertEqual(target, Path(home) / "config.json")
+                self.assertEqual(server.migrate_legacy(target), [])            # nichts Altes da
+                (Path(base) / "config.json").write_text('{"port": 9001}')
+                notes = server.migrate_legacy(target)
+                self.assertEqual(len(notes), 1)
+                self.assertEqual(json.loads(target.read_text())["port"], 9001)
+                self.assertEqual(oct(target.stat().st_mode & 0o777), "0o600")
+                (Path(base) / "config.json").write_text('{"port": 1}')
+                self.assertEqual(server.migrate_legacy(target), [])            # bestehende Config wird nie überschrieben
+                self.assertEqual(json.loads(target.read_text())["port"], 9001)
+                (Path(base) / "data").mkdir()
+                (Path(base) / "data" / "tinyops.db").write_bytes(b"x")
+                d = server.data_dir({})
+                self.assertEqual(d, Path(home) / "data")
+                self.assertTrue((d / "tinyops.db").exists())
+            finally:
+                server.BASE = old_base
+                if old_env is None:
+                    os.environ.pop("TINYOPS_HOME", None)
+                else:
+                    os.environ["TINYOPS_HOME"] = old_env
