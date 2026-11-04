@@ -1,6 +1,6 @@
 # tinyops: Arbeitspanel
 
-Version 0.8.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
+Version 0.9.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -293,6 +293,28 @@ Aus per Voreinstellung. Einstellungen → KI-Kontingent: «Claude lesen» und/od
 * Das Token wird nur gelesen (nie erneuert, kopiert oder geloggt) und nur an den genannten Host geschickt. Ist es abgelaufen: einmal `claude` bzw. `codex` im Terminal starten.
 * Im Container müssen die Dateien eingehängt sein (z. B. als Secret-Volume, schreibgeschützt). Das Manifest tut das bewusst nicht von selbst.
 * Mistral Vibe bietet keine Abfrage; dafür bleiben die von Hand gepflegten KI-Konten (Einstellungen → Weiteres).
+
+## 4n. Sonar-Links und Findings-Report (neu in 0.9.0)
+
+* Hinter jedem MR und Branch mit Sonar-Analyse (Zeilen, Board, Stories): **Sonar** (Dashboard), **Findings** (offene Findings in Sonar, nur bei Gate grün/Warnung/rot) und **Report kopieren**.
+* **Report kopieren** liest auf Knopfdruck per GET Quality Gate, offene Findings (`api/issues/search`) und Security Hotspots (`api/hotspots/search`)
+  und legt Markdown in die Zwischenablage: nicht erfüllte Bedingungen, Zähler nach Schwere und Art, Findings je Datei mit Zeile, Regel und Meldung.
+  Höchstens `sonar.report_max` Findings (Standard 200, nach Schwere sortiert), der Rest steht in Sonar.
+* **DLP:** Der Report enthält Dateipfade, Zeilennummern, Regelnamen und Sonar-Meldungen (die manchmal Bezeichner aus dem Code nennen), aber keinen Quelltext.
+  Er geht nirgends hin, ausser in deine Zwischenablage. Was du damit machst (z. B. in einen Cloud-Chat einfügen), entscheidest du; bei Kundenprojekten vorher lesen.
+* Hotspots brauchen die Berechtigung «Administer Security Hotspots» bzw. «Browse»; sonst steht im Report «Nicht lesbar».
+
+## 4o. Mistral im KI-Kontingent per Lesezeichen (neu in 0.9.0)
+
+Mistral hat keine Schnittstelle fürs Restkontingent, die Budgets stehen nur auf `admin.mistral.ai/subscription` und nur mit der Browser-Sitzung. Die bekommt tinyops nicht zu sehen.
+
+1. Einstellungen → KI-Kontingent → «Mistral anzeigen» ankreuzen und speichern.
+2. Den Link «tinyops: Mistral lesen» in die Lesezeichenleiste ziehen.
+3. Eingeloggt auf `admin.mistral.ai` das Lesezeichen anklicken. Es holt dort die Seite selbst, liest `vibe_budget` und `api_budget` (Prozent, Budget, Währung, Reset)
+   und öffnet tinyops in einem neuen Tab nur mit diesen Zahlen (`#mistral=...`). tinyops prüft sie, speichert sie in `usage_push.json` im Datenordner (nur Zahlen) und zeigt sie in der Kachel.
+
+`usage_percentage` ist ein Prozentwert (0,159 bei 30 $ = 0,05 $ verbraucht). Nach 36 Stunden zeigt die Kachel «veraltet»; nach dem Monatswechsel «abgelaufener Monat».
+Voraussetzung: tinyops muss in diesem Browser unter der gewohnten Adresse erreichbar (und angemeldet) sein. Ändert Mistral die Seite, meldet das Lesezeichen «Keine Budgetdaten gefunden».
 
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 

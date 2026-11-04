@@ -41,7 +41,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.8.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.9.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -139,6 +139,7 @@ LLM_DEFAULTS = {
 USAGE_DEFAULTS = {
     "claude": False,           # Rest des Claude-Abos lesen (inoffizielle Schnittstelle, Token aus der Anmeldedatei des CLI)
     "codex": False,            # dasselbe für Codex
+    "mistral": False,          # Mistral: Stand kommt per Lesezeichen aus dem Browser (kein Zugriff auf die Sitzung)
     "claude_file": "",         # leer = ~/.claude/.credentials.json
     "codex_file": "",          # leer = ~/.codex/auth.json
     "cache_seconds": 120,
@@ -149,6 +150,7 @@ SONAR_DEFAULTS = {
     "url": "",
     "cache_seconds": 300,      # ein Quality Gate ändert sich nur nach einer neuen Analyse: nicht bei jedem Abgleich neu fragen
     "max_items": 40,           # höchstens so viele MRs/Branches pro Abgleich prüfen (eigene zuerst)
+    "report_max": 200,         # höchstens so viele Findings im Report für die Zwischenablage (nach Schwere sortiert)
 }
 
 JIRA_DEFAULTS = {
@@ -952,6 +954,25 @@ class DemoSonar:
             return {"status": "WARN", "failed": f, "url": url, "detail": "; ".join(f)}
         return {"status": "NONE", "failed": [], "url": url, "detail": "keine Analyse"}
 
+    def issues_url(self, key, pr=None, branch=None):
+        return "%s/project/issues?id=%s&resolved=false" % (self.base, key)
+
+    def hotspots_url(self, key, pr=None, branch=None):
+        return "%s/security_hotspots?id=%s" % (self.base, key)
+
+    def issues(self, key, pr=None, branch=None, limit=200):
+        it = [{"component": key + ":src/main/java/ch/example/RetryClient.java", "line": 88, "severity": "CRITICAL", "type": "VULNERABILITY",
+               "rule": "java:S5131", "message": "Make sure that this user-controlled value is sanitized before it is used."},
+              {"component": key + ":src/main/java/ch/example/RetryClient.java", "line": 142, "severity": "MAJOR", "type": "CODE_SMELL",
+               "rule": "java:S3776", "message": "Refactor this method to reduce its Cognitive Complexity from 21 to the 15 allowed."},
+              {"component": key + ":src/test/java/ch/example/RetryClientTest.java", "line": 31, "severity": "MINOR", "type": "CODE_SMELL",
+               "rule": "java:S1135", "message": "Complete the task associated to this TODO comment."}]
+        return it[:limit], len(it), {"severities": {"CRITICAL": 1, "MAJOR": 1, "MINOR": 1}, "types": {"VULNERABILITY": 1, "CODE_SMELL": 2}}
+
+    def hotspots(self, key, pr=None, branch=None, limit=100):
+        return [{"component": key + ":src/main/resources/application.yml", "line": 12, "vulnerabilityProbability": "MEDIUM",
+                 "securityCategory": "weak-cryptography", "message": "Make sure this weak hash algorithm is not used in a sensitive context."}], 1
+
 
 class DemoJira:
     base = "https://jira.example"
@@ -1145,35 +1166,82 @@ class App:
     def configured(self):
         return self.client is not None
 
+    def sonar_report(self, project_id, iid=None, branch=None):
+        """Findings eines MR oder Branches als Markdown für die Zwischenablage (nur lesend, auf Knopfdruck, nicht im Abgleich)."""
+        if not self.sonar:
+            raise UserError("Sonar ist nicht eingeschaltet oder es fehlt der Token (Einstellungen → Sonar).")
+        p = self.proj_cfg.get(project_id)
+        key = (p or {}).get("sonar_key") or ("dlp-core" if self.demo and project_id == 1 else "dlp-ui" if self.demo and project_id == 2 else "")
+        if not key:
+            raise UserError("Für dieses Projekt ist kein Sonar-Schlüssel eingetragen (Einstellungen → GitLab).")
+        pr = int(iid) if iid else None
+        br = None if pr else (str(branch or "").strip() or None)
+        if not pr and not br:
+            raise UserError("MR oder Branch fehlt.")
+        limit = int(self.sc["report_max"])
+        try:
+            gate = self.sonar.gate(key, pr=pr, branch=br)
+            issues, total, facets = self.sonar.issues(key, pr=pr, branch=br, limit=limit)
+            hot = self.sonar.hotspots(key, pr=pr, branch=br)
+        except sonar.SonarError as e:
+            slog.warning("Report: %s", e)
+            raise UserError(str(e))
+        title = "%s, %s" % ((p or {}).get("name") or key, ("MR !%d" % pr) if pr else "Branch %s" % br)
+        slog.info("Report erzeugt: %s (%d von %d Findings)", title, len(issues), total)
+        text = sonar.format_report(title, gate, key, issues, total, facets, hot, gate.get("issues_url") or gate.get("url"), limit)
+        return {"text": text, "issues": len(issues), "total": total, "hotspots": len(hot[0]) if hot else 0, "truncated": total > len(issues)}
+
     def usage_providers(self):
-        return [k for k in ("claude", "codex") if self.uc.get(k)]
+        return [k for k in ("claude", "codex", "mistral") if self.uc.get(k)]
 
     def usage_view(self, fresh=False):
-        """Rest-Kontingent der Abos. Zwischengespeichert; jeder Anbieter einzeln, ein Fehler stoppt die anderen nicht."""
+        """Rest-Kontingent der Abos. Claude und Codex werden abgefragt und zwischengespeichert, jeder einzeln (ein Fehler stoppt den
+        anderen nicht). Mistral kommt aus dem zuletzt per Lesezeichen gesendeten Stand und kostet keine Anfrage."""
         prov = self.usage_providers()
         if not prov:
             return {"enabled": False, "items": [], "fetched": 0}
+        remote = [k for k in prov if k != "mistral"]
         with self._usage_lock:
             c = self._usage_cache
-            if c and not fresh and time.time() - c["fetched"] < float(self.uc["cache_seconds"]) and c["kinds"] == prov:
-                return c
+            if not (c and not fresh and time.time() - c["fetched"] < float(self.uc["cache_seconds"]) and c["kinds"] == remote):
+                now = time.time()
+                if self.demo:
+                    demo = [{"id": "claude", "name": "Claude", "ok": True, "error": "", "fetched": now, "windows": [
+                                {"label": "5 h", "used_pct": 62.0, "left_pct": 38.0, "resets_at": now + 5400, "secs_left": 5400},
+                                {"label": "Woche", "used_pct": 41.0, "left_pct": 59.0, "resets_at": now + 3 * 86400, "secs_left": 3 * 86400}]},
+                            {"id": "codex", "name": "Codex (ChatGPT)", "ok": False, "fetched": now, "windows": [],
+                             "error": "Anmeldedatei nicht gefunden (~/.codex/auth.json). Im Container: Datei als Volume einhängen."}]
+                    items = [i for i in demo if i["id"] in remote]
+                else:
+                    items = []
+                    for k in remote:
+                        r = usage.fetch(k, self.uc.get(k + "_file") or None)
+                        if not r["ok"]:
+                            slog_u.warning("%s: %s", r["name"], r["error"])
+                        items.append(r)
+                c = self._usage_cache = {"enabled": True, "items": items, "fetched": now, "kinds": list(remote)}
+            out = list(c["items"])
+        if "mistral" in prov:
             if self.demo:
                 now = time.time()
-                items = [{"id": "claude", "name": "Claude", "ok": True, "error": "", "fetched": now, "windows": [
-                            {"label": "5 h", "used_pct": 62.0, "left_pct": 38.0, "resets_at": now + 5400, "secs_left": 5400},
-                            {"label": "Woche", "used_pct": 41.0, "left_pct": 59.0, "resets_at": now + 3 * 86400, "secs_left": 3 * 86400}]},
-                         {"id": "codex", "name": "Codex (ChatGPT)", "ok": False, "fetched": now, "windows": [],
-                          "error": "Anmeldedatei nicht gefunden (~/.codex/auth.json). Im Container: Datei als Volume einhängen."}]
-                items = [i for i in items if i["id"] in prov]
+                out.append(usage.mistral_item({"pushed": now - 600, "budgets": {
+                    "vibe": {"pct": 0.06, "budget": 300.0, "cur": "USD", "reset": now + 26 * 86400},
+                    "api": {"pct": 0.159, "budget": 30.0, "cur": "USD", "reset": now + 26 * 86400}}}))
             else:
-                items = []
-                for k in prov:
-                    r = usage.fetch(k, self.uc.get(k + "_file") or None)
-                    if not r["ok"]:
-                        slog_u.warning("%s: %s", r["name"], r["error"])
-                    items.append(r)
-            self._usage_cache = {"enabled": True, "items": items, "fetched": time.time(), "kinds": list(prov)}
-            return self._usage_cache
+                out.append(usage.mistral_item(usage.load_push(data_dir(self.cfg))))
+        return {"enabled": True, "items": out, "fetched": c["fetched"]}
+
+    def usage_push(self, body):
+        """Stand von Mistral aus dem Lesezeichen. Enthält nur Prozent, Budget und Reset, nie Cookies."""
+        if not self.uc.get("mistral"):
+            raise UserError("Mistral ist in den Einstellungen (KI-Kontingent) nicht eingeschaltet.")
+        try:
+            clean = usage.clean_push(body)
+        except usage.UsageError as e:
+            raise UserError(str(e))
+        usage.save_push(data_dir(self.cfg), clean)
+        slog_u.info("Mistral-Stand empfangen: %s", ", ".join("%s %.2f %%" % (k, v["pct"]) for k, v in clean.items()))
+        return {"ok": True, "item": usage.mistral_item(usage.load_push(data_dir(self.cfg)))}
 
     def has(self, name):
         return feature(self.cfg, name)
@@ -1317,7 +1385,7 @@ class App:
                  "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link")),
                  "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
                  "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""),
-                 "sonar_url": (it.get("sonar") or {}).get("url", "")}
+                 "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", "")}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1401,7 +1469,7 @@ class App:
     def _linked_ref(it):
         return {"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"], "pipeline": it["pipeline"],
                 "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
-                "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", "")}
+                "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", "")}
 
     def board_action(self, action, body):
         st = self.store
@@ -1822,7 +1890,7 @@ class App:
         if not self.configured:
             return {"configured": False, "problems": list(self.problems), "me": "", "mine": [], "review": [], "assigned": [],
                     "errors": [], "jira": None, "wip": 0, "wip_limit": self.cfg["wip_limit"], "stale_days": self.cfg["stale_days"],
-                    "demo": self.demo, "version": VERSION, "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
+                    "demo": self.demo, "version": VERSION, "usage_providers": self.usage_providers(), "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
                     "agent_enabled": False, "prompts": [], "fetched": time.time(), "helpdesk": None}
         with self.cache_lock:
             expired = self.cache is None or time.time() - self.cache_t > self.cfg["cache_seconds"]
@@ -2109,6 +2177,12 @@ def make_handler(app):
                     with app.cache_lock:
                         app.cache_t = 0.0
                     return self._send(200, {"started": app.start_sync(), "sync": app.sync_view()})
+                if method == "GET" and path == "/api/sonar/report":
+                    q = urllib.parse.parse_qs(parsed.query)
+                    one = lambda k: (q.get(k) or [""])[0]
+                    return self._send(200, app.sonar_report(int(one("project_id")), one("iid") or None, one("branch") or None))
+                if method == "POST" and path == "/api/usage/push":
+                    return self._send(200, app.usage_push(self._body()))
                 if method == "GET" and path == "/api/usage":
                     v = app.usage_view(fresh="fresh=1" in (parsed.query or ""))
                     return self._send(200, {k: v[k] for k in ("enabled", "items", "fetched")})

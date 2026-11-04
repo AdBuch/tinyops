@@ -16,6 +16,7 @@ import llm
 import net
 import secretstore as store
 import sonar
+import usage
 import sprint
 import tlog
 
@@ -770,10 +771,12 @@ def view(cfg, config_path, features_default=None):
                 "timeout": (cfg.get("llm") or {}).get("timeout", 120),
                 "providers": [{"id": k, "label": v.label, "url": v.default_url} for k, v in llm.PROVIDERS.items()]},
         "usage": {"claude": bool((cfg.get("usage") or {}).get("claude")), "codex": bool((cfg.get("usage") or {}).get("codex")),
+                  "mistral": bool((cfg.get("usage") or {}).get("mistral")), "bookmarklet_src": usage.BOOKMARKLET_JS,
                   "claude_file": (cfg.get("usage") or {}).get("claude_file", ""), "codex_file": (cfg.get("usage") or {}).get("codex_file", ""),
                   "cache_seconds": (cfg.get("usage") or {}).get("cache_seconds", 120)},
         "sonar": {"enabled": bool((cfg.get("sonar") or {}).get("enabled", False)), "url": (cfg.get("sonar") or {}).get("url", ""),
-                  "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40)},
+                  "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40),
+                  "report_max": (cfg.get("sonar") or {}).get("report_max", 200)},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
         "storage": {"keyring": bool(kr), "file": str(store.secrets_file()),
@@ -887,6 +890,7 @@ def build_config(current, p):
     us = p.get("usage")
     if us is not None:
         uc = dict(cfg.get("usage") or {})
+        uc["mistral"] = bool(us.get("mistral", False))
         for k in ("claude", "codex"):
             uc[k] = bool(us.get(k, False))
             f = str(us.get(k + "_file") or "").strip()
@@ -909,6 +913,7 @@ def build_config(current, p):
         sc["url"] = url
         sc["cache_seconds"] = _int(sq.get("cache_seconds"), "sonar.cache_seconds", 30, 3600, errors, 300)
         sc["max_items"] = _int(sq.get("max_items"), "sonar.max_items", 1, 200, errors, 40)
+        sc["report_max"] = _int(sq.get("report_max"), "sonar.report_max", 10, 1000, errors, 200)
         cfg["sonar"] = sc
 
     f = p.get("features") or {}

@@ -122,6 +122,9 @@
   .chip.tk { background: var(--focus-bg); color: var(--focus); }
   .chip.out { background: transparent; border: 1px dashed var(--quiet); color: var(--quiet); }
   .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .sqlinks { display: inline-flex; gap: 6px; margin-left: 6px; align-items: center; }
+  .sqlink { font-size: 12px; color: var(--quiet); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font-family: inherit; }
+  .sqlink:hover { color: var(--ink); }
   .sqdot { font-size: 9px; vertical-align: 1px; }
   .sqdot.bad { color: var(--bad); }
   .sqdot.ok { color: var(--ok, #1d7a4d); }
@@ -545,6 +548,17 @@ const filt = { q: '', proj: LS.get('proj', ''), agent: LS.get('agent', false), n
 
 // Warum steht das hier? Eine Zeile, die sagt, was von dir erwartet wird.
 const SQ = { OK: ['Gate grün', 'sq-ok'], ERROR: ['Gate rot', 'sq-bad'], WARN: ['Gate Warnung', 'warn'], NONE: ['Sonar: keine Analyse', 'sq-none'], UNKNOWN: ['Sonar: Fehler', 'sq-none'] };
+const SQ_HAS = { OK: 1, WARN: 1, ERROR: 1 };
+function sqRepAttrs(x) { return `data-sqrep="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch || '')}"`; }
+// Kleine Links hinter einem MR-Chip: Sonar-Dashboard, Findings in Sonar, Findings als Markdown ins Clipboard
+function sqLinks(x) {
+  if (!SQ_HAS[x.sonar] && !x.sonar_url) return '';
+  const a = [];
+  if (x.sonar_url) a.push(`<a class="sqlink" href="${esc(x.sonar_url)}" target="_blank" rel="noopener" title="Dashboard in Sonar">Sonar</a>`);
+  if (x.sonar_issues_url && SQ_HAS[x.sonar]) a.push(`<a class="sqlink" href="${esc(x.sonar_issues_url)}" target="_blank" rel="noopener" title="Offene Findings in Sonar">Findings</a>`);
+  if (SQ_HAS[x.sonar]) a.push(`<button class="sqlink" ${sqRepAttrs(x)} title="Findings als Markdown-Report in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">Report kopieren</button>`);
+  return `<span class="sqlinks">${a.join('')}</span>`;
+}
 function sonarChip(it) {
   const s = it.sonar; if (!s || !SQ[s.status]) return '';
   const [t, c] = SQ[s.status];
@@ -599,6 +613,11 @@ function row(it) {
   const pipe = it.kind === 'branch' ? '' : `<span class="pd ${esc(it.pipeline)}" title="${esc(pipelineLabel[it.pipeline] || it.pipeline)}"></span>`;
   const acts = [];
   if (it.pipeline_url) acts.push(`<a href="${esc(it.pipeline_url)}" target="_blank" rel="noopener">Pipeline</a>`);
+  if (it.sonar && it.sonar.url) {
+    acts.push(`<a href="${esc(it.sonar.url)}" target="_blank" rel="noopener" title="Dashboard in Sonar">Sonar</a>`);
+    if (SQ_HAS[it.sonar.status] && it.sonar.issues_url) acts.push(`<a href="${esc(it.sonar.issues_url)}" target="_blank" rel="noopener" title="Offene Findings in Sonar">Findings</a>`);
+    if (SQ_HAS[it.sonar.status]) acts.push(`<button class="quiet-btn" ${sqRepAttrs(it)} title="Findings als Markdown-Report in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">Report kopieren</button>`);
+  }
   if (it.no_ticket) acts.push(`<button data-tk="1" data-p="${it.project_id}" data-i="${it.iid ?? ''}" data-b="${esc(it.branch)}" data-cu="${esc(it.create_url || '')}">Ticket anlegen</button>`);
   if (state.jira && state.jira.ok) acts.push(`<button class="quiet-btn" data-assign="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" data-t="${esc(it.title)}" data-iid="${it.iid ?? ''}" title="Ticket von Hand zuordnen (oder die Zeile auf eine Story ziehen)">${it.ticket || it.ticket_unknown ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Öffnen</a>`);
@@ -649,7 +668,7 @@ function storiesTile() {
   for (let i = 0; i < n; i++) {
     const s = j.stories[i];
     if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
-    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="Quality Gate rot">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>`).join('');
+    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="Quality Gate rot">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>${sqLinks(x)}`).join('');
     slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
       <div class="top"><span class="key">${esc(s.key)}</span>${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       ${s.url ? `<a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>` : `<span class="sum">${esc(s.summary)}</span>`}
@@ -966,6 +985,7 @@ $('board').addEventListener('click', ev => { const b = ev.target.closest('button
 const MIME = 'application/x-tinyops';
 const AI_PRESETS = { claude: ['Claude.ai', 5, 100, '%'], chatgpt: ['ChatGPT', 5, 100, '%'], mistral: ['Mistral Vibe', 5, 100, '%'], local: ['Lokales Modell', 24, 0, 'Anfragen'], other: ['Anderes Konto', 5, 100, '%'] };
 const AI_LABEL = { claude: 'Claude', chatgpt: 'ChatGPT', mistral: 'Mistral', local: 'Lokal', other: 'Konto' };
+function fmtAgo(ts) { const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60)); return m >= 2880 ? Math.round(m / 1440) + ' Tagen' : m >= 120 ? Math.round(m / 60) + ' h' : m + ' min'; }
 function fmtLeft(secs) { const m = Math.max(0, Math.round(secs / 60)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; }
 let usageData = null, usageT = 0;
 function usageBody() {
@@ -975,9 +995,10 @@ function usageBody() {
     const ws = a.windows.map(w => {
       const st = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : 'ok';
       return `<div class="aibar s-${st}" title="${esc(w.used_pct)} % verbraucht"><i style="width:${w.left_pct}%"></i></div>
-        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}</span><span>${w.secs_left == null ? '' : 'Reset in ' + (w.secs_left >= 86400 ? Math.floor(w.secs_left / 86400) + ' d ' + Math.round(w.secs_left % 86400 / 3600) + ' h' : fmtLeft(w.secs_left))}</span></div>`;
+        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + (w.secs_left >= 86400 ? Math.floor(w.secs_left / 86400) + ' d ' + Math.round(w.secs_left % 86400 / 3600) + ' h' : fmtLeft(w.secs_left))}</span></div>`;
     }).join('');
-    return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b></div>${ws}</div>`;
+    const age = a.manual ? `<div class="aimeta"><span class="quiet small">${a.stale ? '<b style="color:var(--warn)">Stand ist alt.</b> ' : ''}Zuletzt per Lesezeichen gesendet vor ${fmtAgo(a.fetched)}.</span></div>` : '';
+    return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b>${a.stale ? '<span class="chip warn">veraltet</span>' : ''}</div>${ws}${age}</div>`;
   }).join('');
   const ago = Math.max(0, Math.round((Date.now() / 1000 - usageData.fetched) / 60));
   return rows + `<div class="aimeta"><span class="quiet small">Stand vor ${ago} min · <a href="#" data-usage-refresh="1">neu abfragen</a>. Mistral Vibe hat keine Abfrage.</span></div>`;
@@ -988,6 +1009,18 @@ async function loadUsage(fresh) {
   usageT = Date.now();
   try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderLeft(); } catch (e) { /* nächstes Mal */ }
 }
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest && ev.target.closest('[data-sqrep]');
+  if (!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const old = b.textContent; b.disabled = true; b.textContent = 'Lese Sonar …';
+  try {
+    const r = await api('GET', `/api/sonar/report?project_id=${encodeURIComponent(b.dataset.p)}&iid=${encodeURIComponent(b.dataset.i)}&branch=${encodeURIComponent(b.dataset.b)}`);
+    await copyText(r.text, 'Sonar-Report');
+    toast(`Report kopiert: ${r.issues}${r.truncated ? ' von ' + r.total : ''} Findings, ${r.hotspots} Hotspots`);
+  } catch (e) { toast(e.message); }
+  finally { b.disabled = false; b.textContent = old; }
+}, true);
 document.addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('[data-usage-refresh]')) { ev.preventDefault(); loadUsage(true); } });
 function aiBody() {
   const acc = state.ai || [];
@@ -1044,7 +1077,7 @@ function boardCard(c) {
     ...c.pools.map(p => `<span class="chip tk" title="Kategorie">${esc(p.name)}${c.idea_id ? '' : `<button class="x" data-bpoolrem="${esc(c.id)}" data-pool="${p.id}" title="Aus der Kategorie nehmen" aria-label="Aus der Kategorie nehmen">×</button>`}</span>`)].join('');
   const title = c.title || (c.known === false ? '(Ticket nicht lesbar)' : '');
   const sum = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
-  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="' + esc(x.sonar_detail || 'Quality Gate rot') + '">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}</a>`).join('');
+  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="' + esc(x.sonar_detail || 'Quality Gate rot') + '">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}</a>${sqLinks(x)}`).join('');
   const act = isIdea
     ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>`
     : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
@@ -1331,6 +1364,17 @@ function setView(v) {
 }
 document.querySelectorAll('.tab, .bn').forEach(t => t.onclick = () => setView(t.dataset.view));
 document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
+// Lesezeichen von admin.mistral.ai: «#mistral=<JSON>» enthält nur Prozent, Budget und Reset, nie Cookies
+async function mistralPush() {
+  const m = /^#mistral=(.+)$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const r = await api('POST', '/api/usage/push', JSON.parse(decodeURIComponent(m[1])));
+    usageData = null; toast('Mistral-Stand übernommen'); loadUsage(true);
+  } catch (e) { toast(e.message); }
+}
+mistralPush(); addEventListener('hashchange', mistralPush);
 if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
 if (location.hash === '#board') setTimeout(() => setView('board'), 0);
 
@@ -1456,15 +1500,18 @@ async function loadSettings() {
     <div class="grid2">
       ${field('sq-cache', 'Zwischenspeicher in Sekunden', S.sonar.cache_seconds, { type: 'number', err: 'sonar.cache_seconds', help: 'So lange gilt ein Ergebnis, bevor erneut gefragt wird.' })}
       ${field('sq-max', 'Höchstens so viele Prüfungen je Abgleich', S.sonar.max_items, { type: 'number', err: 'sonar.max_items' })}
+      ${field('sq-rep', 'Höchstens so viele Findings im Report', S.sonar.report_max, { type: 'number', err: 'sonar.report_max', help: 'Für «Report kopieren»: nach Schwere sortiert, der Rest steht in Sonar. Der Report enthält Dateipfade, Zeilen, Regeln und Sonar-Meldungen, aber keinen Quelltext.' })}
     </div>
     <div class="hint">Quality Gates je Merge Request gibt es nur in SonarQube ab Developer Edition. In der Community Edition zeigt tinyops sie für Branches nur, wenn dort mehrere Branches analysiert werden; sonst steht «keine Analyse».</div>
     <div class="row"><button class="primary" id="sq-test">Verbindung testen</button>
       ${S.secrets.sonar_token.set ? '<button id="sq-del">Gespeicherten Token löschen</button>' : ''}</div>
     <div id="sq-result"></div>`)}
 
-  ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist. Gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern. Mistral Vibe bietet keine Abfrage.', `
+  ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist (gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern) und das Monatsbudget von Mistral (per Lesezeichen aus deinem Browser).', `
     <label class="check"><input type="checkbox" id="us-claude" ${S.usage.claude ? 'checked' : ''}><span><strong>Claude lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei von Claude Code)</span></span></label>
     ${field('us-claude-file', 'Pfad der Claude-Anmeldedatei', S.usage.claude_file, { ph: '~/.claude/.credentials.json', err: 'usage.claude_file' })}
+    <label class="check"><input type="checkbox" id="us-mistral" ${S.usage.mistral ? 'checked' : ''}><span><strong>Mistral anzeigen</strong> <span class="quiet small">(Stand kommt per Lesezeichen aus deinem Browser)</span></span></label>
+    <div class="hint" id="us-bm"></div>
     <label class="check"><input type="checkbox" id="us-codex" ${S.usage.codex ? 'checked' : ''}><span><strong>Codex lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei des Codex-CLI, ChatGPT-Anmeldung nötig)</span></span></label>
     ${field('us-codex-file', 'Pfad der Codex-Anmeldedatei', S.usage.codex_file, { ph: '~/.codex/auth.json', err: 'usage.codex_file' })}
     ${field('us-cache', 'Zwischenspeicher in Sekunden', S.usage.cache_seconds, { type: 'number', err: 'usage.cache_seconds' })}
@@ -1505,7 +1552,7 @@ async function loadSettings() {
   </div>
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
     <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
-  renderJiraSecret(); renderProjects();
+  renderJiraSecret(); renderProjects(); renderBookmarklet();
   renderLlmKey();
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
     const p = S.llm.providers.find(x => x.id === $('lm-prov').value), cur = val('lm-url');
@@ -1525,6 +1572,12 @@ async function loadSettings() {
   });
 }
 
+function renderBookmarklet() {
+  const box = $('us-bm'); if (!box) return;
+  const href = 'javascript:' + encodeURIComponent(S.usage.bookmarklet_src.replace('__ORIGIN__', location.origin));
+  box.innerHTML = `<b>Mistral per Lesezeichen:</b> Diesen Link in die Lesezeichenleiste ziehen: <a class="pchip" href="${esc(href)}" onclick="return false" draggable="true">tinyops: Mistral lesen</a><br>
+    Dann auf <code>admin.mistral.ai</code> (eingeloggt) anklicken. Das Lesezeichen liest dort die Budgetzahlen und öffnet tinyops mit nur diesen Zahlen (Prozent, Budget, Reset). Cookies und Zugangsdaten gehen nie an tinyops. Mistral ändert die Seite gelegentlich: dann meldet das Lesezeichen «Keine Budgetdaten gefunden». Im Container muss das Panel vom Browser aus unter derselben Adresse erreichbar sein, die du gerade benutzt.`;
+}
 function renderJiraSecret() {
   const basic = $('ji-auth').value === 'basic';
   $('ji-userbox').hidden = !basic;
@@ -1691,8 +1744,8 @@ function collect() {
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
       wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
-    usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
-    sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max') },
+    usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
+    sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     secrets,

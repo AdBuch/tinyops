@@ -5,6 +5,21 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.9.0]
+
+### Neu
+- **Sonar-Links und Findings-Report:** Hinter jedem MR und Branch mit Analyse stehen «Sonar» (Dashboard), «Findings» (offene Findings in Sonar) und
+  «Report kopieren». Der Report ist Markdown für die Zwischenablage: Gate-Bedingungen, Zähler nach Schwere und Art, Findings je Datei
+  (Zeile, Regel, Meldung), Security Hotspots zur Prüfung. Er enthält Pfade und Sonar-Meldungen, keinen Quelltext. Gelesen wird nur auf Knopfdruck
+  (GET), höchstens `sonar.report_max` Findings (Standard 200, nach Schwere sortiert).
+- **Mistral im KI-Kontingent:** Das Monatsbudget (Vibe und API, Prozent, Dollar, Reset) kommt per Lesezeichen aus dem eingeloggten Browser auf
+  `admin.mistral.ai`. Das Lesezeichen liest dort nur die Budgetzahlen und öffnet tinyops mit diesen Zahlen; Cookies und Zugangsdaten sehen nur
+  Browser und Mistral. tinyops prüft die Zahlen streng, markiert alte Stände («veraltet» nach 36 h, abgelaufener Monat).
+
+### Bekannte Grenzen
+- Das Mistral-Lesezeichen hängt am Seitenaufbau von `admin.mistral.ai` und ist ein Klick pro Aktualisierung. Es wurde nur gegen den Seitentext aus deinem HAR geprüft.
+- Der Report wurde nur gegen den Fake-Server geprüft; Felder wie `severity` und `type` der Issues nutzt Sonar auch in neueren Versionen, die neuen «Impacts» liest tinyops nicht.
+
 ## [0.8.0]
 
 ### Neu

@@ -7,9 +7,12 @@ Claude und Codex haben keinen dokumentierten Endpunkt dafür. Beide CLIs benutze
 
 Das sind inoffizielle Schnittstellen und können sich ohne Ankündigung ändern. Deshalb gilt: jeder Fehler wird zu «nicht abrufbar» mit Grund,
 nie zu einer erfundenen Zahl. Das Token wird nur gelesen (nie erneuert, nie gespeichert, nie geloggt) und nur an den festen Host geschickt.
-Mistral Vibe hat keinen solchen Endpunkt und kommt hier nicht vor.
+Mistral hat keinen solchen Endpunkt. Dessen Budgets stehen nur auf der Admin-Seite (admin.mistral.ai/subscription), und die ist nur mit der
+Browser-Sitzung lesbar. Die Sitzung gibt tinyops nie zu sehen: Ein Lesezeichen (Bookmarklet) läuft im eingeloggten Browser, liest dort die
+Budgetzahlen und schickt nur diese (Prozent, Budget, Reset) an das lokale tinyops. Hier wird so ein Stand geprüft und abgelegt.
 """
 import json
+import math
 import os
 import ssl
 import time
@@ -160,4 +163,102 @@ def fetch(kind, path=None, ctx=None, timeout=10):
         res.update(ok=True, windows=wins)
     except UsageError as e:
         res["error"] = str(e).replace(tok, "***") if "tok" in locals() and tok else str(e)
+    return res
+
+
+# ---------------------------------------------------------------- Mistral: Stand per Lesezeichen
+# Sucht die Budgets im Seitentext (RSC-Antwort oder HTML mit maskierten Anführungszeichen). «usage_percentage» ist ein Prozentwert
+# (0.159 bei 30 $ Budget = 0,05 $ verbraucht; so zeigt es die Seite auch an).
+PARSE_JS = r"""const parse=raw=>{const t=raw.replace(/\\"/g,'"');
+const g=k=>{const m=t.match(new RegExp('"'+k+'":\\{"usage_percentage":([0-9.eE+-]+),"initial_budget":([0-9.]+),"currency":"([A-Z]{3})","reset_at":"([^"]+)"'));return m?{pct:+m[1],budget:+m[2],cur:m[3],reset:m[4]}:null};
+return {vibe:g('vibe_budget'),api:g('api_budget')}};"""
+
+BOOKMARKLET_JS = "(async()=>{try{" + PARSE_JS + r"""
+if(location.hostname!=='admin.mistral.ai'){alert('Bitte erst admin.mistral.ai öffnen (eingeloggt) und dort anklicken.');return}
+const r=await fetch('/subscription',{credentials:'same-origin',headers:{rsc:'1'}});
+const d=parse(await r.text());
+if(!d.vibe&&!d.api){alert('Keine Budgetdaten gefunden. Hat Mistral die Seite geändert?');return}
+const u='__ORIGIN__/#mistral='+encodeURIComponent(JSON.stringify(d));
+if(!window.open(u,'_blank'))location.href=u;
+}catch(e){alert('tinyops-Lesezeichen: '+e.message)}})()"""
+
+PUSH_FILE = "usage_push.json"
+PUSH_LABEL = {"vibe": "Vibe Monat", "api": "API Monat"}
+STALE_AFTER = 36 * 3600
+
+
+def clean_push(payload, now=None):
+    """Prüft den Stand aus dem Lesezeichen streng: nur Zahlen in sinnvollen Grenzen, alles andere wird verworfen."""
+    now = now or time.time()
+    if not isinstance(payload, dict):
+        raise UsageError("Ungültige Daten.")
+    out = {}
+    for k in PUSH_LABEL:
+        w = payload.get(k)
+        if w is None:
+            continue
+        if not isinstance(w, dict):
+            raise UsageError("Ungültige Daten (%s)." % k)
+        try:
+            pct, budget = float(w.get("pct")), float(w.get("budget"))
+        except (TypeError, ValueError):
+            raise UsageError("Ungültige Zahl (%s)." % k)
+        if not (math.isfinite(pct) and math.isfinite(budget)) or not 0 <= pct <= 1000 or not 0 < budget <= 1e7:
+            raise UsageError("Zahl ausserhalb des erlaubten Bereichs (%s)." % k)
+        cur = str(w.get("cur") or "")
+        if not (len(cur) == 3 and cur.isalpha() and cur.isupper()):
+            raise UsageError("Ungültige Währung (%s)." % k)
+        reset = _epoch(w.get("reset"))
+        if reset is None or abs(reset - now) > 400 * 86400:
+            raise UsageError("Ungültiger Reset-Zeitpunkt (%s)." % k)
+        out[k] = {"pct": pct, "budget": budget, "cur": cur, "reset": reset}
+    if not out:
+        raise UsageError("Keine Budgetdaten.")
+    return out
+
+
+def save_push(data_dir, clean, now=None):
+    p = Path(data_dir) / PUSH_FILE
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"pushed": now or time.time(), "budgets": clean}), encoding="utf-8")
+    os.replace(tmp, p)
+    try:
+        os.chmod(p, 0o600)
+    except OSError:
+        pass
+
+
+def load_push(data_dir):
+    try:
+        d = json.loads((Path(data_dir) / PUSH_FILE).read_text(encoding="utf-8"))
+        return d if isinstance(d.get("budgets"), dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _money(v, cur):
+    return ("%.2f %s" % (v, {"USD": "$", "EUR": "€", "CHF": "CHF"}.get(cur, cur))).replace(".", ",")
+
+
+def mistral_item(push, now=None):
+    now = now or time.time()
+    res = {"id": "mistral", "name": "Mistral (Le Chat Pro)", "ok": False, "error": "", "windows": [], "fetched": now, "stale": False, "manual": True}
+    if not push:
+        res["error"] = "Noch kein Stand empfangen. Das Lesezeichen auf admin.mistral.ai anklicken (Einstellungen → KI-Kontingent)."
+        return res
+    res["fetched"] = push.get("pushed", now)
+    for k, b in push["budgets"].items():
+        left = max(0.0, 100.0 - b["pct"])
+        used = b["pct"] / 100.0 * b["budget"]
+        res["windows"].append({"label": PUSH_LABEL.get(k, k), "used_pct": round(b["pct"], 2), "left_pct": round(left, 1), "resets_at": b["reset"],
+                               "secs_left": max(0, int(b["reset"] - now)),
+                               "detail": "%s von %s verbraucht" % (_money(used, b["cur"]), _money(b["budget"], b["cur"]).replace(",00", ""))})
+    expired = any(w["resets_at"] < now for w in res["windows"])
+    if expired:
+        res["error"] = "Der Stand gehört zu einem abgelaufenen Monat. Lesezeichen neu anklicken."
+        res["windows"] = []
+        return res
+    res["ok"] = True
+    res["stale"] = now - res["fetched"] > STALE_AFTER
     return res

@@ -89,6 +89,52 @@ class ClientTests(WithMock):
             sonar.Client("http://127.0.0.1:%d" % free_port(), "x").gate("k", pr=1)
 
 
+class ReportTests(WithMock):
+    def client(self):
+        return sonar.Client(self.base, "sqtoken")
+
+    def test_links(self):
+        c = self.client()
+        r = c.gate("dlp-core", pr=8)
+        self.assertIn("/project/issues?id=dlp-core&pullRequest=8&resolved=false", r["issues_url"])
+        self.assertIn("/security_hotspots?id=dlp-core&branch=feature-b", c.hotspots_url("dlp-core", branch="feature-b"))
+        self.assertEqual(c.gate("dlp-core", pr=9)["issues_url"], "")                    # ohne Analyse kein Findings-Link
+        self.assertIn("dashboard?id=dlp-core&pullRequest=9", c.gate("dlp-core", pr=9)["url"])
+
+    def test_issues_paging_limit_and_facets(self):
+        iss, total, fac = self.client().issues("dlp-core", pr=8, limit=120)
+        self.assertEqual((len(iss), total), (120, 251))                                  # zwei Seiten gelesen, dann abgeschnitten
+        self.assertEqual(iss[0]["severity"], "BLOCKER")
+        self.assertEqual(fac["severities"]["MAJOR"], 250)
+        self.assertEqual(self.client().issues("dlp-core", pr=7)[1], 0)
+        with self.assertRaises(sonar.SonarError):
+            self.client().issues("dlp-core", branch="kaputt")
+
+    def test_hotspots_unreadable_is_none(self):
+        self.assertEqual(self.client().hotspots("dlp-core", pr=8)[1], 1)
+        self.assertIsNone(self.client().hotspots("dlp-core", pr=7))
+
+    def test_report_text(self):
+        c = self.client()
+        iss, total, fac = c.issues("dlp-core", pr=8, limit=30)
+        txt = sonar.format_report("core, MR !8", c.gate("dlp-core", pr=8), "dlp-core", iss, total, fac, c.hotspots("dlp-core", pr=8), "https://s/x", 30)
+        self.assertIn("# Sonar-Findings: core, MR !8", txt)
+        self.assertIn("Quality Gate: **nicht bestanden**", txt)
+        self.assertIn("Abdeckung neuer Code 61.2 %", txt)
+        self.assertIn("Schwere: blocker 1, major 250", txt)
+        self.assertIn("### `src/Auth.java`", txt)                                       # Pfad ohne Projektschlüssel, schwerste Datei zuerst
+        self.assertLess(txt.index("src/Auth.java"), txt.index("src/Repo.java"))
+        self.assertIn("Es werden 30 von 251 Findings gezeigt", txt)
+        self.assertIn("src/Crypto.java", txt)
+        self.assertNotIn("\n\n\n\n", txt)
+        auth_line = next(l for l in txt.splitlines() if "java:S2068" in l)
+        self.assertTrue(auth_line.endswith("…") and "\n" not in auth_line and "  " not in auth_line)   # Meldung auf eine Zeile gekürzt
+        self.assertLess(len(auth_line), 400)
+        txt = sonar.format_report("x", c.gate("dlp-core", pr=7), "dlp-core", [], 0, {}, None, "", 30)
+        self.assertIn("Keine offenen Findings.", txt)
+        self.assertIn("Nicht lesbar", txt)
+
+
 class SettingsTests(WithMock):
     def stored(self, tok=""):
         return lambda name: (tok, "Test") if name == "sonar_token" else ("", "")
@@ -168,6 +214,26 @@ class SyncTests(WithMock):
         b = next(c for c in ov["board"]["cards"] if c["items"] and c["items"][0]["iid"] == 8)
         self.assertEqual(b["items"][0]["sonar"], "ERROR")
         self.assertIn("Abdeckung", b["items"][0]["sonar_detail"])
+
+    def test_report_via_app_is_read_only_and_clear_errors(self):
+        import urllib.request
+        a = self.app(report_max=50)
+        r = a.sonar_report(1, iid=8)
+        self.assertEqual((r["issues"], r["total"], r["truncated"], r["hotspots"]), (50, 251, True, 1))
+        self.assertIn("MR !8", r["text"])
+        self.assertIn("dlp-core, MR !8", r["text"])
+        a.sonar_report(1, branch="feature-b")
+        for bad, msg in (({"project_id": 2, "iid": 3}, "kein Sonar-Schlüssel"), ({"project_id": 1}, "MR oder Branch")):
+            with self.assertRaises(server.UserError) as cm:
+                a.sonar_report(bad["project_id"], bad.get("iid"))
+            self.assertIn(msg, str(cm.exception))
+        with self.assertRaises(server.UserError):
+            a.sonar_report(1, branch="kaputt")
+        a.sonar = None
+        with self.assertRaises(server.UserError):
+            a.sonar_report(1, iid=8)
+        calls = json.load(urllib.request.urlopen(self.base + "/_calls"))
+        self.assertTrue(all(c.startswith("/api/") for c in calls))
 
     def test_wrong_token_aborts_with_clear_error(self):
         a = self.app()

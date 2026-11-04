@@ -178,6 +178,104 @@ class InApp(WithMock):
             self.assertEqual(a.overview()["usage_providers"], ["claude"])
 
 
+FIXTURE = ('{"budget":{"usage_percentage":0.15907,"initial_budget":30,"currency":"USD","reset_at":"2026-12-01T00:00:00Z",'
+           '"api_budget":{"usage_percentage":0.15907,"initial_budget":30,"currency":"USD","reset_at":"2026-12-01T00:00:00Z"},'
+           '"vibe_budget":{"usage_percentage":0.05994501333333333,"initial_budget":300,"currency":"USD","reset_at":"2026-12-01T00:00:00Z"}}}')
+
+
+class MistralPush(unittest.TestCase):
+    def good(self, now):
+        return {"vibe": {"pct": 0.06, "budget": 300, "cur": "USD", "reset": "2026-12-01T00:00:00Z"},
+                "api": {"pct": 0.159, "budget": 30, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}}
+
+    def test_bookmarklet_parser_on_both_page_formats(self):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node fehlt")
+        escaped = FIXTURE.replace('"', '\\"')           # HTML-Variante: Flight-Daten als JS-String mit maskierten Anführungszeichen
+        for name, text in (("rsc", FIXTURE), ("html", '<script>self.__next_f.push([1,"%s"])</script>' % escaped), ("leer", "<html>nichts</html>")):
+            code = usage.PARSE_JS + "console.log(JSON.stringify(parse(%s)))" % json.dumps(text)
+            out = json.loads(subprocess.run([node, "-e", code], capture_output=True, text=True, check=True).stdout)
+            if name == "leer":
+                self.assertEqual(out, {"vibe": None, "api": None})
+            else:
+                self.assertEqual(out["vibe"], {"pct": 0.05994501333333333, "budget": 300, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}, name)
+                self.assertEqual(out["api"]["budget"], 30, name)
+
+    def test_bookmarklet_source_has_no_secrets_and_posts_only_numbers(self):
+        src = usage.BOOKMARKLET_JS
+        self.assertIn("__ORIGIN__", src)
+        self.assertNotIn("document.cookie", src)
+        self.assertNotIn("localStorage", src)
+        self.assertNotIn("headers:{cookie", src.lower())
+
+    def test_clean_push_accepts_and_rejects(self):
+        now = time.mktime((2026, 11, 4, 12, 0, 0, 0, 0, 0))
+        c = usage.clean_push(self.good(now), now)
+        self.assertEqual(sorted(c), ["api", "vibe"])
+        self.assertEqual(usage.clean_push({"vibe": self.good(now)["vibe"]}, now).keys(), {"vibe"})
+        bad = [None, [], {}, {"vibe": 5}, {"vibe": {"pct": "x", "budget": 1, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}},
+               {"vibe": {"pct": 5000, "budget": 1, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}},
+               {"vibe": {"pct": float("nan"), "budget": 1, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}},
+               {"vibe": {"pct": 1, "budget": 0, "cur": "USD", "reset": "2026-12-01T00:00:00Z"}},
+               {"vibe": {"pct": 1, "budget": 1, "cur": "usd<", "reset": "2026-12-01T00:00:00Z"}},
+               {"vibe": {"pct": 1, "budget": 1, "cur": "USD", "reset": "2099-01-01T00:00:00Z"}},
+               {"vibe": {"pct": 1, "budget": 1, "cur": "USD", "reset": "morgen"}}]
+        for b in bad:
+            with self.assertRaises(usage.UsageError, msg=repr(b)):
+                usage.clean_push(b, now)
+
+    def test_item_values_stale_expired_missing(self):
+        now = time.mktime((2026, 11, 4, 12, 0, 0, 0, 0, 0))
+        push = {"pushed": now - 60, "budgets": usage.clean_push(self.good(now), now)}
+        it = usage.mistral_item(push, now)
+        self.assertTrue(it["ok"])
+        v = next(w for w in it["windows"] if w["label"] == "Vibe Monat")
+        self.assertEqual(v["left_pct"], 99.9)
+        self.assertEqual(v["detail"], "0,18 $ von 300 $ verbraucht")                        # entspricht der Anzeige auf der Mistral-Seite
+        self.assertEqual(next(w for w in it["windows"] if w["label"] == "API Monat")["detail"], "0,05 $ von 30 $ verbraucht")
+        self.assertFalse(it["stale"])
+        self.assertTrue(usage.mistral_item({"pushed": now - 40 * 3600, "budgets": push["budgets"]}, now)["stale"])
+        gone = usage.mistral_item(push, now + 40 * 86400)                                     # Reset ist vorbei
+        self.assertFalse(gone["ok"])
+        self.assertIn("abgelaufenen Monat", gone["error"])
+        self.assertIn("Lesezeichen", usage.mistral_item(None, now)["error"])
+
+    def test_save_load_roundtrip_and_permissions(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(usage.load_push(d))
+            now = time.time()
+            usage.save_push(d, usage.clean_push(self.good(now), now), now)
+            self.assertEqual(usage.load_push(d)["budgets"]["vibe"]["budget"], 300.0)
+            self.assertEqual(os.stat(Path(d) / usage.PUSH_FILE).st_mode & 0o077, 0)
+            Path(d, usage.PUSH_FILE).write_text("{kaputt")
+            self.assertIsNone(usage.load_push(d))
+
+    def test_app_push_flow(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = server.load_config(None)
+            cfg["data_dir"] = d
+            a = server.App(cfg, False, {"gitlab_token": "x"}, Path("/nonexistent/c.json"))
+            with self.assertRaises(server.UserError):                                           # ausgeschaltet: wird nicht gespeichert
+                a.usage_push(self.good(0))
+            self.assertIsNone(usage.load_push(d))
+            cfg["usage"] = {"mistral": True}
+            a = server.App(cfg, False, {"gitlab_token": "x"}, Path("/nonexistent/c.json"))
+            v = a.usage_view()
+            self.assertFalse(v["items"][0]["ok"])                                               # vor dem ersten Klick: klare Anleitung
+            with self.assertRaises(server.UserError):
+                a.usage_push({"vibe": {"pct": "x"}})
+            now = time.time()
+            r = a.usage_push({"vibe": {"pct": 0.06, "budget": 300, "cur": "USD", "reset": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + 20 * 86400))}})
+            self.assertTrue(r["ok"] and r["item"]["ok"])
+            self.assertEqual([i["id"] for i in a.usage_view()["items"]], ["mistral"])
+            self.assertTrue(a.usage_view()["items"][0]["ok"])
+            self.assertEqual(a.overview()["usage_providers"], ["mistral"])
+            raw = (Path(d) / usage.PUSH_FILE).read_text()
+            self.assertNotIn("cookie", raw.lower())
+
+
 class Settings(unittest.TestCase):
     def test_save_and_view(self):
         cfg, err = settings.build_config({"projects": []}, {"usage": {"claude": True, "codex": False, "claude_file": " /x/c.json ", "cache_seconds": "60"}})
@@ -186,6 +284,9 @@ class Settings(unittest.TestCase):
         v = settings.view(cfg, "/x/config.json")
         self.assertTrue(v["usage"]["claude"])
         self.assertFalse(v["usage"]["codex"])
+        cfg, err = settings.build_config({"projects": []}, {"usage": {"mistral": True}})
+        self.assertTrue(cfg["usage"]["mistral"])
+        self.assertIn("__ORIGIN__", settings.view(cfg, "/x/config.json")["usage"]["bookmarklet_src"])
         _, err = settings.build_config({"projects": []}, {"usage": {"cache_seconds": "5"}})
         self.assertIn("usage.cache_seconds", err)
         # Das Token selbst taucht nirgends in Config oder Ansicht auf

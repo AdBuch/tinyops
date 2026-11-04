@@ -93,6 +93,20 @@ Typische Fehler: `ImagePullBackOff` (Cluster hat keinen Zugang zur Registry: `im
 `Pending` (keine StorageClass fürs Volume: `storageClassName` in `deploy/k8s/pvc.yaml`), Preflight im Pod meldet
 Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optional.yaml` nur nach Anpassung einspielen).
 
+## 8. Sonar, KI-Kontingent, Mistral-Lesezeichen (ab 0.7.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 8.1 | Einstellungen → Sonar: Adresse, Token, je Projekt Sonar-Schlüssel, «Verbindung testen» | Schritte grün; falsche Schlüssel werden mit Namen gemeldet |
+| 8.2 | Übersicht nach dem Speichern | Chips «Gate grün/rot/Warnung» an MRs und Branches; rotes Gate steht unter «Braucht dich» |
+| 8.3 | «Sonar» und «Findings» anklicken | Dashboard bzw. offene Findings des MR/Branches in Sonar (nicht das Hauptprojekt) |
+| 8.4 | «Report kopieren» an einem MR mit Findings, dann in einen Texteditor einfügen | Markdown mit Bedingungen, Zählern, Findings je Datei; keine Codezeilen; Zahlen passen zu Sonar |
+| 8.5 | Report an einem Branch ohne Analyse | Kein Knopf (nur bei Gate vorhanden); bei Community Edition «keine Analyse» für MRs ist normal |
+| 8.6 | Einstellungen → KI-Kontingent: Claude lesen, speichern, «Jetzt abfragen» | Prozent frei im 5-h- und Wochenfenster, Reset; bei Fehler ein klarer Grund (Datei, abgelaufen, HTTP-Code) |
+| 8.7 | Dasselbe mit Codex | Ebenso; nur mit ChatGPT-Anmeldung (`codex login`), nicht mit reinem API-Schlüssel |
+| 8.8 | Mistral anzeigen ankreuzen, speichern, Lesezeichen in die Leiste ziehen, auf `admin.mistral.ai` anklicken | Neuer Tab mit tinyops, Meldung «Mistral-Stand übernommen», Kachel zeigt Vibe und API Monat mit Dollar-Werten wie auf der Mistral-Seite |
+| 8.9 | Lesezeichen auf einer anderen Seite anklicken | Hinweis, erst admin.mistral.ai zu öffnen; nichts wird gesendet |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

@@ -59,6 +59,30 @@ class H(BaseHTTPRequestHandler):
             if br == "kaputt":
                 return self._json(500, {"errors": [{"msg": "boom"}]})
             return self._json(404, {"errors": [{"msg": "not found"}]})
+        if u.path == "/api/issues/search":
+            if q.get("componentKeys") != "dlp-core":
+                return self._json(404, {})
+            pr, br = q.get("pullRequest"), q.get("branch")
+            if pr == "8":
+                allv = [{"component": "dlp-core:src/Repo.java", "line": 40 + n, "severity": "MAJOR", "type": "CODE_SMELL", "rule": "java:S100", "message": "Rename method %d" % n}
+                        for n in range(250)]
+                allv.insert(0, {"component": "dlp-core:src/Auth.java", "line": 7, "severity": "BLOCKER", "type": "VULNERABILITY", "rule": "java:S2068",
+                                "message": "Hard-coded   credential\nremove it " + "x" * 400})
+                ps, p = int(q.get("ps", 100)), int(q.get("p", 1))
+                return self._json(200, {"total": len(allv), "paging": {"pageIndex": p, "pageSize": ps, "total": len(allv)},
+                                        "issues": allv[(p - 1) * ps:p * ps],
+                                        "facets": [{"property": "severities", "values": [{"val": "BLOCKER", "count": 1}, {"val": "MAJOR", "count": 250}]},
+                                                   {"property": "types", "values": [{"val": "VULNERABILITY", "count": 1}, {"val": "CODE_SMELL", "count": 250}]}]})
+            if pr == "7":
+                return self._json(200, {"paging": {"total": 0}, "issues": [], "facets": []})
+            if br == "kaputt":
+                return self._json(500, {})
+            return self._json(404, {})
+        if u.path == "/api/hotspots/search":
+            if q.get("pullRequest") == "8":
+                return self._json(200, {"paging": {"total": 1}, "hotspots": [{"component": "dlp-core:src/Crypto.java", "line": 12, "vulnerabilityProbability": "HIGH",
+                                                                           "securityCategory": "weak-cryptography", "message": "Weak hash"}]})
+            return self._json(403, {"errors": [{"msg": "Insufficient privileges"}]})
         self._json(404, {})
 
     def log_message(self, *a):
