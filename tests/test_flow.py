@@ -86,6 +86,36 @@ class Derive(unittest.TestCase):
         self.assertEqual(d["checks"], {"done": 1, "total": 2})
         self.assertEqual(nxt(card([mr(pipeline="failed")]), checklist=cl), ("check", "blocked", "pipeline"))
 
+    def test_review_and_approval(self):
+        self.assertEqual(nxt(card([mr(reviewers=[], approved=False)])), ("check", "do", "reviewer"))
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], approved=False)])), ("check", "wait", "review"))
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], approved=False, upvotes=1)])), ("test", "do", "test"))
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], approved=True, approved_by=["anna"])])), ("test", "do", "test"))
+        # Regeln verlangen noch eine Freigabe: der Daumen reicht nicht
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], upvotes=2, approved=False, approvals_left=1)])), ("check", "wait", "review"))
+        # Merge erst mit Freigabe, auch wenn von Hand auf «Getestet» gesetzt
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], approved=False)], stage="tested", manual_stage=True)), ("merge", "wait", "review"))
+        self.assertIn("@anna", flow.derive(card([mr(reviewers=["anna"], approved=False)]))["next"]["why"])
+        self.assertEqual(nxt(card([mr()])), ("test", "do", "test"))      # Quelle liefert nichts dazu: nicht blockieren
+
+    def test_github_labels(self):
+        d = flow.derive(card([mr(host="github", pipeline="failed", iid=12)]))
+        self.assertIn("PR #12", d["next"]["why"])
+
+    def test_branch_needs_ticket(self):
+        d = flow.derive(card([{"kind": "branch", "branch": "fix/x", "project_id": 3, "project": "core", "title": "WIP fix"}], key="", id="3:fix/x"))
+        self.assertEqual((d["next"]["kind"], d["next"]["id"]), ("blocked", "ticket"))
+        self.assertEqual(d["next"]["action"]["tiny"], {"project_id": 3, "branch": "fix/x", "title": "WIP fix", "project": "core"})
+        self.assertIsNone(d["complete_to"])
+        d = flow.derive(card([mr(pipeline="failed")], key="", id="1:feature/X-1"))
+        self.assertEqual(d["next"]["id"], "ticket")
+
+    def test_complete_to(self):
+        self.assertEqual(flow.derive(card())["complete_to"], "impl")
+        self.assertEqual(flow.derive(card([mr()]))["complete_to"], "tested")
+        self.assertEqual(flow.next_stage(4), "test")
+        self.assertIsNone(flow.next_stage(7))
+
     def test_orphan_flag_and_ideas(self):
         d = flow.derive(card([{"kind": "branch", "branch": "b"}], key="", id="1:b"))
         self.assertIn("ohne Ticket", d["flags"])
@@ -163,7 +193,7 @@ class AppFlow(unittest.TestCase):
         f = ov["flow"]
         self.assertEqual(set(f["items"]), {c["id"] for c in ov["board"]["cards"]})
         kinds = {d["next"]["id"] for d in f["items"].values()}
-        self.assertTrue({"pipeline", "ready", "ci"} <= kinds, kinds)
+        self.assertTrue({"ticket", "ready", "ci", "test"} <= kinds, kinds)
         self.assertTrue(f["reviews"])
         self.assertEqual([p["id"] for p in f["phases"]], [p for p, _ in flow.PHASES])
 
@@ -182,6 +212,27 @@ class AppFlow(unittest.TestCase):
             self.app.flow_action("add", {"key": key, "text": ""})
         with self.assertRaises(server.UserError):
             self.app.flow_action("toggle", {"id": "x"})
+
+    def test_complete_and_tiny_ticket(self):
+        ov = self.app.overview()
+        r = self.app.flow_action("complete", {"id": "DLP-104", "phase": 1})
+        self.assertEqual(r["stage"], "impl")
+        with self.assertRaises(server.UserError) as cm:
+            self.app.flow_action("complete", {"id": "1:feature/proxo-mapping", "phase": 2})
+        self.assertIn("Ticket", str(cm.exception))
+        r = self.app.flow_action("tiny", {"project_id": 1, "branch": "feature/proxo-mapping", "title": "proxo Mapping", "project": "dlp-core"})
+        self.assertTrue(r["key"].startswith("LOC-"))
+        self.assertEqual(r["pool"], "dlp-core")
+        self.app.cache_t = 0.0
+        ov = self.app.overview()
+        card = next(c for c in ov["board"]["cards"] if c["id"] == r["key"])
+        self.assertEqual([x["branch"] for x in card["items"]], ["feature/proxo-mapping"])
+        self.assertNotIn("1:feature/proxo-mapping", {c["id"] for c in ov["board"]["cards"]})
+        self.assertNotEqual(ov["flow"]["items"][r["key"]]["next"]["id"], "ticket")
+        # zweites tiny-Ticket im selben Projekt nimmt dieselbe Kategorie
+        r2 = self.app.flow_action("tiny", {"project_id": 1, "branch": "idea/ui-prototype", "title": "UI", "project": "dlp-core"})
+        self.assertEqual(len([p for p in self.app.store.pools() if p["name"] == "dlp-core"]), 1)
+        self.assertNotEqual(r["key"], r2["key"])
 
     def test_stage_change_gives_points(self):
         self.app.overview()

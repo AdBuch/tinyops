@@ -142,6 +142,20 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 10.8 | Sonar mit Projekt-Analyse-Token | Meldung «keine Berechtigung (HTTP 403) … User-Token» statt «Anmeldung abgelehnt» |
 | 10.9 | Tastatur: j, k, Enter, a, n, Esc | Auswahl springt, Panel öffnet und schliesst, «a» führt den Schritt der Zeile aus |
 
+## 11. GitHub, Reviews, Ticketpflicht (ab 0.14.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 11.1 | Feingranularer Token (nur Lesen), Einstellungen → GitHub, «Verbindung testen» | Anmeldung, Anfragelimit, Repos grün; ein klassischer Token mit `repo` gibt eine Warnung |
+| 11.2 | Repo suchen und hinzufügen, einschalten, speichern | Eigene PRs und Branches erscheinen mit Quelle «GitHub», «PR #N», Checks als Pipeline-Punkt |
+| 11.3 | PR, in dem du als Reviewer angefragt bist | Unter «Andere warten auf dich» mit «Review öffnen» |
+| 11.4 | Eigener GitLab-MR ohne Reviewer | «Reviewer zuweisen»; nach dem Zuweisen «Review abwarten» mit dem Namen |
+| 11.5 | Reviewer gibt 👍 oder Approve | Weiter zu «Manuell testen»; Panel zeigt Daumen bzw. Freigabe mit Namen |
+| 11.6 | Projekt mit Approval-Regel (z. B. 1 Freigabe nötig), nur 👍 | Bleibt bei «Review abwarten», Panel zeigt «noch 1 Freigabe» |
+| 11.7 | Branch ohne Key im Namen | «Ticket zuordnen» (rot); «tiny-Ticket anlegen» erzeugt LOC-N in der Kategorie des Projekts, der Branch hängt daran |
+| 11.8 | ✓ «Schritt erledigt» an einem Ticket in «Testen» | Station «Mergen», XP-Meldung; im Panel «Automatisch» setzt es zurück |
+| 11.9 | Log auf DEBUG während eines Abgleichs | Nur GET-Anfragen an GitHub und an `…/approvals` in GitLab |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

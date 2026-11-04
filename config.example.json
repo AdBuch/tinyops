@@ -68,6 +68,8 @@
     "allow_remote": false
   },
   "sonar": {"enabled": false, "url": "https://sonar.example.intern", "cache_seconds": 300, "max_items": 40},
+  "github": {"enabled": false, "api_url": "https://api.github.com", "repos": [{"full": "owner/repo", "id": 123456, "agent_dir": "", "allow_cloud_agents": false}]},
+  "flow": {"daily_goal": 3},
   "connections": [
     {"id": "dev-vm", "name": "dev-vm", "host": "dev.example.intern", "user": "adrian", "port": 22, "identity_file": "", "host_key": "strict"}
   ],

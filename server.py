@@ -31,6 +31,7 @@ from pathlib import Path
 import agents
 import fnmatch
 import flow
+import github
 import links
 import llm
 import sonar
@@ -43,7 +44,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.13.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.14.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -245,6 +246,15 @@ def jira_cfg(cfg):
 def usage_cfg(cfg):
     c = dict(USAGE_DEFAULTS)
     c.update(cfg.get("usage") or {})
+    return c
+
+
+GITHUB_DEFAULTS = {"enabled": False, "api_url": github.API_DEFAULT, "repos": []}
+
+
+def github_cfg(cfg):
+    c = dict(GITHUB_DEFAULTS)
+    c.update(cfg.get("github") or {})
     return c
 
 
@@ -496,6 +506,21 @@ def derive_state(item):
     return "offen"
 
 
+def identity(cfg, me):
+    """Wer bin ich, wer ist mein Agent: aus den Einstellungen (Meine Commits) und dem angemeldeten Konto."""
+    bf = branch_cfg(cfg)
+
+    def low(xs):
+        return {str(x).strip().lower() for x in xs if str(x).strip()}
+
+    emails = low(list(cfg.get("my_emails") or []) + list(bf["emails"]) +
+                 [me.get("email") or "", me.get("public_email") or "", me.get("commit_email") or ""])
+    names = low(list(bf["names"]) + [me.get("name") or ""])
+    return {"emails": emails, "names": names,
+            "agent_emails": low(bf["agent_emails"]), "agent_names": low(bf["agent_names"]),
+            "patterns": [p.lower() for p in bf["agent_message_patterns"] if p]}
+
+
 def classify_commits(commits, ident):
     """Wem gehört ein Branch? Betrachtet alle Commits, die der Branch dem Default-Branch voraus hat.
 
@@ -549,23 +574,30 @@ class GitLabClient:
             "author": (mr.get("author") or {}).get("username", ""),
             "can_deploy": pid in self.proj_cfg,
             "merge_status": mr.get("detailed_merge_status") or "",   # GitLab ab 15.6: mergeable, not_approved, conflict, ...
+            "reviewers": [r.get("username", "") for r in (mr.get("reviewers") or [])] if "reviewers" in mr else None,
+            "upvotes": int(mr.get("upvotes") or 0), "host": "gitlab",
+            "approved": None, "approved_by": [], "approvals_left": None,
         }
+        if kind == "mr":
+            self._approvals(item)
         item["age_days"] = age_days(item["updated_at"])
         item["state"] = derive_state(item) if kind == "mr" else "review"
         return item
 
+    def _approvals(self, item):
+        """Freigaben eines eigenen MR (ein GET je MR). Fehlt das Recht oder die Funktion, bleibt es «unbekannt»."""
+        try:
+            a = self.http.get("/projects/%s/merge_requests/%s/approvals" % (item["project_id"], item["iid"]))
+        except UserError as e:
+            glog.debug("Freigaben von !%s nicht lesbar: %s", item["iid"], e)
+            return
+        item["approved_by"] = [((x.get("user") or {}).get("username") or "") for x in (a.get("approved_by") or [])]
+        left = a.get("approvals_left")
+        item["approvals_left"] = int(left) if isinstance(left, int) else None
+        item["approved"] = bool(item["approved_by"])     # «approved» von GitLab ist auch ohne Regeln wahr; zählt nur, wer wirklich freigegeben hat
+
     def _identity(self, me):
-        bf = branch_cfg(self.cfg)
-
-        def low(xs):
-            return {str(x).strip().lower() for x in xs if str(x).strip()}
-
-        emails = low(list(self.cfg["my_emails"]) + list(bf["emails"]) +
-                     [me.get("email") or "", me.get("public_email") or "", me.get("commit_email") or ""])
-        names = low(list(bf["names"]) + [me.get("name") or ""])
-        return {"emails": emails, "names": names,
-                "agent_emails": low(bf["agent_emails"]), "agent_names": low(bf["agent_names"]),
-                "patterns": [p.lower() for p in bf["agent_message_patterns"] if p]}
+        return identity(self.cfg, me)
 
     def _classify(self, pid, default, b, ident):
         sha = (b.get("commit") or {}).get("id", "")
@@ -912,7 +944,8 @@ class DemoClient:
             self._item("mr", 35, "Sonar: Findings Welle 1", "agent/sonar-wave-1", 3, "failed"),
             self._item("mr", 29, "Labelo: Graph-Client Refactoring", "feature/DLP-103-labelo-client", 9, "success", draft=True),
         ]
-        mine[1]["merge_status"] = "not_approved"
+        for m, rv, up, by in ((mine[0], ["kollege"], 0, []), (mine[1], ["kollege"], 1, ["kollege"]), (mine[2], [], 0, []), (mine[3], [], 0, [])):
+            m.update(reviewers=rv, upvotes=up, approved=bool(by), approved_by=by, host="gitlab", merge_status="mergeable" if by else "")
         for name, days, ahead, by_me, by_agent in (
                 ("feature/proxo-mapping", 14, 5, True, False),
                 ("idea/ui-prototype", 22, 2, True, True),
@@ -928,10 +961,14 @@ class DemoClient:
         assigned = [self._item("assigned", 47, "Sonar: Quality Gate anpassen", "feature/DLP-150-sonar-gate", 4, "success")]
         for r in review + assigned:
             r["author"] = "kollege"
+        gh = self._item("mr", 7, "Webhook-Empfänger für GitHub", "feature/DLP-105-webhooks", 2, "success", project="adrian/tinyops-hooks")
+        gh.update(project_id=github.pid_of(42), host="github", url="https://github.com/adrian/tinyops-hooks/pull/7", reviewers=["octocat"], upvotes=0,
+                  approved=False, approved_by=[], merge_status="mergeable", can_deploy=False)
+        mine.insert(4, gh)
         sink.update(me="demo", errors=[])
-        sink.setdefault("mine", []).extend(mine[:4])
+        sink.setdefault("mine", []).extend(mine[:5])
         pause("gl-1", "Projekt dlp-core", "4 MR")
-        sink["mine"].extend(mine[4:])
+        sink["mine"].extend(mine[5:])
         sink.setdefault("review", []).extend(review)
         pause("gl-2", "Projekt dlp-ui", "3 Branches")
         pause("gl-review", "Review-Queue", "%d MR" % len(review))
@@ -1148,7 +1185,8 @@ class App:
         self._types_cache = {}
         self._by_key = {}
         self.problems = []
-        self.client, self.jira = None, None
+        self.client, self.jira, self.github = None, None, None
+        self.ghc = github_cfg(cfg)
         self.cache, self.cache_t = None, 0.0
         self.hd_cache, self.hd_t = None, 0.0
         self.over_limit = False
@@ -1185,6 +1223,16 @@ class App:
                     self.jira = JiraClient(self.jc, jira_auth_header(self.jc, secrets), ctx)
                 except SystemExit as e:
                     self.problems.append(str(e))
+        if self.ghc["enabled"]:
+            if not secrets.get("github_token"):
+                self.problems.append("GitHub-Token fehlt.")
+            elif not self.ghc["repos"]:
+                self.problems.append("GitHub ist eingeschaltet, aber es ist kein Repo ausgewählt.")
+                self.github = github.Client(self.ghc["api_url"], secrets["github_token"], ctx)
+            else:
+                self.github = github.Client(self.ghc["api_url"], secrets["github_token"], ctx)
+        if not self.client and self.github:
+            self.problems = [p for p in self.problems if not p.startswith("GitLab")]   # nur GitHub ist auch eine gültige Einrichtung
         if self.sc["enabled"]:
             if not self.sc["url"]:
                 self.problems.append("Sonar-Adresse fehlt.")
@@ -1197,7 +1245,7 @@ class App:
 
     @property
     def configured(self):
-        return self.client is not None
+        return self.client is not None or self.github is not None
 
     @staticmethod
     def _scope_key(key, pr, br):
@@ -1325,6 +1373,25 @@ class App:
         log.info("Einstellungen neu geladen: GitLab %s, Jira %s, %d Projekt(e)", "ja" if self.client else "nein",
                  "ja" if self.jira else "nein", len(cfg["projects"]))
 
+    def _key_rules(self):
+        allowed = list(self.jc.get("project_keys") or [])
+        return allowed + [links.LOCAL_PREFIX] if allowed else allowed   # tiny-Tickets (LOC-…) zählen im Branchnamen immer
+
+    def _local_keys(self, data):
+        """Ohne Jira: Keys aus Branchnamen und Hand-Verknüpfungen trotzdem setzen, damit tiny-Tickets ihre Branches finden."""
+        manual = self.store.links()
+        by_key = {t["key"]: self._local_ticket(t) for t in self.store.tasks()}
+        self._by_key = by_key
+        for it in data["mine"] + data["review"] + data["assigned"]:
+            keys = [k for k in extract_keys("%s %s" % (it["branch"], it["title"])) if links.is_local_key(k)]
+            m = manual.get(it["ref"])
+            it["manual_link"] = m or ""
+            it["keys"] = [m] if m else keys
+            it["ticket"] = next((by_key[k] for k in it["keys"] if k in by_key), None)
+            it["ticket_unknown"] = ""
+            it["no_ticket"] = (not it["keys"]) and it["kind"] in ("mr", "branch")
+            it["create_url"] = ""
+
     # -- Jira-Verknüpfung (läuft beim Auffrischen des Caches)
     def _jira_data(self, data, pre=None):
         j = self.jira
@@ -1339,7 +1406,7 @@ class App:
             types = {t.lower() for t in (self.jc.get("wip_issue_types") or [])}
             if types:
                 inprog = [i for i in inprog if i["type"].lower() in types]
-            allowed = self.jc.get("project_keys")
+            allowed = self._key_rules()
             manual = self.store.links()
             for it in items:
                 it["keys"] = extract_keys("%s %s" % (it["branch"], it["title"]), allowed)
@@ -1458,7 +1525,9 @@ class App:
                  "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
                  "sonar_trend": (it.get("sonar") or {}).get("trend"),
                  "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
-                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent"))}
+                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
+                 "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
+                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab")}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1475,9 +1544,9 @@ class App:
             for i in p["items"]:
                 pools.setdefault(i["value"], []).append({"id": p["id"], "name": p["name"]})
         jira_prog = {st["key"] for st in (j or {}).get("stories", [])}
-        keys = set(jira_prog) | set(known) | {k for k in stages if not links.is_ref_key(k)} | set(self.store.pool_tickets())
-
         mine_keys = {k for it in data["mine"] for k in it.get("keys", [])}
+        # auch Keys, die Jira (noch) nicht kennt: sonst verschwände ein eigener MR mit Tippfehler im Key aus Board und Fokus
+        keys = set(jira_prog) | set(known) | {k for k in stages if not links.is_ref_key(k)} | set(self.store.pool_tickets()) | mine_keys
 
         def derive(tk, linked):
             if tk and tk.get("in_progress"):
@@ -1490,7 +1559,7 @@ class App:
                 continue   # Tickets nur, wenn sie in Arbeit, im Pool, auf dem Board oder mit eigenem MR/Branch verbunden sind
             linked = self._linked(k, items)
             st = stages.get(k)
-            card = {"id": k, "key": k, "title": (tk or {}).get("summary", ""), "status": (tk or {}).get("status", ""), "url": (tk or {}).get("url", ""),
+            card = {"id": k, "key": k, "title": (tk or {}).get("summary", "") or next((x.get("title", "") for x in linked if x.get("title")), ""), "status": (tk or {}).get("status", ""), "url": (tk or {}).get("url", ""),
                     "local": bool(tk and tk.get("local")), "known": tk is not None, "type": (tk or {}).get("type", ""), "items": linked,
                     "stage": st["stage"] if st else derive(tk, linked), "manual_stage": bool(st), "updated": st["updated"] if st else 0,
                     "pools": pools.get(k, []), "jira_in_progress": k in jira_prog, "sprint": (tk or {}).get("sprint", "")}
@@ -1545,7 +1614,9 @@ class App:
                 "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
                  "sonar_trend": (it.get("sonar") or {}).get("trend"),
                  "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
-                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent"))}
+                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
+                 "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
+                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab")}
 
     def board_action(self, action, body):
         st = self.store
@@ -1659,7 +1730,13 @@ class App:
                 raise pre_holder["e"]
             return pre_holder["v"]
         try:
-            data = self.client.fetch(sink, step)
+            if self.client is None:
+                data = sink if sink is not None else {}
+                data.update(me=data.get("me", ""), errors=data.get("errors", []))
+                for k in ("mine", "review", "assigned"):
+                    data.setdefault(k, [])
+            else:
+                data = self.client.fetch(sink, step)
         except UserError as e:
             rlog.error("GitLab-Abfrage fehlgeschlagen: %s", e)
             step("gl-user", "Bei GitLab anmelden", "err", str(e))
@@ -1668,8 +1745,12 @@ class App:
             for k in ("mine", "review", "assigned"):
                 data.setdefault(k, [])
             data.setdefault("errors", []).append(str(e))
+        if self.github:
+            self._github_fetch(data, step)
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["ref"] = links.ref_of(it["project_id"], it["branch"])
+        if not self.jira:
+            self._local_keys(data)
         if self.jira:
             step("ji-link", "Tickets mit Branches verknüpfen", "run")
             data["jira"] = self._jira_data(data, pre)
@@ -1684,6 +1765,13 @@ class App:
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
         return data
+
+    def _github_fetch(self, data, step):
+        bf = branch_cfg(self.cfg)
+        ign = list(bf.get("ignore_branches") or [])
+        ident = identity(self.cfg, {})
+        repos = [r["full"] for r in self.ghc["repos"] if r.get("full")]
+        self.github.fetch(repos, ident, classify_commits, bf, lambda b: ignored_branch(b, ign), data, step)
 
     def _sonar(self, data, step):
         """Quality Gate jedes MR und Branches (nur lesend). Ergebnisse stehen danach in it["sonar"]; ein einzelner Fehler stoppt nichts,
@@ -1758,7 +1846,7 @@ class App:
                 "assigned": [dict(i) for i in p.get("assigned", [])], "errors": list(p.get("errors", [])), "partial": True}
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["ref"] = links.ref_of(it["project_id"], it["branch"])
-            it["keys"] = extract_keys("%s %s" % (it["branch"], it["title"]), self.jc.get("project_keys")) if self.jira else []
+            it["keys"] = extract_keys("%s %s" % (it["branch"], it["title"]), self._key_rules()) if self.jira else []
         if self.jira:
             st = self.early_stories
             data["jira"] = {"enabled": True, "ok": st is not None, "loading": st is None, "partial": True, "limit": int(self.jc["story_limit"]),
@@ -2027,11 +2115,45 @@ class App:
             if action == "delete":
                 st.check_delete(int(b.get("id")))
                 return {"ok": True}
+            if action == "complete":
+                return self._flow_complete(b)
+            if action == "tiny":
+                return self._flow_tiny(b)
         except (TypeError, ValueError):
             raise UserError("Teilschritt-Nummer fehlt.")
         except links.LinkError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    def _flow_complete(self, b):
+        """«Schritt erledigt»: setzt die nächste Station von Hand. Branches und MRs ohne Ticket dürfen das nicht."""
+        cid = str(b.get("id") or "")
+        if not cid or cid.startswith("idea:"):
+            raise UserError("Ideen werden mit «Einplanen» übernommen.")
+        if links.is_ref_key(cid):
+            raise UserError("Ein Branch braucht zuerst ein Jira- oder tiny-Ticket. Erst «Ticket zuordnen», dann geht es weiter.")
+        try:
+            phase = int(b.get("phase"))
+        except (TypeError, ValueError):
+            raise UserError("Station fehlt.")
+        stage = flow.next_stage(phase)
+        if stage is None:
+            raise UserError("Schon fertig.")
+        self.board_action("stage", {"key": cid, "stage": stage})
+        return {"stage": stage}
+
+    def _flow_tiny(self, b):
+        """Ein tiny-Ticket für einen Branch oder MR ohne Ticket: Aufgabe in «Umsetzung», Kategorie = Projekt, Branch verknüpft."""
+        pid, branch = self._ref(b)
+        title = " ".join(str(b.get("title") or branch).split())[:200]
+        pname = (str(b.get("project") or "") or (self.proj_cfg.get(pid) or {}).get("name") or "Projekt %s" % pid)[:60]
+        pool = next((p for p in self.store.pools() if p["name"].lower() == pname.lower()), None)
+        pool_id = pool["id"] if pool else self._local(self.store.add_pool, pname)
+        key = self._local(self.store.task_add, title, "impl", pool_id)
+        self._local(self.store.link, pid, branch, key)
+        log.info("tiny-Ticket %s für %s:%s angelegt (Kategorie %s)", key, pid, branch, pname)
+        self.cache_t = 0.0
+        return {"key": key, "pool": pname}
 
     # -- Coding-Agenten an Tickets
     def agents_view(self):
@@ -2435,6 +2557,12 @@ def make_handler(app):
                 res = settings.test_sonar(body, stored)
                 hlog.info("Test Sonar: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
+            if path == "/api/settings/test/github":
+                res = settings.test_github(body, stored)
+                hlog.info("Test GitHub: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
+            if path == "/api/settings/github/repos":
+                return self._send(200, settings.search_github(body, stored))
             if path == "/api/settings/test/agent":
                 res = settings.test_agent(body, stored)
                 hlog.info("Test Agent: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
@@ -2504,6 +2632,8 @@ def resolve_secrets(cfg, demo, show=False):
         names.append("llm_key")
     if not demo and sonar_cfg(cfg).get("enabled"):
         names.append("sonar_token")
+    if not demo and github_cfg(cfg).get("enabled"):
+        names.append("github_token")
     out = {}
     for name in names:
         try:
@@ -2559,6 +2689,8 @@ def run_preflight(cfg, config_path, demo):
     jc = jira_cfg(cfg)
     if sonar_cfg(cfg).get("enabled") and not demo:
         line("ok" if secrets.get("sonar_token") else "fail", "Sonar-Token", "gefunden" if secrets.get("sonar_token") else "fehlt (TINYOPS_SONAR_TOKEN, Einstellungen)")
+    if github_cfg(cfg).get("enabled") and not demo:
+        line("ok" if secrets.get("github_token") else "fail", "GitHub-Token", "gefunden" if secrets.get("github_token") else "fehlt (TINYOPS_GITHUB_TOKEN, Einstellungen)")
     if jc["url"] and not demo:
         n = "jira_token" if jc["auth"] == "bearer" else "jira_password"
         line("ok" if secrets.get(n) else "fail", "Jira-Zugang (%s)" % n, "gefunden" if secrets.get(n) else "fehlt")

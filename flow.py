@@ -32,6 +32,28 @@ def branch_cmd(key, title):
     return "git switch -c %s" % name
 
 
+def mr_label(m):
+    return ("PR #%s" if m.get("host") == "github" else "MR !%s") % m.get("iid")
+
+
+def _approval(m):
+    """(Freigabe da?, Reviewer zugewiesen?) oder None, wenn die Quelle es nicht liefert."""
+    if m.get("reviewers") is None and m.get("approved") is None:
+        return None
+    ok = bool(m.get("approved") or m.get("approved_by") or (m.get("upvotes") or 0) > 0)
+    if m.get("approvals_left"):          # Regeln im Projekt verlangen noch Freigaben: ein Daumen reicht dann nicht
+        ok = False
+    return ok, bool(m.get("reviewers") or m.get("approved_by"))
+
+
+def next_stage(phase):
+    """Board-Stufe für «Schritt erledigt»: die nächste Station, die man von Hand setzen kann (Branch und MR sind Tatsachen)."""
+    for q in range(phase + 1, len(PHASES)):
+        if q in PHASE_TO_STAGE:
+            return PHASE_TO_STAGE[q]
+    return None
+
+
 def _mr_rank(m):
     """Wie weit ist ein MR? Der am wenigsten fortgeschrittene bestimmt den Schritt (Engpass)."""
     if m.get("draft"):
@@ -41,6 +63,9 @@ def _mr_rank(m):
     if m.get("pipeline") in RUNNING:
         return 2
     if (m.get("merge_status") or "") in ("discussions_not_resolved", "not_approved", "approvals_syncing"):
+        return 3
+    ap = _approval(m)
+    if ap is not None and not ap[0]:
         return 3
     return 4
 
@@ -66,34 +91,41 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
         data, nxt = 0, _step("do", "plan", "Einplanen", "Eine Idee. Kategorie wählen und ins Board übernehmen.", action="plan")
     elif mrs:
         m = sorted(mrs, key=_mr_rank)[0]
-        ms, label = m.get("merge_status") or "", "!%s" % m.get("iid")
+        ms, label = m.get("merge_status") or "", mr_label(m)
+        ap = _approval(m)
+        what = "PR" if m.get("host") == "github" else "MR"
         more = " (und %d weitere MR)" % (len(mrs) - 1) if len(mrs) > 1 else ""
         url = m.get("url", "")
         if m.get("draft"):
             data = 3
-            nxt = _step("do", "ready", "Draft fertigstellen", "MR %s ist noch Draft%s. Fertig? Dann «Mark as ready» in GitLab." % (label, more), url=url)
+            nxt = _step("do", "ready", "Draft fertigstellen", "%s ist noch Draft%s. Fertig? Dann «Mark as ready» in %s." % (label, more, "GitHub" if what == "PR" else "GitLab"), url=url)
         elif ms in ("conflict", "need_rebase"):
             data = 4
-            nxt = _step("blocked", "rebase", "Konflikt lösen", "MR %s lässt sich nicht mergen: %s." % (label, "Konflikt" if ms == "conflict" else "Rebase nötig"), url=url)
+            nxt = _step("blocked", "rebase", "Konflikt lösen", "%s lässt sich nicht mergen: %s." % (label, "Konflikt" if ms == "conflict" else "Rebase nötig"), url=url)
         elif m.get("pipeline") == "failed":
             data = 4
-            nxt = _step("blocked", "pipeline", "Pipeline reparieren", "Die Pipeline von MR %s ist rot." % label, url=m.get("pipeline_url") or url)
+            nxt = _step("blocked", "pipeline", "Pipeline reparieren", "Die Pipeline von %s ist rot." % label, url=m.get("pipeline_url") or url)
         elif m.get("sonar") == "ERROR":
             data = 4
-            nxt = _step("blocked", "sonar", "Sonar-Findings beheben", (m.get("sonar_detail") or "Quality Gate rot") + " (MR %s)." % label,
+            nxt = _step("blocked", "sonar", "Sonar-Findings beheben", (m.get("sonar_detail") or "Quality Gate rot") + " (%s)." % label,
                         report={"project_id": m.get("project_id"), "iid": m.get("iid"), "branch": m.get("branch")}, url=m.get("sonar_issues_url") or m.get("sonar_url") or url)
         elif m.get("pipeline") in RUNNING:
             data = 4
-            nxt = _step("wait", "ci", "Pipeline läuft", "Warten auf die CI von MR %s." % label, owner="ci", url=m.get("pipeline_url") or url)
+            nxt = _step("wait", "ci", "Pipeline läuft", "Warten auf die CI von %s." % label, owner="ci", url=m.get("pipeline_url") or url)
         elif ms == "discussions_not_resolved":
             data = 4
-            nxt = _step("do", "threads", "Kommentare klären", "Im MR %s sind Diskussionen offen." % label, url=url)
-        elif ms in ("not_approved", "approvals_syncing"):
+            nxt = _step("do", "threads", "Kommentare klären", "Im %s sind Diskussionen offen." % label, url=url)
+        elif ap is not None and not ap[1] and not ap[0]:
             data = 4
-            nxt = _step("wait", "review", "Review abwarten", "MR %s braucht noch eine Freigabe." % label, owner="others", url=url)
+            nxt = _step("do", "reviewer", "Reviewer zuweisen", "%s hat noch keinen Reviewer. Ohne Review kein Merge." % label, url=url)
+        elif ms in ("not_approved", "approvals_syncing") or (ap is not None and not ap[0]):
+            data = 4
+            who = ", ".join("@" + r for r in (m.get("reviewers") or []) if r)
+            nxt = _step("wait", "review", "Review abwarten", "%s braucht noch ein Approve oder einen 👍%s." % (label, (" (Reviewer: %s)" % who) if who else ""),
+                        owner="others", url=url)
         else:
             data = 5
-            nxt = _step("do", "test", "Manuell testen", "Pipeline und Gate sind in Ordnung (MR %s). Testen, dann als getestet markieren." % label,
+            nxt = _step("do", "test", "Manuell testen", "Pipeline und Gate sind in Ordnung (%s). Testen, dann als getestet markieren." % label,
                         stage="tested", url=url)
     elif branches:
         b = branches[0]
@@ -110,6 +142,13 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
     else:
         data = 0
         nxt = _step("do", "start", "Loslegen", "Geplant. Loslegen heisst: Branch anlegen oder einen Agenten zuweisen.", copy=branch_cmd(key, title), stage="impl")
+
+    # -- Ein Branch oder MR braucht ein Ticket (Jira oder tiny), bevor es weitergeht
+    if items and not key and not card.get("idea_id"):
+        first = (mrs or branches)[0]
+        nxt = _step("blocked", "ticket", "Ticket zuordnen", "Ohne Ticket geht es nicht weiter: tiny-Ticket anlegen (ein Klick) oder ein Jira-Ticket zuordnen.",
+                    tiny={"project_id": first.get("project_id"), "branch": first.get("branch"), "title": first.get("title") or card.get("title") or first.get("branch"),
+                          "project": first.get("project", "")})
 
     # -- Übersteuerung im Board
     manual = STAGE_TO_PHASE.get(card.get("stage")) if card.get("manual_stage") and not card.get("idea_id") else None
@@ -150,7 +189,8 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
         nxt = _step("do", "check", open_checks[0]["text"], "Teilschritt %d von %d. Danach: %s." % (done_n + 1, len(checklist), nxt["label"]),
                     check=open_checks[0]["id"], then=nxt)
 
-    return {"phase": phase, "phase_id": PHASES[phase][0], "override": manual is not None and manual != data, "data_phase": data,
+    can = next_stage(phase) if phase < 7 and not card.get("idea_id") and not (items and not key) else None
+    return {"phase": phase, "phase_id": PHASES[phase][0], "override": manual is not None and manual != data, "data_phase": data, "complete_to": can,
             "next": nxt, "flags": flags, "checks": {"done": len(checklist) - len(open_checks), "total": len(checklist)}}
 
 
@@ -185,7 +225,7 @@ def review_view(data):
         rev = it.get("kind") == "review"
         out.append({"id": it.get("ref") or "%s:%s" % (it.get("project_id"), it.get("branch")), "title": it.get("title", ""), "project": it.get("project", ""),
                     "iid": it.get("iid"), "url": it.get("url", ""), "author": it.get("author", ""), "age_days": it.get("age_days", 0),
-                    "pipeline": it.get("pipeline", "none"), "keys": it.get("keys") or [],
+                    "pipeline": it.get("pipeline", "none"), "keys": it.get("keys") or [], "host": it.get("host", "gitlab"),
                     "next": _step("do", "do_review" if rev else "assigned", "Review machen" if rev else "Zugeteilten MR ansehen",
                                   "%s wartet seit %d Tag%s auf dich." % (it.get("author") or "Jemand", it.get("age_days", 0), "" if it.get("age_days", 0) == 1 else "en"),
                                   url=it.get("url", ""))})

@@ -5,6 +5,27 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.14.0]
+
+### Neu
+- **GitHub als Quelle** (github.com oder GitHub Enterprise, nur lesend): Einstellungen → GitHub mit Token, Verbindungstest (Anmeldung, Anfragelimit,
+  Zugriff je Repo, Warnung bei Tokens mit Schreibrechten) und Repo-Suche. Aus den gewählten Repos kommen deine PRs und Branches, aus allen sichtbaren Repos
+  die Review-Anfragen und dir zugewiesenen PRs. PRs bringen Checks/Status (als Pipeline), Mergezustand (Konflikt, hinter main), angefragte Reviewer,
+  Approves und Daumen hoch mit. Sie fahren denselben Ablauf wie GitLab-MRs, tragen die Quelle «GitHub» und heissen «PR #N».
+  Agenten lassen sich auch GitHub-Repos zuweisen (Agent-Ordner und Cloud-Freigabe je Repo). Auch ohne GitLab nutzbar.
+- **Review vor dem Merge:** Ein MR ohne Reviewer hat als Schritt «Reviewer zuweisen». Mit Reviewer, aber ohne Approve und ohne 👍 heisst er «Review abwarten»
+  (unter «Läuft gerade», mit Namen der Reviewer). Weiter zu Testen und Mergen geht es erst mit Approve oder 👍. Verlangen die Regeln im GitLab-Projekt noch Freigaben,
+  reicht der Daumen nicht. Auch von Hand auf «Getestet» gesetzt bleibt «Mergen» blockiert, bis die Freigabe da ist. Im Detail-Panel stehen Reviewer, Approves und Daumen.
+  GitLab: Reviewer und Daumen kommen aus der MR-Liste, die Freigaben aus einem zusätzlichen GET je eigenem MR.
+- **Schritt erledigt:** Ein ✓ neben dem Knopf jeder Zeile (und gross in «Jetzt dran» und im Panel) schliesst die aktuelle Station ab und setzt die nächste
+  von Hand. Zählt im Spielstand wie jeder Fortschritt; «Automatisch» im Panel nimmt es zurück.
+- **Ein Branch braucht ein Ticket:** Branches und MRs ohne Jira- oder tiny-Ticket haben als Schritt «Ticket zuordnen» (blockiert, rot). Ein Klick legt ein tiny-Ticket an:
+  Titel aus dem Branch, Station «Umsetzung», Kategorie = Projekt (wird bei Bedarf angelegt), der Branch hängt daran. «Schritt erledigt» geht vorher nicht.
+  tiny-Keys (LOC-…) im Branchnamen werden auch mit gesetzten Jira-Projektschlüsseln erkannt, und auch ganz ohne Jira.
+
+### Korrekturen
+- Ein eigener MR, dessen Key Jira nicht kennt (Tippfehler, kein Zugriff), verschwand aus Board und Fokus. Er erscheint jetzt als eigene Karte mit dem Titel des MR.
+
 ## [0.13.0]
 
 ### Neu

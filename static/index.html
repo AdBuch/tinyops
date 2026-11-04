@@ -239,7 +239,8 @@
   .ptab .pr { padding: 3px 4px; border-radius: 8px; } .ptab .pr:hover { background: var(--raised); }
   .ptab input[type=text] { width: 100%; min-width: 0; padding: 4px 8px; font-size: 13px; }
   .ptab .pc { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--quiet); white-space: nowrap; }
-  @media (max-width: 800px) { .ptab .ph { display: none; } .ptab .pr { grid-template-columns: 1fr 1fr; } }
+  .ptab.gh .ph, .ptab.gh .pr { grid-template-columns: minmax(180px, 2fr) minmax(110px, 1fr) 96px 28px; }
+  @media (max-width: 800px) { .ptab .ph { display: none; } .ptab .pr, .ptab.gh .pr { grid-template-columns: 1fr 1fr; } }
   .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--ground) 94%, transparent); backdrop-filter: blur(8px);
              border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 14px; justify-content: center; align-items: center; z-index: 6; }
   table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -497,7 +498,7 @@
   .fgroup summary::-webkit-details-marker { display: none; }
   .fgroup summary::before { content: "▸"; color: var(--quiet); } .fgroup details[open] summary::before { content: "▾"; }
   .flist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .frow { display: grid; grid-template-columns: 136px minmax(0, 1fr) minmax(200px, 34%) 150px; gap: 18px; align-items: center; padding: 10px 14px 10px 16px;
+  .frow { display: grid; grid-template-columns: 136px minmax(0, 1fr) minmax(200px, 34%) 196px; gap: 18px; align-items: center; padding: 10px 14px 10px 16px;
           border-top: 1px solid var(--line); cursor: pointer; box-shadow: inset 3px 0 0 var(--kc); }
   .frow:first-child { border-top: 0; }
   .frow:hover { background: var(--raised); }
@@ -514,6 +515,8 @@
   .fnext b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fnext small { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .fown { width: 18px; display: flex; }
+  .fbtns { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .fdone { padding: 5px 8px; color: var(--quiet); } .fdone:hover { color: var(--ok); border-color: var(--ok); }
   .fgo { justify-self: end; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; max-width: 150px; overflow: hidden; }
   .fgo span { overflow: hidden; text-overflow: ellipsis; }
   .frow.k-do .fgo, .frow.k-blocked .fgo { border-color: color-mix(in srgb, var(--kc) 45%, var(--line)); color: var(--kc); font-weight: 650; }
@@ -589,7 +592,7 @@
   @keyframes bfly { to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
   .toast.xpt { background: var(--xp-bg); color: var(--xp); font-weight: 700; border: 1px solid color-mix(in srgb, var(--xp) 35%, transparent); }
   @media (prefers-reduced-motion: reduce) { #fx, .ring .fg { transition: none; } .trk li.now i { animation: none !important; } .burst { display: none; } }
-  @media (max-width: 1280px) { .frow { grid-template-columns: 110px minmax(0, 1fr) 130px; } .frow .fnext { display: none; } .trk { width: 110px; } }
+  @media (max-width: 1280px) { .frow { grid-template-columns: 110px minmax(0, 1fr) 180px; } .frow .fnext { display: none; } .trk { width: 110px; } }
   @media (max-width: 960px) {
     #viewFocus { grid-template-columns: minmax(0, 1fr); padding: 14px 16px 100px; } #fRail { position: static; }
     #fx { width: 100vw; top: 0; z-index: 12; } .hero h2 { font-size: 25px; }
@@ -1702,6 +1705,7 @@ document.getElementById('refresh').onclick = async () => {
 let S = null;          // Antwort von /api/settings
 let P = [];            // Arbeitskopie der Projekte
 let CN = [], AGC = []; // Arbeitskopien der SSH-Verbindungen und Agenten
+let GH = [];           // Arbeitskopie der GitHub-Repos
 let view = 'focus';
 
 function setView(v) {
@@ -1777,7 +1781,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -1846,6 +1850,21 @@ async function loadSettings() {
     <div class="row"><button class="primary" id="ji-test">Verbindung testen</button>
       ${(S.secrets.jira_token.set || S.secrets.jira_password.set) ? '<button id="ji-del">Gespeicherte Zugangsdaten löschen</button>' : ''}</div>
     <div id="ji-result"></div>`)}
+
+  ${sect('github', 'GitHub', 'Zusätzlich zu GitLab: eigene Pull Requests, eigene Branches, Review-Anfragen und dir zugewiesene PRs von github.com oder GitHub Enterprise. Nur lesend: tinyops stellt ausschliesslich GET-Anfragen.', `
+    <label class="check"><input type="checkbox" id="gh-on" ${S.github.enabled ? 'checked' : ''}><span><strong>GitHub einschalten</strong></span></label>
+    <div class="grid2">
+      ${field('gh-api', 'API-Adresse', S.github.api_url, { err: 'github.api_url', ph: 'https://api.github.com', help: 'github.com: https://api.github.com · Enterprise: https://host/api/v3' })}
+      ${field('gh-secret', 'Token', '', { type: 'password', err: 'github_token', ph: S.secrets.github_token.set ? '•••••••• gespeichert' : 'github_pat_…', help: secretHelp('github_token', 'Token') + ' Feingranularer Token, nur Lesen: Metadata, Contents, Pull requests, Commit statuses, Checks.' })}
+    </div>
+    <div class="row"><button class="primary" id="gh-test">Verbindung testen</button>${S.secrets.github_token.set ? '<button id="gh-del">Gespeicherten Token löschen</button>' : ''}</div>
+    <div id="gh-result"></div>
+    <h3>Repos</h3>
+    <div class="quiet small" style="margin-bottom:8px">Aus diesen Repos kommen deine PRs und Branches. Review-Anfragen und zugewiesene PRs kommen aus allen Repos, die der Token sehen darf.</div>
+    <div id="gh-list"></div>
+    <div class="row"><input type="text" id="gh-q" style="max-width:340px" placeholder="Name oder owner/name suchen" autocomplete="off"><button id="gh-search">Suchen</button></div>
+    <div id="gh-res" style="margin-top:8px"></div>
+    <div class="ferr" data-err="github.repos"></div>`)}
 
   ${sect('sonar', 'SonarQube', 'Zeigt das Quality Gate je MR und Branch. Nur lesend: tinyops stellt ausschliesslich GET-Anfragen. Den Sonar-Schlüssel trägst du je Projekt unter GitLab ein.', `
     <label class="check"><input type="checkbox" id="sq-on" ${S.sonar.enabled ? 'checked' : ''}><span><strong>Sonar einschalten</strong></span></label>
@@ -1918,6 +1937,9 @@ async function loadSettings() {
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
     <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
   CN = (S.connections || []).map(c => ({ ...c })); AGC = (S.agents || []).map(a => ({ ...a })); renderAgentCfg();
+  GH = ((S.github || {}).repos || []).map(r => ({ ...r })); renderGhRepos();
+  $('gh-test').onclick = testGithub; $('gh-search').onclick = searchGithub; $('gh-q').onkeydown = ev => { if (ev.key === 'Enter') searchGithub(); };
+  if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
   renderLlmKey();
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
@@ -2105,6 +2127,45 @@ async function suggestIdentity() {
   });
 }
 
+// ---- GitHub: Repos
+function ghForm() { return { api_url: val('gh-api'), ca_bundle: val('gl-ca'), secret: $('gh-secret').value, repos: GH }; }
+function renderGhRepos() {
+  const box = $('gh-list'); if (!box) return;
+  box.innerHTML = GH.length ? `<div class="ptab gh" role="table" aria-label="GitHub-Repos"><div class="ph" role="row"><span>Repo</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Repo-Name)">Agent-Ordner</span><span title="Darf Claude, Codex oder Vibe Prompt und Code dieses Repos an den Anbieter senden?">Cloud-Agent</span><span></span></div>` +
+    GH.map((r, i) => `<div class="pr" role="row"><span title="${r.id ? 'Repo-ID ' + esc(r.id) : 'ID wird beim Test ermittelt'}">${esc(r.full)}</span>
+      <input type="text" data-gha="${i}" value="${esc(r.agent_dir || '')}" placeholder="${esc(r.full.split('/').pop())}" aria-label="Agent-Ordner">
+      <label class="pc"><input type="checkbox" data-ghc="${i}" ${r.allow_cloud_agents ? 'checked' : ''}> erlaubt</label>
+      <button class="quiet-btn" data-ghdel="${i}" aria-label="Repo entfernen" title="Repo entfernen">×</button></div>`).join('') + '</div>' : '<div class="empty">Noch kein Repo.</div>';
+}
+$('viewSettings').addEventListener('input', ev => { const a = ev.target.dataset.gha; if (a !== undefined) GH[+a].agent_dir = ev.target.value; });
+$('viewSettings').addEventListener('change', ev => { const c = ev.target.dataset.ghc; if (c !== undefined) GH[+c].allow_cloud_agents = ev.target.checked; });
+$('viewSettings').addEventListener('click', ev => {
+  const d = ev.target.closest('[data-ghdel]'); if (d) { GH.splice(+d.dataset.ghdel, 1); renderGhRepos(); }
+  const a = ev.target.closest('[data-ghadd]');
+  if (a && !GH.some(r => r.full.toLowerCase() === a.dataset.ghadd.toLowerCase())) { GH.push({ full: a.dataset.ghadd, id: +a.dataset.id }); renderGhRepos(); a.disabled = true; a.textContent = 'hinzugefügt'; }
+});
+async function searchGithub() {
+  const out = $('gh-res');
+  await busy($('gh-search'), 'Suche …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/github/repos', { ...ghForm(), q: val('gh-q') });
+      if (r.error) { out.innerHTML = `<div class="banner bad">${esc(r.error)}</div>`; return; }
+      out.innerHTML = r.items.length ? `<table class="mini">${r.items.map(x => `<tr><td>${esc(x.full)}${x.private ? ' <span class="chip">privat</span>' : ''}</td>
+        <td><button data-ghadd="${esc(x.full)}" data-id="${x.id}">Hinzufügen</button></td></tr>`).join('')}</table>` : '<div class="empty">Nichts gefunden. «owner/name» findet auch ein einzelnes Repo.</div>';
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+async function testGithub() {
+  const out = $('gh-result');
+  await busy($('gh-test'), 'Teste …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/test/github', ghForm());
+      Object.entries(r.ids || {}).forEach(([full, id]) => { const x = GH.find(g => g.full === full); if (x && id) x.id = id; });
+      out.innerHTML = stepsHtml(r);
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
+
 // ---- Agenten: Einstellungen
 const agSlug = t => String(t || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 31);
 const connOptions = sel => '<option value="local"' + (sel === 'local' ? ' selected' : '') + '>lokal (dieser Rechner)</option>' + CN.map(c => { const id = c.id || agSlug(c.name); return `<option value="${esc(id)}" ${sel === id ? 'selected' : ''}>${esc(c.name || id)} (SSH)</option>`; }).join('');
@@ -2176,10 +2237,12 @@ function collect() {
   if ($('gl-token').value.trim()) secrets.gitlab_token = $('gl-token').value;
   if ($('ji-secret').value.trim()) secrets[val('ji-auth') === 'basic' ? 'jira_password' : 'jira_token'] = $('ji-secret').value;
   if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
+  if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC,
+    github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
@@ -2203,6 +2266,7 @@ async function saveSettings() {
       if (S.gitlab.url) testGitlab();
       if (S.jira.url) testJira();
       if (S.sonar.enabled && S.sonar.url) testSonar();
+      if (S.github && S.github.enabled) testGithub();
     } catch (e) {
       showErrors(e.data && e.data.errors);
       toast(e.message);
@@ -2248,7 +2312,7 @@ const ACT = {
   threads: ['MR öffnen', 'ext'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
   agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
-  do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'],
+  do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };
 const OWNER = { me: '', ci: 'gear', others: 'users', agent: 'bot', none: '' };
 const OWNER_T = { me: 'Du bist dran', ci: 'Wartet auf die CI', others: 'Wartet auf andere', agent: 'Ein Agent arbeitet', none: '' };
@@ -2266,17 +2330,19 @@ function focusEntries() {
     d: { next: r.next, phase: 4, phase_id: 'check', flags: [], checks: { done: 0, total: 0 }, checklist: [] } }));
   return cards.concat(revs);
 }
-function eKey(e) { return e.t === 'review' ? '!' + e.r.iid : (e.c.key || (e.c.idea_id ? 'Idee' : 'ohne Ticket')); }
+const mrNo = x => (x.host === 'github' ? '#' : '!') + x.iid;
+function eKey(e) { return e.t === 'review' ? mrNo(e.r) : (e.c.key || (e.c.idea_id ? 'Idee' : 'ohne Ticket')); }
 function eTitle(e) { return e.t === 'review' ? e.r.title : (e.c.title || '(ohne Titel)'); }
 function eUrl(e) { return e.t === 'review' ? e.r.url : (e.c.url || ''); }
 function srcTags(e) {
   const t = [];
-  if (e.t === 'review') t.push(['gl', 'GitLab']);
+  if (e.t === 'review') t.push(e.r.host === 'github' ? ['gh', 'GitHub'] : ['gl', 'GitLab']);
   else {
     const c = e.c;
     if (c.key && !c.local) t.push(['jira', 'Jira']);
     if (c.local || c.idea_id) t.push(['tiny', 'tiny']);
-    if (c.items.length) t.push(['gl', 'GitLab']);
+    if (c.items.some(x => x.host !== 'github')) t.push(['gl', 'GitLab']);
+    if (c.items.some(x => x.host === 'github')) t.push(['gh', 'GitHub']);
   }
   return t.map(([k, l]) => `<span class="st st-${k}" title="Quelle: ${l === 'tiny' ? 'eigenes Board' : l}">${l}</span>`).join('');
 }
@@ -2292,7 +2358,7 @@ function metaOf(e) {
   if (e.t === 'review') return `<span class="fm">${ic('mr')}${esc(e.r.project)}</span><span>von ${esc(e.r.author || '?')}</span><span>seit ${e.r.age_days} d</span>`;
   const c = e.c, d = e.d, p = [];
   const mrs = c.items.filter(x => x.iid), br = c.items.filter(x => !x.iid);
-  if (mrs.length) p.push(`<span class="fm" title="Merge Requests">${ic('mr')}${mrs.map(x => '!' + esc(x.iid)).join(' ')}</span>`);
+  if (mrs.length) p.push(`<span class="fm" title="Merge Requests">${ic('mr')}${mrs.map(x => esc(mrNo(x))).join(' ')}</span>`);
   if (br.length) p.push(`<span class="fm" title="${esc(br.map(x => x.branch).join(', '))}">${ic('branch')}${esc(br.length === 1 ? short(br[0].branch, 36) : br.length + ' Branches')}</span>`);
   const proj = [...new Set(c.items.map(x => x.project))];
   if (proj.length) p.push(`<span>${esc(short(proj.join(', '), 40))}</span>`);
@@ -2303,8 +2369,16 @@ function metaOf(e) {
 function goBtn(e, cls) {
   const n = e.d.next;
   if (n.kind === 'done') return '';
-  const [l, i] = ACT[n.id] || ['Öffnen', 'ext'];
+  let [l, i] = ACT[n.id] || ['Öffnen', 'ext'];
+  const items = e.t === 'review' ? [e.r] : e.c.items;
+  if (items.length && items.every(x => x.host === 'github')) l = l.replace('MR', 'PR');
   return `<button class="${cls || 'fgo'} ${n.kind === 'wait' && !cls ? 'ghost' : ''}" data-fgo="${esc(e.id)}" title="${esc(l)}">${ic(i)}<span>${esc(l)}</span></button>`;
+}
+function doneBtn(e, big) {
+  const to = e.t === 'card' && e.d.complete_to;
+  if (!to) return '';
+  const ph = state.flow.phases, cur = ph[e.d.phase].label;
+  return `<button class="${big ? 'big' : 'fdone'}" data-fdone="${esc(e.id)}" title="Station «${esc(cur)}» abschliessen, weiter zu «${esc(STAGE_LABEL[to] || to)}»" aria-label="Schritt erledigt">${ic('check')}${big ? '<span>Schritt erledigt</span>' : ''}</button>`;
 }
 function fRow(e) {
   const n = e.d.next;
@@ -2312,7 +2386,7 @@ function fRow(e) {
     ${trackHtml(e.d)}
     <div class="fmain"><div class="fl1"><span class="fkey">${esc(eKey(e))}</span><span class="ftitle" title="${esc(eTitle(e))}">${esc(eTitle(e))}</span></div><div class="fl2">${srcTags(e)}${metaOf(e)}</div></div>
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
-    ${goBtn(e)}</div>`;
+    <div class="fbtns">${doneBtn(e)}${goBtn(e)}</div></div>`;
 }
 function heroHtml(e) {
   if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div></section>`;
@@ -2322,7 +2396,7 @@ function heroHtml(e) {
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
     ${trackHtml(e.d, true)}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
-      <div class="hbtns">${goBtn(e, 'primary big')}<button class="big" data-fopen="${esc(e.id)}">Details</button>
+      <div class="hbtns">${goBtn(e, 'primary big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         <button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button></div></div>
   </section>`;
 }
@@ -2446,7 +2520,7 @@ function renderFx() {
   const keep = $('fxCkNew') ? { v: $('fxCkNew').value, f: document.activeElement === $('fxCkNew') } : null;
   const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
-    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div>${n.kind === 'done' ? '' : goBtn(e, 'primary big')}</div>`;
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${doneBtn(e, true)}</div></div>`;
   if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
@@ -2467,20 +2541,31 @@ function renderFx() {
   $('fx').innerHTML = `<div class="fxhead">${head}</div><div class="fxbody">${body}</div>`;
   if (keep) { $('fxCkNew').value = keep.v; if (keep.f) $('fxCkNew').focus(); }
 }
+function reviewChips(x) {
+  if (!x.iid || (x.reviewers == null && x.approved == null)) return '';
+  const out = [];
+  const by = x.approved_by || [];
+  if (by.length) out.push(`<span class="chip sq-ok" title="Freigegeben von ${esc(by.join(', '))}">${ic('check')} ${esc(by.map(u => '@' + u).join(' '))}</span>`);
+  if (x.upvotes) out.push(`<span class="chip sq-ok" title="Daumen hoch">👍 ${x.upvotes}</span>`);
+  if ((x.reviewers || []).length) { if (!by.length) out.push(`<span class="chip" title="Reviewer">${ic('users')} ${esc(x.reviewers.map(u => '@' + u).join(' '))}</span>`); }
+  else if (!by.length) out.push('<span class="chip warn">kein Reviewer</span>');
+  if (x.approvals_left) out.push(`<span class="chip warn" title="Regeln im Projekt">noch ${x.approvals_left} Freigabe${x.approvals_left === 1 ? '' : 'n'}</span>`);
+  return out.join('');
+}
 function fxItem(c, x) {
   const ms = MSTAT[x.merge_status];
   const sq = SQ[x.sonar] ? `<a class="chip ${SQ[x.sonar][1]}" href="${esc(x.sonar_url || '#')}" target="_blank" rel="noopener" title="${esc(x.sonar_detail || '')}">${esc(SQ[x.sonar][0])}</a>${trendBadge(x)}` : '';
-  const b = [`<a class="ibtn" href="${esc(x.url)}" target="_blank" rel="noopener" title="In GitLab öffnen">${ic('ext')} ${x.iid ? 'MR' : 'Branch'}</a>`];
+  const b = [`<a class="ibtn" href="${esc(x.url)}" target="_blank" rel="noopener" title="In ${x.host === 'github' ? 'GitHub' : 'GitLab'} öffnen">${ic('ext')} ${x.iid ? (x.host === 'github' ? 'PR' : 'MR') : 'Branch'}</a>`];
   if (x.pipeline_url) b.push(`<a class="ibtn" href="${esc(x.pipeline_url)}" target="_blank" rel="noopener">${ic('gear')} Pipeline</a>`);
   if (SQ_HAS[x.sonar]) b.push(`<button class="ibtn" ${sqRepAttrs(x)} title="Findings als Markdown in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">${ic('copy')} Report</button>`);
-  if (!x.iid && x.create_mr_url) b.push(`<a class="ibtn" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener">${ic('mr')} MR erstellen</a>`);
+  if (!x.iid && x.create_mr_url) b.push(`<a class="ibtn" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener">${ic('mr')} ${x.host === 'github' ? 'PR' : 'MR'} erstellen</a>`);
   if (!c.key && state.jira && state.jira.ok) {
     b.push(`<button class="ibtn" data-tk="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch)}" data-cu="">${ic('ticket')} Ticket anlegen</button>`);
   }
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   if (F().testenv && x.iid) b.push(`<button class="ibtn" data-fxdeploy="${x.project_id}:${x.iid}">${ic('flask')} Testumgebung</button>`);
   return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : ic('branch')}
-    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? '!' + esc(x.iid) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
 }
 function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); }
@@ -2493,6 +2578,7 @@ async function doNext(e, btn) {
   const n = e.d.next, a = n.action || {};
   try {
     if (a.run) return openRunDlg(a.run);
+    if (a.tiny) { const r = await post('/api/flow/tiny', a.tiny); toast(`${r.key} angelegt (Kategorie ${r.pool}). Der Branch hängt jetzt daran.`); burstAt(btn); closeFx(); await load(); return; }
     if (n.id === 'plan') { setView('board'); return; }
     if (a.check) { await fCheck(a.check, true, btn); return; }
     if (a.report) {
@@ -2526,6 +2612,9 @@ document.addEventListener('click', async ev => {
   const go = t.closest('[data-fgo]');
   if (go) { ev.stopPropagation(); const e = fEntry(go.dataset.fgo); if (e) await doNext(e, go); return; }
   const op = t.closest('[data-fopen]'); if (op) { openFx(op.dataset.fopen); return; }
+  const dn = t.closest('[data-fdone]');
+  if (dn) { ev.stopPropagation(); const e = fEntry(dn.dataset.fdone); if (!e) return;
+    try { const r = await post('/api/flow/complete', { id: e.c.id, phase: e.d.phase }); burstAt(dn); toast(`Weiter zu «${STAGE_LABEL[r.stage] || r.stage}»`); await load(); } catch (err) { toast(err.message); } return; }
   const sk = t.closest('[data-fskip]');
   if (sk) { fSkip.add(sk.dataset.fskip); try { sessionStorage.setItem('tinyops.skip', JSON.stringify([...fSkip])); } catch (e) { /* egal */ } renderFocus(); return; }
   const ax = t.closest('[data-falx]'); if (ax) { fSkip.add('al:' + ax.dataset.falx); renderFocus(); return; }

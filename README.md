@@ -355,6 +355,21 @@ Branch und MR sind Tatsachen aus GitLab und lassen sich nicht von Hand setzen. t
 
 Der Spielstand zählt nur echten Fortschritt (eine noch nie erreichte Station, ein abgehakter Teilschritt, ein fertiger Agentenlauf). Das Tagesziel stellst du in der `config.json` ein: `"flow": {"daily_goal": 3}`.
 
+## 4r. GitHub, Review-Pflicht und Ticketpflicht (neu in 0.14.0)
+
+**GitHub verbinden:** Auf GitHub unter Settings → Developer settings → Fine-grained tokens einen Token anlegen. Repository access: die gewünschten Repos,
+Permissions nur **Read-only**: Metadata, Contents, Pull requests, Commit statuses, Checks. In tinyops unter Einstellungen → GitHub Token eintragen, «Verbindung testen»,
+Repos suchen und hinzufügen, «GitHub einschalten», speichern. GitHub Enterprise: API-Adresse `https://host/api/v3`. Umgebungsvariable: `TINYOPS_GITHUB_TOKEN`.
+Ein Abgleich braucht je eigenem PR etwa fünf Anfragen (PR, Checks, Status, Reviews, Reaktionen) und je Branch eine; das Limit liegt bei 5000 pro Stunde.
+
+**Review vor dem Merge:** ohne Reviewer → «Reviewer zuweisen»; mit Reviewer, ohne Approve oder 👍 → «Review abwarten»; erst danach Testen und Mergen.
+Verlangen die Approval-Regeln in GitLab noch Freigaben, zählt ein Daumen nicht.
+
+**Ticketpflicht:** Jeder Branch und MR braucht ein Jira- oder tiny-Ticket. Ohne Ticket ist der Schritt «Ticket zuordnen»; ein Klick legt ein tiny-Ticket an
+(Kategorie = Projekt). Wer das Ticket schon im Branchnamen hat (`feature/DLP-123-…` oder `feature/LOC-4-…`), merkt davon nichts.
+
+**Schritt erledigt** (✓): schliesst die aktuelle Station ab, wenn tinyops sie nicht selbst erkennen kann (zum Beispiel nach dem manuellen Test).
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.

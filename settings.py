@@ -13,6 +13,7 @@ import urllib.parse
 from pathlib import Path
 
 import agents
+import github
 import llm
 import net
 import secretstore as store
@@ -26,7 +27,7 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token")
+SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
@@ -557,6 +558,95 @@ def test_agent(form, stored):
     return r.result(cloud=bool(agents.KINDS[kind]["provider"] and kind != "custom"))
 
 
+def test_github(form, stored):
+    """Prüft GitHub (nur lesend): Adresse, Verbindung, Anmeldung, Anfragelimit und Zugriff auf die gewählten Repos.
+    form: api_url, ca_bundle, secret/token, repos [{full}]."""
+    r = Report()
+    base, ok = _check_url(r, form.get("api_url") or github.API_DEFAULT, "api.github")
+    steps = (("auth", "Anmeldung"), ("rate", "Anfragelimit"), ("repos", "Repos"))
+    if not ok:
+        return r.result()
+    ctx = _check_connection(r, base, form.get("ca_bundle"))
+    if ctx is None:
+        for sid, t in steps:
+            r.skip(sid, t)
+        return r.result()
+    tok, src = _token(form, stored, "github_token")
+    if not tok:
+        r.add("auth", "Anmeldung", "fail", "Kein Token eingegeben oder gespeichert.",
+              "Auf GitHub unter Settings → Developer settings → Fine-grained tokens anlegen: nur Lesen (Metadata, Contents, Pull requests, Commit statuses, Checks).")
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    store.register(tok)
+    hdr = github.headers(tok)
+    try:
+        resp = _get(base, "/user", hdr, ctx)
+    except net.NetError as e:
+        r.add("auth", "Anmeldung", "fail", e.detail)
+        return r.result()
+    data = net.parse_json(resp)
+    if resp["status"] == 200 and isinstance(data, dict) and data.get("login"):
+        scopes = resp["headers"].get("x-oauth-scopes")
+        note = ""
+        if scopes is not None:
+            note = " · klassischer Token, Scopes: %s" % (scopes or "keine")
+            if any(x.strip() in ("repo", "admin:org", "delete_repo", "workflow") for x in scopes.split(",")):
+                r.add("auth", "Anmeldung", "warn", "angemeldet als %s (%s)%s" % (data["login"], src, note),
+                      "Der Token darf mehr als lesen. tinyops liest nur; ein feingranularer Token mit Leserechten ist sicherer.")
+            else:
+                r.add("auth", "Anmeldung", "ok", "angemeldet als %s (%s)%s" % (data["login"], src, note))
+        else:
+            r.add("auth", "Anmeldung", "ok", "angemeldet als %s (%s, feingranularer Token)" % (data["login"], src))
+    else:
+        r.add("auth", "Anmeldung", "fail", "HTTP %d: %s" % (resp["status"], _msg(resp)),
+              "Token falsch oder abgelaufen? Bei GitHub Enterprise: API-Adresse https://host/api/v3.")
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    left, limit = resp["headers"].get("x-ratelimit-remaining"), resp["headers"].get("x-ratelimit-limit")
+    if left is not None:
+        r.add("rate", "Anfragelimit", "ok" if int(left) > 200 else "warn", "%s von %s Anfragen in dieser Stunde frei" % (left, limit),
+              "" if int(left) > 200 else "Knapp. Ein Abgleich braucht je Repo und PR einige Anfragen.")
+    else:
+        r.add("rate", "Anfragelimit", "ok", "keine Angabe (Enterprise ohne Limit?)")
+    repos = [x.get("full") for x in (form.get("repos") or []) if x.get("full")]
+    if not repos:
+        r.add("repos", "Repos", "warn", "Noch kein Repo gewählt.", "Unten suchen und hinzufügen.")
+        return r.result(user=data["login"])
+    bad, okn, ids = [], 0, {}
+    for full in repos[:30]:
+        try:
+            rr = _get(base, "/repos/%s" % full, hdr, ctx)
+        except net.NetError as e:
+            bad.append("%s (%s)" % (full, e.detail))
+            continue
+        jd = net.parse_json(rr) or {}
+        if rr["status"] == 200:
+            okn += 1
+            ids[full] = jd.get("id")
+        else:
+            bad.append("%s (HTTP %d)" % (full, rr["status"]))
+    if bad:
+        r.add("repos", "Repos", "fail", "%d lesbar, nicht lesbar: %s" % (okn, ", ".join(bad)),
+              "Feingranularer Token: das Repo unter «Repository access» freigeben. 404 heisst bei GitHub oft «kein Zugriff».")
+    else:
+        r.add("repos", "Repos", "ok", "alle %d lesbar" % okn)
+    return r.result(user=data["login"], ids=ids)
+
+
+def search_github(form, stored):
+    tok, _src = _token(form, stored, "github_token")
+    if not tok:
+        return {"error": "Kein GitHub-Token. Erst eingeben (oder speichern) und testen.", "items": []}
+    try:
+        ctx = net.make_ssl_ca((form.get("ca_bundle") or "").strip())
+        c = github.Client(form.get("api_url") or github.API_DEFAULT, tok, ctx, timeout=10)
+        return {"items": c.search_repos(form.get("q"))}
+    except (github.GitHubError, ValueError) as e:
+        return {"error": str(e), "items": []}
+
+
 def test_jira(form, stored):
     """form: url, auth, username, secret, ca_bundle, project_keys, issue_types, jql, story_limit."""
     r = Report()
@@ -829,6 +919,8 @@ def view(cfg, config_path, features_default=None):
         "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", ""),
                       "agent_dir": p.get("agent_dir", ""), "allow_cloud_agents": bool(p.get("allow_cloud_agents", False))} for p in cfg.get("projects", [])],
         "connections": [dict(c) for c in cfg.get("connections") or []],
+        "github": {"enabled": bool((cfg.get("github") or {}).get("enabled", False)), "api_url": (cfg.get("github") or {}).get("api_url") or github.API_DEFAULT,
+                   "repos": [dict(r) for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"]} for k, v in agents.KINDS.items()],
         "branch_filter": {
@@ -1005,6 +1097,45 @@ def build_config(current, p):
         sc["max_items"] = _int(sq.get("max_items"), "sonar.max_items", 1, 200, errors, 40)
         sc["report_max"] = _int(sq.get("report_max"), "sonar.report_max", 10, 1000, errors, 200)
         cfg["sonar"] = sc
+
+    if "github" in p:
+        gh = p.get("github") or {}
+        g = dict(cfg.get("github") or {})
+        g["enabled"] = bool(gh.get("enabled"))
+        api = (gh.get("api_url") or github.API_DEFAULT).strip().rstrip("/")
+        u = urllib.parse.urlparse(api)
+        if not u.hostname or not (u.scheme == "https" or (u.scheme == "http" and u.hostname in ("127.0.0.1", "localhost"))):
+            errors["github.api_url"] = "Muss mit https:// beginnen (github.com: https://api.github.com, Enterprise: https://host/api/v3)."
+        g["api_url"] = api
+        repos, seen = [], set()
+        for x in gh.get("repos") or []:
+            full = str((x or {}).get("full") or "").strip()
+            if not github.REPO_RE.fullmatch(full):
+                errors["github.repos"] = "«%s» ist kein Repo der Form owner/name." % full[:60]
+                continue
+            if full.lower() in seen:
+                continue
+            seen.add(full.lower())
+            e = {"full": full}
+            try:
+                if x.get("id") not in (None, ""):
+                    e["id"] = int(x["id"])
+            except (TypeError, ValueError):
+                errors["github.repos"] = "Repo-ID von %s ist keine Zahl." % full
+            ad = str(x.get("agent_dir") or "").strip()
+            if ad and not agents.valid_agent_dir(ad):
+                errors["github.repos"] = "Der Agent-Ordner «%s» ist ungültig." % ad[:40]
+            elif ad:
+                e["agent_dir"] = ad
+            if x.get("allow_cloud_agents"):
+                e["allow_cloud_agents"] = True
+            repos.append(e)
+        if len(repos) > 30:
+            errors["github.repos"] = "Höchstens 30 Repos."
+        g["repos"] = repos[:30]
+        if g["enabled"] and not repos:
+            errors["github.repos"] = "Zum Einschalten mindestens ein Repo wählen."
+        cfg["github"] = g
 
     if "connections" in p or "agents" in p:
         conns = agents.clean_connections(p.get("connections") if "connections" in p else cfg.get("connections"), errors)

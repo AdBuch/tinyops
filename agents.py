@@ -336,8 +336,17 @@ class Service:
             raise AgentError("Die Verbindung «%s» dieses Agenten gibt es nicht." % agent["connection"])
         return c
 
+    def projects(self):
+        """GitLab-Projekte und GitHub-Repos (Projektnummer 10**12 + Repo-ID)."""
+        out = list(self.cfg.get("projects") or [])
+        for r in (self.cfg.get("github") or {}).get("repos") or []:
+            if r.get("id") and r.get("full"):
+                out.append({"id": 10 ** 12 + int(r["id"]), "name": r["full"].split("/")[-1], "agent_dir": r.get("agent_dir", ""),
+                            "allow_cloud_agents": bool(r.get("allow_cloud_agents"))})
+        return out
+
     def project(self, pid):
-        for p in self.cfg.get("projects") or []:
+        for p in self.projects():
             if p["id"] == pid:
                 return p
         return None
@@ -409,7 +418,7 @@ class Service:
         agents = [{"id": a["id"], "name": a["name"], "kind": a["kind"], "label": KINDS[a["kind"]]["label"], "cloud": a.get("cloud", True),
                    "where": "lokal" if a["connection"] == "local" else (self.conns().get(a["connection"]) or {}).get("name", "?"),
                    "workspace_root": a["workspace_root"]} for a in self.agent_list()]
-        projects = [{"id": p["id"], "name": p.get("name") or str(p["id"])} for p in self.cfg.get("projects") or []]
+        projects = [{"id": p["id"], "name": p.get("name") or str(p["id"])} for p in self.projects()]
         return {"enabled": bool(agents), "agents": agents, "projects": projects, "runs": [self.run_view(r) for r in self.store.agent_runs(limit=200)]}
 
     # -- Zuweisen, Starten, Stoppen
