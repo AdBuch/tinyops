@@ -1,6 +1,6 @@
 # tinyops: Arbeitspanel
 
-Version 0.10.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
+Version 0.11.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -306,6 +306,8 @@ Aus per Voreinstellung. Einstellungen → KI-Kontingent: «Claude lesen» und/od
 
 > Ab 0.10.0 steht der Stand der Abos als eingeklappte Box «KI-Kontingent» unter der Ideenbox (Klick öffnet, ein Reload schliesst sie wieder).
 > «MR erstellen» an Branches ohne MR öffnet in GitLab das Formular für einen neuen Merge Request. Abgleich höchstens alle `cache_seconds` (Standard 300).
+
+> Ab 0.11.0: **Trend** der Findings neben dem Gate (Sonar-Verlauf, sonst lokal beobachtet), Auswertung nach Auswirkung (SonarQube 2026.1), Schritt «Pull-Request-Analyse» im Verbindungstest.
 
 ## 4o. Mistral im KI-Kontingent per Lesezeichen (neu in 0.9.0)
 

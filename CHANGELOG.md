@@ -5,6 +5,23 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.11.0]
+
+### Neu
+- **Sonar-Trend:** An jedem MR und Branch mit Analyse steht neben dem Gate eine kleine Kurve der Findings mit der Änderung seit der ersten Analyse
+  (▼ weniger = grün, ▲ mehr = rot). Quelle ist Sonars eigener Verlauf (`api/measures/search_history`, ab zwei Analysen). Liefert Sonar keinen Verlauf,
+  nutzt tinyops lokale Schnappschüsse der Gate-Werte (ohne zusätzliche Anfrage, gespeichert nur bei Änderung, 120 Tage). Der Report enthält eine Verlaufstabelle.
+- **SonarQube 2026.1 (Multi-Quality-Rule-Modus):** Findings werden nach Auswirkung (`impacts`: Sicherheit, Zuverlässigkeit, Wartbarkeit; hoch/mittel/gering)
+  statt nach alter Schwere/Art ausgewertet und im Report so benannt; die neuen Metriknamen der Gate-Bedingungen (`new_software_quality_*`) sind übersetzt.
+  Ältere Versionen funktionieren weiter (Rückfall auf Schwere/Art).
+- **Verbindungstest Sonar:** neuer Schritt «Pull-Request-Analyse» zeigt je Projekt, wie viele Pull Requests analysiert sind und welcher der letzte ist
+  (`api/project_pull_requests/list`), und warnt, wenn die Edition keine MR-Analyse kennt.
+
+### Hinweis
+- Alle Sonar-Abfragen nutzen die Web API v1 (`/api/...`). Für Gate, Findings, Hotspots, Verlauf und Pull Requests gibt es nach Sonars Dokumentation
+  noch keinen v2-Ersatz, die neue API ersetzt v1 «schrittweise»; die Endpunkt-Liste steht in Sonar unter Hilfe → Web API v2.
+- Sonar speichert für `new_*`-Kennzahlen keinen Verlauf. Der Trend zählt deshalb die Findings des MR (`violations`), nicht «neue Findings».
+
 ## [0.10.0]
 
 ### Neu

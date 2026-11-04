@@ -109,6 +109,9 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 8.10 | Übersicht neu laden (F5) | Box «KI-Kontingent» unter der Ideenbox ist zu und zeigt nur die Zeile mit Prozentwerten; Klick öffnet sie |
 | 8.11 | An einem Branch ohne MR «MR erstellen» | GitLab öffnet das Formular für einen neuen MR mit dem Branch als Quelle |
 | 8.12 | Panel 10 Minuten offen lassen (Log auf DEBUG) | GitLab/Jira werden höchstens alle 5 Minuten abgefragt, nicht jede Minute |
+| 8.13 | Sonar «Verbindung testen» mit Projektschlüssel | Schritt «Pull-Request-Analyse» nennt die Zahl analysierter PRs und den letzten (`!N`); bei Community Edition eine Warnung |
+| 8.14 | MR mit mindestens zwei Analysen in Sonar | Kurve und ▼/▲ neben dem Gate; Tooltip nennt Anfang, Ende, Datum und Quelle «Sonar-Verlauf» (stimmt mit Sonar überein?) |
+| 8.15 | Report an einem solchen MR | Abschnitt «Verlauf» mit Tabelle; Schwere heisst hoch/mittel/gering (Auswirkung), nicht blocker/major |
 
 ## Rückmeldung
 

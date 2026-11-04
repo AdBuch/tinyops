@@ -419,7 +419,7 @@ def test_sonar(form, stored):
     form: url, ca_bundle, secret/token, projects [{id, name, sonar_key}]."""
     r = Report()
     base, ok = _check_url(r, form.get("url"), "sonar")
-    steps = (("api", "Sonar-API"), ("auth", "Anmeldung"), ("keys", "Projektschlüssel"))
+    steps = (("api", "Sonar-API"), ("auth", "Anmeldung"), ("keys", "Projektschlüssel"), ("prs", "Pull-Request-Analyse"))
     if not ok:
         return r.result()
     ctx = _check_connection(r, base, form.get("ca_bundle"))
@@ -481,6 +481,28 @@ def test_sonar(form, stored):
               "Schlüssel genau wie in Sonar schreiben (Gross-/Kleinschreibung zählt). Der Token braucht «Browse» auf dem Projekt.")
     else:
         r.add("keys", "Projektschlüssel", "ok", "; ".join(good))
+    # Pull-Request-Analyse (ab Developer Edition): ohne sie gibt es für MRs nie ein Quality Gate
+    ok_keys = [k for n, k in mapped if not any(b.startswith("%s → %s " % (n, k)) for b in bad)]
+    parts, unavailable = [], []
+    for key in ok_keys:
+        try:
+            prs = sonar.Client(base, tok, ctx).pull_requests(key)
+        except sonar.SonarError:
+            prs = None
+        if prs is None:
+            unavailable.append(key)
+        else:
+            nums = sorted((int(p["key"]) for p in prs if str(p.get("key", "")).isdigit()), reverse=True)
+            parts.append("%s: %d analysiert%s" % (key, len(prs), " (zuletzt !%d)" % nums[0] if nums else ""))
+    if unavailable and not parts:
+        r.add("prs", "Pull-Request-Analyse", "warn", "Nicht verfügbar für: %s" % ", ".join(unavailable),
+              "Pull-Request-Analyse gibt es erst ab der Developer Edition. Ohne sie bleibt für MRs «keine Analyse»; Branches funktionieren nur mit mehreren analysierten Branches.")
+    elif unavailable:
+        r.add("prs", "Pull-Request-Analyse", "warn", "; ".join(parts) + "; nicht verfügbar für: " + ", ".join(unavailable))
+    elif parts:
+        r.add("prs", "Pull-Request-Analyse", "ok", "; ".join(parts) + ". Die MR-Nummer von GitLab muss als «sonar.pullrequest.key» an Sonar gehen (Standard in der CI-Anbindung).")
+    else:
+        r.skip("prs", "Pull-Request-Analyse")
     return r.result()
 
 

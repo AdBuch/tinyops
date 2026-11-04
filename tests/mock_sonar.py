@@ -67,17 +67,36 @@ class H(BaseHTTPRequestHandler):
                 allv = [{"component": "dlp-core:src/Repo.java", "line": 40 + n, "severity": "MAJOR", "type": "CODE_SMELL", "rule": "java:S100", "message": "Rename method %d" % n}
                         for n in range(250)]
                 allv.insert(0, {"component": "dlp-core:src/Auth.java", "line": 7, "severity": "BLOCKER", "type": "VULNERABILITY", "rule": "java:S2068",
+                                "impacts": [{"softwareQuality": "SECURITY", "severity": "HIGH"}, {"softwareQuality": "MAINTAINABILITY", "severity": "LOW"}],
                                 "message": "Hard-coded   credential\nremove it " + "x" * 400})
                 ps, p = int(q.get("ps", 100)), int(q.get("p", 1))
                 return self._json(200, {"total": len(allv), "paging": {"pageIndex": p, "pageSize": ps, "total": len(allv)},
                                         "issues": allv[(p - 1) * ps:p * ps],
-                                        "facets": [{"property": "severities", "values": [{"val": "BLOCKER", "count": 1}, {"val": "MAJOR", "count": 250}]},
+                                        "facets": [{"property": "impactSeverities", "values": [{"val": "HIGH", "count": 1}, {"val": "MEDIUM", "count": 250}]},
+                                                   {"property": "impactSoftwareQualities", "values": [{"val": "SECURITY", "count": 1}, {"val": "MAINTAINABILITY", "count": 250}]},
+                                                   {"property": "severities", "values": [{"val": "BLOCKER", "count": 1}, {"val": "MAJOR", "count": 250}]},
                                                    {"property": "types", "values": [{"val": "VULNERABILITY", "count": 1}, {"val": "CODE_SMELL", "count": 250}]}]})
             if pr == "7":
                 return self._json(200, {"paging": {"total": 0}, "issues": [], "facets": []})
             if br == "kaputt":
                 return self._json(500, {})
             return self._json(404, {})
+        if u.path == "/api/project_pull_requests/list":
+            return self._json(200 if q.get("project") == "dlp-core" else 404, {"pullRequests": [{"key": "7"}, {"key": "8"}]})
+        if u.path == "/api/measures/search_history":
+            if q.get("component") != "dlp-core":
+                return self._json(404, {})
+            if q.get("pullRequest") == "8":
+                series = {"violations": [12, 9, 7, 3], "bugs": [3, 2, 2, 1], "vulnerabilities": [1, 1, 0, 0], "code_smells": [8, 6, 5, 2], "coverage": [50.5, 58.0, 61.2, 70.0]}
+                dates = ["2026-11-01T09:00:00+0100", "2026-11-02T09:00:00+0100", "2026-11-03T09:00:00+0100", "2026-11-04T09:00:00+0100"]
+                ms = [{"metric": m, "history": [{"date": d, "value": str(series[m][i])} for i, d in enumerate(dates)]} for m in q.get("metrics", "").split(",") if m in series]
+                ms += [{"metric": "new_violations", "history": [{"date": d} for d in dates]}] if "new_violations" in q.get("metrics", "") else []   # Sonar liefert für new_* nur Daten
+                return self._json(200, {"measures": ms})
+            if q.get("pullRequest") == "7":
+                return self._json(200, {"measures": [{"metric": "violations", "history": [{"date": "2026-11-04T09:00:00+0100", "value": "0"}]}]})
+            if q.get("branch") == "kaputt":
+                return self._json(500, {})
+            return self._json(200, {"measures": []})
         if u.path == "/api/hotspots/search":
             if q.get("pullRequest") == "8":
                 return self._json(200, {"paging": {"total": 1}, "hotspots": [{"component": "dlp-core:src/Crypto.java", "line": 12, "vulnerabilityProbability": "HIGH",

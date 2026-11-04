@@ -121,7 +121,8 @@ class ReportTests(WithMock):
         self.assertIn("# Sonar-Findings: core, MR !8", txt)
         self.assertIn("Quality Gate: **nicht bestanden**", txt)
         self.assertIn("Abdeckung neuer Code 61.2 %", txt)
-        self.assertIn("Schwere: blocker 1, major 250", txt)
+        self.assertIn("Schwere: high 1, medium 250", txt)                              # Multi-Quality-Rule-Modus: Auswirkungen statt alter Schwere
+        self.assertIn("Zeile 7 [high, Sicherheit]", txt)
         self.assertIn("### `src/Auth.java`", txt)                                       # Pfad ohne Projektschlüssel, schwerste Datei zuerst
         self.assertLess(txt.index("src/Auth.java"), txt.index("src/Repo.java"))
         self.assertIn("Es werden 30 von 251 Findings gezeigt", txt)
@@ -135,6 +136,47 @@ class ReportTests(WithMock):
         self.assertIn("Nicht lesbar", txt)
 
 
+class TrendTests(WithMock):
+    def client(self):
+        return sonar.Client(self.base, "sqtoken")
+
+    def test_history_parses_dates_and_skips_new_metrics_without_values(self):
+        pts = self.client().history("dlp-core", pr=8, metrics=("violations", "bugs", "new_violations"))
+        self.assertEqual([p["violations"] for p in pts], [12.0, 9.0, 7.0, 3.0])
+        self.assertTrue(all("new_violations" not in p for p in pts))                  # Sonar liefert dafür nur Daten, keine Werte
+        self.assertEqual(pts[0]["bugs"], 3.0)
+        self.assertTrue(pts[0]["ts"] < pts[-1]["ts"])
+        self.assertEqual(self.client().history("dlp-core", branch="gibt-es-nicht"), [])
+        self.assertEqual(self.client().history("anderes", pr=8), [])
+        with self.assertRaises(sonar.SonarError):
+            self.client().history("dlp-core", branch="kaputt")
+
+    def test_trend_of(self):
+        t = sonar.trend_of([(1, 12.0), (2, 9.0), (3, 3.0)])
+        self.assertEqual((t["first"], t["last"], t["delta"], t["points"], t["n"]), (12.0, 3.0, -9.0, [12, 9, 3], 3))
+        self.assertIsNone(sonar.trend_of([(1, 5.0)]))
+        self.assertIsNone(sonar.trend_of([(1, None), (2, None)]))
+        self.assertEqual(len(sonar.trend_of([(i, float(i)) for i in range(100)], keep=24)["points"]), 24)
+
+    def test_gate_values_and_mqr_labels(self):
+        self.assertEqual(self.client().gate("dlp-core", pr=8)["values"]["new_coverage"], 61.2)
+        self.assertEqual(sonar.describe({"metricKey": "new_software_quality_security_rating", "actualValue": "3.0", "errorThreshold": "1", "comparator": "GT"}),
+                         "Sicherheit neuer Code C (höchstens A)")
+        self.assertIn("Blocker-Findings", sonar.describe({"metricKey": "new_software_quality_blocker_issues", "actualValue": "2", "errorThreshold": "0", "comparator": "GT"}))
+
+    def test_impact_prefers_mqr_and_falls_back(self):
+        self.assertEqual(sonar.impact({"severity": "MAJOR", "type": "BUG", "impacts": [{"softwareQuality": "RELIABILITY", "severity": "MEDIUM"}, {"softwareQuality": "SECURITY", "severity": "HIGH"}]}), ("HIGH", "SECURITY"))
+        self.assertEqual(sonar.impact({"severity": "MAJOR", "type": "BUG"}), ("MAJOR", "BUG"))
+
+    def test_report_has_history_table(self):
+        c = self.client()
+        pts = c.history("dlp-core", pr=8, metrics=tuple(k for k, _ in sonar.HIST_COLS))
+        txt = sonar.format_report("x", c.gate("dlp-core", pr=7), "dlp-core", [], 0, {}, None, "", 30, {"source": "Sonar-Verlauf", "cols": sonar.HIST_COLS, "rows": pts})
+        self.assertIn("## Verlauf (Sonar-Verlauf)", txt)
+        self.assertIn("| Stand | Findings | Bugs | Schwachstellen | Smells | Abdeckung % |", txt)
+        self.assertIn("Findings: 12 → 3 (weniger)", txt)
+
+
 class SettingsTests(WithMock):
     def stored(self, tok=""):
         return lambda name: (tok, "Test") if name == "sonar_token" else ("", "")
@@ -142,7 +184,10 @@ class SettingsTests(WithMock):
     def test_good_and_bad_key(self):
         r = settings.test_sonar({"url": self.base, "secret": "sqtoken", "projects": [{"id": 1, "name": "core", "sonar_key": "dlp-core"}]}, self.stored())
         self.assertTrue(r["ok"], r)
-        self.assertEqual({s["id"]: s["status"] for s in r["steps"]}["keys"], "ok")
+        st = {s["id"]: s for s in r["steps"]}
+        self.assertEqual(st["keys"]["status"], "ok")
+        self.assertEqual(st["prs"]["status"], "ok")
+        self.assertIn("dlp-core: 2 analysiert (zuletzt !8)", st["prs"]["detail"])
         r = settings.test_sonar({"url": self.base, "secret": "sqtoken", "projects": [{"id": 1, "name": "core", "sonar_key": "gibt-es-nicht"}]}, self.stored())
         keys = next(s for s in r["steps"] if s["id"] == "keys")
         self.assertEqual(keys["status"], "warn")
@@ -215,12 +260,36 @@ class SyncTests(WithMock):
         self.assertEqual(b["items"][0]["sonar"], "ERROR")
         self.assertIn("Abdeckung", b["items"][0]["sonar_detail"])
 
+    def test_trend_in_sync_from_sonar_history_and_local_fallback(self):
+        a = self.app()
+        items = [{"kind": "mr", "iid": n, "branch": "b%d" % n, "title": "T%d" % n, "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "none", "draft": False, "age_days": 1} for n in (7, 8)]
+        items.append({"kind": "branch", "iid": None, "branch": "feature-b", "title": "B", "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "none", "draft": False, "age_days": 1})
+        a.client.fetch = lambda sink=None, step=None: {"me": "me", "errors": [], "assigned": [], "review": [], "mine": [dict(i) for i in items]}
+        ov = a.overview()
+        by = {i["title"]: i["sonar"] for i in ov["mine"]}
+        self.assertEqual(by["T8"]["trend"]["points"], [12, 9, 7, 3])                    # aus Sonars Verlauf
+        self.assertEqual((by["T8"]["trend"]["delta"], by["T8"]["trend"]["source"]), (-9.0, "Sonar-Verlauf"))
+        self.assertIsNone(by["T7"].get("trend"))                                         # nur ein Punkt: kein Trend
+        card = next(c for c in ov["board"]["cards"] if any(x["iid"] == 8 for x in c["items"]))
+        self.assertEqual(next(x for x in card["items"] if x["iid"] == 8)["sonar_trend"]["last"], 3.0)
+        # Branch feature-b: Sonar kennt keinen Verlauf → lokale Schnappschüsse aus den Gate-Werten, Trend ab dem zweiten, geänderten Stand
+        self.assertIsNone(by["B"].get("trend"))
+        scope = a._scope_key("dlp-core", None, "feature-b")
+        t0 = time.time() + 100
+        a.store.snap_add(scope, {"new_violations": 5.0}, ts=t0)
+        a.store.snap_add(scope, {"new_violations": 5.0}, ts=t0 + 10)                      # unverändert: nicht doppelt gespeichert
+        a.store.snap_add(scope, {"new_violations": 2.0}, ts=t0 + 20)
+        self.assertEqual(len(a.store.snap_rows(scope)), 3)                                # inkl. dem Stand aus dem Abgleich (new_duplicated_lines_density)
+        t = a._sonar_trend("dlp-core", None, "feature-b", {"values": {}})
+        self.assertEqual((t["source"], t["points"], t["delta"]), ("lokal beobachtet", [5, 2], -3.0))
+
     def test_report_via_app_is_read_only_and_clear_errors(self):
         import urllib.request
         a = self.app(report_max=50)
         r = a.sonar_report(1, iid=8)
         self.assertEqual((r["issues"], r["total"], r["truncated"], r["hotspots"]), (50, 251, True, 1))
         self.assertIn("MR !8", r["text"])
+        self.assertIn("## Verlauf (Sonar-Verlauf)", r["text"])
         self.assertIn("dlp-core, MR !8", r["text"])
         a.sonar_report(1, branch="feature-b")
         for bad, msg in (({"project_id": 2, "iid": 3}, "kein Sonar-Schlüssel"), ({"project_id": 1}, "MR oder Branch")):

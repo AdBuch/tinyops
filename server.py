@@ -41,7 +41,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.10.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.11.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -957,6 +957,24 @@ class DemoSonar:
             return {"status": "WARN", "failed": f, "url": url, "detail": "; ".join(f)}
         return {"status": "NONE", "failed": [], "url": url, "detail": "keine Analyse"}
 
+    def history(self, key, pr=None, branch=None, metrics=("violations",), limit=60):
+        """Erfundener Verlauf: OK-Einträge werden besser, rote schlechter, der Rest bleibt flach."""
+        import zlib
+        n = zlib.crc32(("%s|%s|%s" % (key, pr, branch)).encode()) % 5
+        base = time.time() - 6 * 86400
+        shape = {0: [14, 11, 9, 4, 1, 0], 1: [8, 6, 5, 5, 2, 1], 2: [2, 3, 5, 6, 9, 12], 3: [5, 5, 6, 5, 5, 5]}.get(n)
+        if not shape:
+            return []
+        out = []
+        for i, v in enumerate(shape):
+            row = {"ts": base + i * 86400, "violations": float(v), "bugs": float(v // 4), "vulnerabilities": float(v // 6), "code_smells": float(v - v // 4 - v // 6),
+                   "coverage": 55.0 + i * 3}
+            out.append({k: x for k, x in row.items() if k == "ts" or k in metrics})
+        return out[-limit:]
+
+    def pull_requests(self, key):
+        return [{"key": "41", "status": {"qualityGateStatus": "OK"}}]
+
     def issues_url(self, key, pr=None, branch=None):
         return "%s/project/issues?id=%s&resolved=false" % (self.base, key)
 
@@ -1169,6 +1187,36 @@ class App:
     def configured(self):
         return self.client is not None
 
+    @staticmethod
+    def _scope_key(key, pr, br):
+        return "%s|%s|%s" % (key, pr or "", br or "")
+
+    def _sonar_trend(self, key, pr, br, res):
+        """Verlauf der Findings eines MR/Branches: aus Sonars eigener Historie (ab zwei Analysen), sonst aus lokalen Schnappschüssen der Gate-Werte.
+        Gleichzeitig wird der aktuelle Stand lokal vermerkt (nur bei Änderung)."""
+        scope = self._scope_key(key, pr, br)
+        vals = res.get("values") or {}
+        if vals:
+            try:
+                self.store.snap_add(scope, vals)
+            except Exception as e:      # der Verlauf ist Beiwerk und darf den Abgleich nie stoppen
+                slog.warning("Schnappschuss nicht gespeichert: %s", e)
+        try:
+            pts = self.sonar.history(key, pr=pr, branch=br, metrics=("violations",))
+        except sonar.SonarError as e:
+            if e.auth:
+                raise
+            pts = []
+        t = sonar.trend_of([(p["ts"], p.get("violations")) for p in pts], "Sonar-Verlauf")
+        if t:
+            return t
+        rows = self.store.snap_rows(scope)
+        for metric in ("new_violations", "violations"):
+            t = sonar.trend_of([(ts, v.get(metric)) for ts, v in rows], "lokal beobachtet")
+            if t:
+                return t
+        return None
+
     def sonar_report(self, project_id, iid=None, branch=None):
         """Findings eines MR oder Branches als Markdown für die Zwischenablage (nur lesend, auf Knopfdruck, nicht im Abgleich)."""
         if not self.sonar:
@@ -1186,12 +1234,19 @@ class App:
             gate = self.sonar.gate(key, pr=pr, branch=br)
             issues, total, facets = self.sonar.issues(key, pr=pr, branch=br, limit=limit)
             hot = self.sonar.hotspots(key, pr=pr, branch=br)
+            pts = self.sonar.history(key, pr=pr, branch=br, metrics=tuple(k for k, _ in sonar.HIST_COLS), limit=12)
         except sonar.SonarError as e:
             slog.warning("Report: %s", e)
             raise UserError(str(e))
         title = "%s, %s" % ((p or {}).get("name") or key, ("MR !%d" % pr) if pr else "Branch %s" % br)
         slog.info("Report erzeugt: %s (%d von %d Findings)", title, len(issues), total)
-        text = sonar.format_report(title, gate, key, issues, total, facets, hot, gate.get("issues_url") or gate.get("url"), limit)
+        hist = {"source": "Sonar-Verlauf", "cols": sonar.HIST_COLS, "rows": pts} if len(pts) > 1 else None
+        if not hist:
+            snaps = self.store.snap_rows(self._scope_key(key, pr, br), 12)
+            if len(snaps) > 1:
+                hist = {"source": "lokal beobachtet", "rows": [dict(v, ts=ts) for ts, v in snaps],
+                        "cols": (("new_violations", "Neue Findings"), ("new_coverage", "Abdeckung neuer Code %"), ("new_duplicated_lines_density", "Duplikate neuer Code %"))}
+        text = sonar.format_report(title, gate, key, issues, total, facets, hot, gate.get("issues_url") or gate.get("url"), limit, hist)
         return {"text": text, "issues": len(issues), "total": total, "hotspots": len(hot[0]) if hot else 0, "truncated": total > len(issues)}
 
     def usage_providers(self):
@@ -1389,6 +1444,7 @@ class App:
                  "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
                  "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""),
                  "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
+                 "sonar_trend": (it.get("sonar") or {}).get("trend"),
                  "create_mr_url": it.get("create_mr_url", "")}
                 for it in items if key in it.get("keys", [])]
 
@@ -1474,6 +1530,7 @@ class App:
         return {"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"], "pipeline": it["pipeline"],
                 "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
                 "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
+                 "sonar_trend": (it.get("sonar") or {}).get("trend"),
                  "create_mr_url": it.get("create_mr_url", "")}
 
     def board_action(self, action, body):
@@ -1646,6 +1703,8 @@ class App:
                 return
             try:
                 res = self.sonar.gate(key, pr=pr, branch=br)
+                if res["status"] in ("OK", "WARN", "ERROR"):
+                    res["trend"] = self._sonar_trend(key, pr, br, res)
             except sonar.SonarError as e:
                 if e.auth:
                     out["ok"], out["error"] = False, str(e)

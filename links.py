@@ -7,6 +7,7 @@
 
 Die Datei liegt neben der Ideenbox (tinyops.db) und wird erst beim ersten Schreiben angelegt.
 """
+import json
 import re
 import sqlite3
 import time
@@ -226,7 +227,32 @@ class _BoardMixin:
             c.execute("delete from pool_items where kind='ticket' and value=?", (key,))
 
 
-class Store(_AiMixin, _BoardMixin):
+class _SnapMixin:
+    """Lokaler Verlauf der Sonar-Gate-Werte je MR/Branch. Das ist der Ersatz, wenn Sonar für einen MR keinen Verlauf liefert, und er entsteht ohne
+    zusätzliche Anfrage aus den Werten, die der Abgleich ohnehin bekommt. Gespeichert wird nur bei Änderung."""
+    def snap_add(self, scope, values, ts=None):
+        ts = ts or time.time()
+        if not values:
+            return False
+        blob = json.dumps(values, sort_keys=True)
+        with self._conn(True) as c:
+            last = c.execute("select vals from sonar_snap where scope=? order by ts desc limit 1", (scope,)).fetchone()
+            if last and last["vals"] == blob:
+                return False
+            c.execute("insert into sonar_snap(scope, ts, vals) values(?,?,?)", (scope, ts, blob))
+            c.execute("delete from sonar_snap where scope=? and ts not in (select ts from sonar_snap where scope=? order by ts desc limit 100)", (scope, scope))
+            c.execute("delete from sonar_snap where ts < ?", (ts - 120 * 86400,))
+        return True
+
+    def snap_rows(self, scope, limit=60):
+        with self._conn() as c:
+            if c is None:
+                return []
+            rows = c.execute("select ts, vals from sonar_snap where scope=? order by ts desc limit ?", (scope, limit)).fetchall()
+        return [(r["ts"], json.loads(r["vals"])) for r in reversed(rows)]
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -248,6 +274,8 @@ class Store(_AiMixin, _BoardMixin):
                              " window_hours real not null, budget real not null, unit text not null, used real not null default 0, window_start real not null default 0)")
                 conn.execute("create table if not exists tasks(id integer primary key autoincrement, title text not null, created text not null)")
                 conn.execute("create table if not exists task_stage(key text primary key, stage text not null, updated real not null)")
+                conn.execute("create table if not exists sonar_snap(scope text not null, ts real not null, vals text not null)")
+                conn.execute("create index if not exists sonar_snap_scope on sonar_snap(scope, ts)")
                 yield conn
         finally:
             conn.close()

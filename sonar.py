@@ -7,6 +7,7 @@ Beides gibt es erst ab der Developer Edition; in der Community Edition liefert S
 import base64
 import json
 import urllib.parse
+from datetime import datetime
 
 import net
 import secretstore as store
@@ -22,6 +23,16 @@ METRIC_LABEL = {
     "new_maintainability_rating": "Wartbarkeit neuer Code", "security_rating": "Sicherheit", "reliability_rating": "Zuverlässigkeit",
     "sqale_rating": "Wartbarkeit", "bugs": "Bugs", "vulnerabilities": "Schwachstellen", "code_smells": "Code Smells",
     "new_security_hotspots_reviewed_status": "Security Hotspots geprüft",
+    # Multi-Quality-Rule-Modus (SonarQube ab 10.8, Standard in 2026.1): Softwarequalitäten statt Bug/Schwachstelle/Smell
+    "new_software_quality_security_rating": "Sicherheit neuer Code", "new_software_quality_reliability_rating": "Zuverlässigkeit neuer Code",
+    "new_software_quality_maintainability_rating": "Wartbarkeit neuer Code", "software_quality_security_rating": "Sicherheit",
+    "software_quality_reliability_rating": "Zuverlässigkeit", "software_quality_maintainability_rating": "Wartbarkeit",
+    "new_software_quality_blocker_issues": "Neue Blocker-Findings", "new_software_quality_high_issues": "Neue Findings mit hoher Auswirkung",
+    "new_software_quality_medium_issues": "Neue Findings mit mittlerer Auswirkung", "new_software_quality_low_issues": "Neue Findings mit geringer Auswirkung",
+    "new_software_quality_info_issues": "Neue Info-Findings", "new_accepted_issues": "Neue akzeptierte Findings",
+    "software_quality_blocker_issues": "Blocker-Findings", "software_quality_high_issues": "Findings mit hoher Auswirkung",
+    "new_software_quality_security_issues": "Neue Sicherheits-Findings", "new_software_quality_reliability_issues": "Neue Zuverlässigkeits-Findings",
+    "new_software_quality_maintainability_issues": "Neue Wartbarkeits-Findings",
 }
 RATING = {"1.0": "A", "2.0": "B", "3.0": "C", "4.0": "D", "5.0": "E", "1": "A", "2": "B", "3": "C", "4": "D", "5": "E"}
 COMPARATOR = {"LT": "mindestens", "GT": "höchstens", "EQ": "genau", "NE": "nicht"}
@@ -99,8 +110,11 @@ class Client:
         while len(out) < limit:
             params = self._scope(key, pr, branch, "componentKeys")
             params.update({"resolved": "false", "ps": str(min(100, limit - len(out))), "p": str(page), "s": "SEVERITY", "asc": "false",
-                           "facets": "severities,types"})
+                           "facets": "severities,types,impactSeverities,impactSoftwareQualities"})
             resp = self._get("/api/issues/search", params, max_body=4 << 20)
+            if resp["status"] == 400:      # ältere Version kennt die Facetten des Multi-Quality-Rule-Modus nicht
+                params["facets"] = "severities,types"
+                resp = self._get("/api/issues/search", params, max_body=4 << 20)
             st = resp["status"]
             if st in (401, 403):
                 raise SonarError("Sonar: Anmeldung abgelehnt (HTTP %d)." % st, auth=True)
@@ -130,6 +144,36 @@ class Client:
         d = net.parse_json(resp) or {}
         return d.get("hotspots") or [], int((d.get("paging") or {}).get("total", len(d.get("hotspots") or [])))
 
+    def history(self, key, pr=None, branch=None, metrics=("violations",), limit=60):
+        """Verlauf aus Sonar (api/measures/search_history), je Analyse ein Punkt: [{"ts", metric: zahl, ...}], alt nach neu.
+        «new_*»-Kennzahlen speichert Sonar nicht historisch, deshalb nur die Bestandszahlen (bei MRs sind das die Findings des MR). Leer, wenn es nichts gibt."""
+        params = self._scope(key, pr, branch, "component")
+        params.update({"metrics": ",".join(metrics), "ps": "1000"})
+        resp = self._get("/api/measures/search_history", params)
+        st = resp["status"]
+        if st in (401, 403):
+            raise SonarError("Sonar: Anmeldung abgelehnt (HTTP %d)." % st, auth=True)
+        if st in (400, 404):
+            return []
+        if st != 200:
+            raise SonarError("Sonar: Verlauf nicht lesbar (HTTP %d)" % st)
+        rows = {}
+        for m in (net.parse_json(resp) or {}).get("measures") or []:
+            for h in m.get("history") or []:
+                try:
+                    ts = datetime.fromisoformat(str(h["date"])).timestamp()
+                    rows.setdefault(ts, {"ts": ts})[m["metric"]] = float(h["value"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+        return [rows[t] for t in sorted(rows)][-limit:]
+
+    def pull_requests(self, key):
+        """Analysierte Pull Requests eines Projekts (Developer Edition und höher). None, wenn nicht verfügbar."""
+        resp = self._get("/api/project_pull_requests/list", {"project": key})
+        if resp["status"] != 200:
+            return None
+        return (net.parse_json(resp) or {}).get("pullRequests") or []
+
     def gate(self, key, pr=None, branch=None):
         """Quality Gate eines MR (pr) oder Branches. Gibt {status, failed[], url} zurück. Ohne Analyse: status NONE."""
         params = {"projectKey": key}
@@ -150,14 +194,31 @@ class Client:
         if not isinstance(ps, dict):
             raise SonarError("Sonar: unerwartete Antwort (kein SonarQube unter dieser Adresse?)")
         status = ps.get("status") if ps.get("status") in STATUS_LABEL else "NONE"
+        values = {}
+        for c in ps.get("conditions") or []:
+            try:
+                values[c["metricKey"]] = float(c["actualValue"])
+            except (KeyError, TypeError, ValueError):
+                pass
         failed = [describe(c) for c in ps.get("conditions") or [] if c.get("status") in ("ERROR", "WARN")]
         return {"status": status, "failed": failed, "url": self.dashboard_url(key, pr, branch),
-                "issues_url": self.issues_url(key, pr, branch),
+                "issues_url": self.issues_url(key, pr, branch), "values": values,
                 "detail": "; ".join(failed) if failed else STATUS_LABEL[status]}
 
 
-SEVERITY_ORDER = ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]
-TYPE_LABEL = {"BUG": "Bug", "VULNERABILITY": "Schwachstelle", "CODE_SMELL": "Code Smell", "SECURITY_HOTSPOT": "Hotspot"}
+SEVERITY_ORDER = ["BLOCKER", "CRITICAL", "HIGH", "MAJOR", "MEDIUM", "MINOR", "LOW", "INFO"]
+TYPE_LABEL = {"BUG": "Bug", "VULNERABILITY": "Schwachstelle", "CODE_SMELL": "Code Smell", "SECURITY_HOTSPOT": "Hotspot",
+              "SECURITY": "Sicherheit", "RELIABILITY": "Zuverlässigkeit", "MAINTAINABILITY": "Wartbarkeit"}
+HIST_COLS = (("violations", "Findings"), ("bugs", "Bugs"), ("vulnerabilities", "Schwachstellen"), ("code_smells", "Smells"), ("coverage", "Abdeckung %"))
+
+
+def impact(issue):
+    """(Schwere, Art) eines Findings: im Multi-Quality-Rule-Modus aus «impacts» (schwerste Auswirkung), sonst aus severity/type."""
+    imps = [i for i in issue.get("impacts") or [] if isinstance(i, dict) and i.get("severity")]
+    if imps:
+        top = min(imps, key=lambda i: SEVERITY_ORDER.index(i["severity"]) if i["severity"] in SEVERITY_ORDER else 99)
+        return top["severity"], top.get("softwareQuality") or issue.get("type")
+    return issue.get("severity") or "?", issue.get("type") or "?"
 
 
 def _path(component, key):
@@ -170,7 +231,7 @@ def _line(txt, n=300):
     return txt if len(txt) <= n else txt[:n - 1] + "…"
 
 
-def format_report(title, gate, key, issues, total, facets, hotspots, link, limit):
+def format_report(title, gate, key, issues, total, facets, hotspots, link, limit, history=None):
     """Markdown für die Zwischenablage. Enthält Dateipfade, Zeilennummern, Regeln und Sonar-Meldungen, aber keinen Quelltext."""
     L = ["# Sonar-Findings: %s" % title, "", "Projekt `%s` · Quality Gate: **%s**" % (key, STATUS_LABEL.get(gate.get("status"), gate.get("status", "?")))]
     if link:
@@ -178,7 +239,8 @@ def format_report(title, gate, key, issues, total, facets, hotspots, link, limit
     if gate.get("failed"):
         L += ["", "## Nicht erfüllte Bedingungen"] + ["- %s" % f for f in gate["failed"]]
     L += ["", "## Findings (%d offen)" % total]
-    sev, typ = facets.get("severities") or {}, facets.get("types") or {}
+    sev = facets.get("impactSeverities") or facets.get("severities") or {}
+    typ = facets.get("impactSoftwareQualities") or facets.get("types") or {}
     if sev:
         L.append("Schwere: " + ", ".join("%s %s" % (s.lower(), sev[s]) for s in SEVERITY_ORDER if sev.get(s)))
     if typ:
@@ -188,11 +250,11 @@ def format_report(title, gate, key, issues, total, facets, hotspots, link, limit
     by_file = {}
     for i in issues:
         by_file.setdefault(_path(i.get("component"), key), []).append(i)
-    for path in sorted(by_file, key=lambda p: (min(SEVERITY_ORDER.index(i.get("severity")) if i.get("severity") in SEVERITY_ORDER else 9 for i in by_file[p]), p)):
+    for path in sorted(by_file, key=lambda p: (min(SEVERITY_ORDER.index(impact(i)[0]) if impact(i)[0] in SEVERITY_ORDER else 99 for i in by_file[p]), p)):
         L += ["", "### `%s`" % path]
         for i in sorted(by_file[path], key=lambda x: x.get("line") or 0):
-            L.append("- Zeile %s [%s, %s] `%s`: %s" % (i.get("line", "?"), (i.get("severity") or "?").lower(), TYPE_LABEL.get(i.get("type"), i.get("type") or "?"),
-                                                    i.get("rule", "?"), _line(i.get("message"))))
+            sv, ty = impact(i)
+            L.append("- Zeile %s [%s, %s] `%s`: %s" % (i.get("line", "?"), sv.lower(), TYPE_LABEL.get(ty, ty), i.get("rule", "?"), _line(i.get("message"))))
     if total > len(issues):
         L += ["", "_Es werden %d von %d Findings gezeigt (nach Schwere sortiert). Den Rest gibt es in Sonar._" % (len(issues), total)]
     L += ["", "## Security Hotspots zur Prüfung"]
@@ -206,5 +268,25 @@ def format_report(title, gate, key, issues, total, facets, hotspots, link, limit
                                                     h.get("securityCategory", "?"), _line(h.get("message"))))
         if hotspots[1] > len(hotspots[0]):
             L.append("_%d weitere in Sonar._" % (hotspots[1] - len(hotspots[0])))
+    if history and history.get("rows"):
+        cols = [(k, lab) for k, lab in history["cols"] if any(k in r for r in history["rows"])]
+        L += ["", "## Verlauf (%s)" % history["source"], "| Stand | " + " | ".join(lab for _, lab in cols) + " |", "|---|" + "---|" * len(cols)]
+        for r in history["rows"]:
+            L.append("| %s | " % datetime.fromtimestamp(r["ts"]).strftime("%d.%m. %H:%M") + " | ".join(("%g" % r[k]) if k in r else "" for k, _ in cols) + " |")
+        first, last = history["rows"][0], history["rows"][-1]
+        k0 = cols[0][0] if cols else None
+        if k0 and k0 in first and k0 in last and len(history["rows"]) > 1:
+            d = last[k0] - first[k0]
+            L.append("%s: %g → %g (%s)" % (cols[0][1], first[k0], last[k0], "weniger" if d < 0 else "mehr" if d > 0 else "unverändert"))
     L += ["", "---", "Erzeugt von tinyops aus der Sonar-API (nur lesend). Enthält Pfade und Meldungen, keinen Quelltext."]
     return "\n".join(L) + "\n"
+
+
+def trend_of(series, source="sonar", keep=24):
+    """series: [(ts, zahl)] alt nach neu → Zusammenfassung für die Anzeige oder None (weniger als zwei Punkte)."""
+    pts = [(t, v) for t, v in series if v is not None]
+    if len(pts) < 2:
+        return None
+    first, last = pts[0][1], pts[-1][1]
+    return {"source": source, "points": [int(v) if float(v).is_integer() else round(v, 1) for _, v in pts[-keep:]], "first": first, "last": last,
+            "delta": last - first, "since": pts[0][0], "n": len(pts)}
