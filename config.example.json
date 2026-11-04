@@ -67,5 +67,12 @@
     "model": "",
     "allow_remote": false
   },
-  "sonar": {"enabled": false, "url": "https://sonar.example.intern", "cache_seconds": 300, "max_items": 40}
+  "sonar": {"enabled": false, "url": "https://sonar.example.intern", "cache_seconds": 300, "max_items": 40},
+  "connections": [
+    {"id": "dev-vm", "name": "dev-vm", "host": "dev.example.intern", "user": "adrian", "port": 22, "identity_file": "", "host_key": "strict"}
+  ],
+  "agents": [
+    {"id": "claude-devvm", "name": "claude-devvm", "kind": "claude", "connection": "dev-vm", "workspace_root": "/home/adrian/work", "extra_args": "", "cloud": true},
+    {"id": "lokal-llm", "name": "lokal-llm", "kind": "custom", "connection": "local", "workspace_root": "~/work", "extra_args": "", "cloud": false, "command": "mein-agent --prompt-file {prompt_file}"}
+  ]
 }

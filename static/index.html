@@ -179,6 +179,17 @@
   .badge.success { background: var(--ok-bg); color: var(--ok); } .badge.failed { background: var(--bad-bg); color: var(--bad); } .badge.running { background: var(--focus-bg); color: var(--focus); }
   textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
   pre.log { background: #0d1015; color: #d8dde6; padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; font: 12px/1.5 var(--mono); white-space: pre-wrap; margin: 6px 0 0; }
+  .bagent { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .bagent select { max-width: 172px; font-size: 12px; padding: 2px 4px; }
+  .bagent .chip { cursor: pointer; font-family: inherit; }
+  .agspin { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: agp 1.2s ease-in-out infinite; }
+  @keyframes agp { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .agspin { animation: none; } }
+  .agbox { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
+  .agbox .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  label.sm { font-size: 12px; color: var(--quiet); display: grid; gap: 2px; }
+  #agLog { max-height: 42vh; min-height: 120px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pchip input.pa { width: 120px; }
   dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); width: min(720px, 92vw); }
   dialog::backdrop { background: rgba(8, 10, 14, .5); }
   dialog textarea { height: 300px; font-family: var(--mono); font-size: 13px; }
@@ -513,6 +524,7 @@
   <div class="row" style="margin-top:8px"><button class="primary" id="ideaSave">Speichern</button><button id="ideaCancel">Abbrechen</button></div>
 </dialog>
 
+<dialog id="agDlg" style="width:min(780px,96vw)"><div id="agBody"></div></dialog>
 <dialog id="logDlg" style="width:min(1000px,96vw)">
   <div class="row" style="justify-content:space-between">
     <strong>Log <span id="logFile" class="quiet small" style="font-weight:400"></span></strong>
@@ -707,6 +719,7 @@ function storiesTile() {
       <div class="top"><span class="key">${esc(s.key)}</span>${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       ${s.url ? `<a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>` : `<span class="sum">${esc(s.summary)}</span>`}
       <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
+      ${agentRow(s.key, s.key, s.summary, s.url, s.items)}
     </div>`);
   }
   const sp = (j.sprints || []).map(s => `${esc(s.name)}${s.days_left !== null && s.days_left !== undefined ? (s.days_left >= 0 ? ` · noch ${s.days_left} Tage` : ' · überfällig') : ''}`).join(', ');
@@ -1132,7 +1145,7 @@ function boardCard(c) {
     ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>`
     : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
   return `<div class="bcard" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''}>
-    <div class="btop">${key}${chips}</div><div class="bsum">${sum}</div>${mrs ? `<div class="links">${mrs}</div>` : ''}<div class="bact">${act}</div></div>`;
+    <div class="btop">${key}${chips}</div><div class="bsum">${sum}</div>${mrs ? `<div class="links">${mrs}</div>` : ''}${isIdea ? '' : agentRow(c.id, c.key || '', title, c.url, c.items)}<div class="bact">${act}</div></div>`;
 }
 function renderBoard() {
   const b = state && state.board, el = $('bcols');
@@ -1219,6 +1232,98 @@ async function act(fn, ok) {
   try { const r = await fn(); if (ok) toast(ok); await load(); return r; } catch (e) { toast(e.message); }
 }
 const post = (path, body) => api('POST', path, body);
+
+// ---- Agenten auf Karten
+const AG = () => (state && state.agents) || { enabled: false, agents: [], runs: [], projects: [] };
+const AG_ST = { 'zugewiesen': 'tk', 'läuft': 'agent', 'fertig': 'sq-ok', 'fehlgeschlagen': 'sq-bad', 'abgebrochen': 'sq-none', 'verloren': 'warn' };
+const agCtx = {};
+function agentRow(ticket, key, title, url, items) {
+  const ag = AG();
+  if (!ag.enabled || !ticket) return '';
+  agCtx[ticket] = { key, title, url, items: items || [] };
+  const chips = ag.runs.filter(r => r.ticket === ticket).slice(0, 4).map(r =>
+    `<button class="chip ${AG_ST[r.status] || ''}" data-arun="${r.id}" title="${esc(r.agent_name)} · ${esc(r.where)}${r.note ? ' · ' + esc(r.note) : ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)} · ${esc(r.status)}</button>`).join('');
+  return `<div class="bagent">${chips}<select data-aassign="1" data-ticket="${esc(ticket)}" aria-label="Agent zuweisen"><option value="">Agent zuweisen …</option>${ag.agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)} (${esc(a.where)})</option>`).join('')}</select></div>`;
+}
+const fmtSecs = n => n >= 3600 ? Math.floor(n / 3600) + ' h ' + Math.floor(n % 3600 / 60) + ' min' : n >= 60 ? Math.floor(n / 60) + ' min ' + (n % 60) + ' s' : n + ' s';
+let agTimer = null;
+function agClose() { clearInterval(agTimer); agTimer = null; $('agDlg').close(); }
+$('agDlg').addEventListener('close', () => { clearInterval(agTimer); agTimer = null; });
+async function openAgentDlg(o) {
+  const ag = AG(), ctx = agCtx[o.ticket] || { key: '', title: '', url: '', items: [] };
+  const a = ag.agents.find(x => x.id === o.agent);
+  if (!a) return;
+  let pid = o.pid ?? (ctx.items[0] ? ctx.items[0].project_id : (ag.projects[0] ? ag.projects[0].id : null));
+  const branch = (ctx.items.find(x => x.project_id === pid) || ctx.items[0] || {}).branch || '';
+  const box = $('agBody');
+  async function draw() {
+    let info;
+    try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url }); }
+    catch (e) { toast(e.message); return; }
+    const projSel = ag.projects.length > 1 ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
+    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(ctx.key || 'Aufgabe')} an ${esc(a.name)}</strong><span class="quiet small">${esc(info.kind)}</span></div>
+      <div class="quiet small" style="margin:4px 0 8px">${esc(ctx.title)}</div>
+      <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Ordner: <code>${esc(info.workdir || '—')}</code></div></div></div>
+      ${info.cloud ? `<div class="banner ${info.allowed ? 'warn' : 'bad'}">${info.allowed ? `Dieser Agent sendet Prompt und Code an ${esc(info.provider)}. Das Projekt ist dafür freigegeben.` : esc(info.reason)}</div>` : (!info.allowed ? `<div class="banner bad">${esc(info.reason)}</div>` : '')}
+      <label class="sm" for="agPrompt">Prompt (nur Ticketangaben, du kannst ihn ändern)</label>
+      <textarea id="agPrompt" spellcheck="false" style="height:230px">${esc(info.prompt)}</textarea>
+      <div class="row" style="margin-top:8px;justify-content:flex-end"><button id="agCancel">Abbrechen</button>${o.run ? '' : '<button id="agAssign">Nur zuweisen</button>'}<button class="primary" id="agStart" ${info.allowed ? '' : 'disabled'}>${o.run ? 'Starten' : 'Zuweisen &amp; starten'}</button></div>`;
+    if ($('agProj')) $('agProj').onchange = ev => { pid = +ev.target.value; draw(); };
+    $('agCancel').onclick = agClose;
+    const go = async start => {
+      try {
+        let run = o.run;
+        if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title })).id;
+        if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch });
+        agClose(); toast(start ? 'Gestartet' : 'Zugewiesen'); await load();
+      } catch (e) { toast(e.message); await load(); }
+    };
+    $('agStart').onclick = () => go(true);
+    if ($('agAssign')) $('agAssign').onclick = () => go(false);
+  }
+  await draw();
+  $('agDlg').showModal();
+}
+async function openRunDlg(id) {
+  const box = $('agBody');
+  const get = () => (AG().runs.find(r => r.id === id));
+  let r = get();
+  if (!r) return;
+  if (r.status === 'zugewiesen') { return openAgentDlg({ ticket: r.ticket, agent: r.agent, run: r.id, pid: r.project_id }); }
+  async function draw(first) {
+    r = get();
+    if (!r) { agClose(); return; }
+    let text = '';
+    try { text = (await post('/api/agents/tail', { run: id, lines: 120 })).text; } catch (e) { text = e.message; }
+    const atBottom = !$('agLog') || $('agLog').scrollTop + $('agLog').clientHeight >= $('agLog').scrollHeight - 30;
+    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
+      <div class="quiet small" style="margin:4px 0">${esc(r.title)}</div>
+      <div class="quiet small">Ziel: ${esc(r.where)} · Ordner: <code>${esc(r.workdir)}</code>${r.branch ? ' · Branch: ' + esc(r.branch) : ''} · Dauer: ${esc(fmtSecs(r.secs))}</div>
+      ${r.note ? `<div class="banner warn">${esc(r.note)}</div>` : ''}
+      <pre class="log" id="agLog">${esc(text)}</pre>
+      <details style="margin-top:6px"><summary class="quiet small">Prompt</summary><pre class="log" style="max-height:30vh;white-space:pre-wrap">${esc(r.prompt_text || '(nur beim Start gesendet)')}</pre></details>
+      <div class="row" style="margin-top:8px;justify-content:flex-end">
+        ${r.attach ? '<button id="agAttach" title="Im Terminal einfügen, um live mitzulesen und einzugreifen">Befehl zum Mitlesen kopieren</button>' : ''}
+        <button id="agReload">Aktualisieren</button>
+        ${r.active ? '<button id="agStop">Stoppen</button>' : '<button id="agRemove">Entfernen</button>'}
+        <button class="primary" id="agClose">Schließen</button></div>`;
+    const lg = $('agLog'); if (lg && (first || atBottom)) lg.scrollTop = lg.scrollHeight;
+    $('agClose').onclick = agClose;
+    $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
+    if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
+    if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
+    if ($('agRemove')) $('agRemove').onclick = async () => { try { await post('/api/agents/remove', { run: id }); agClose(); await load(); } catch (e) { toast(e.message); } };
+  }
+  await draw(true);
+  $('agDlg').showModal();
+  clearInterval(agTimer);
+  agTimer = setInterval(async () => { if (!$('agDlg').open) return; await load(); const cur = get(); if (cur && (cur.active || (draw.last !== cur.status))) { draw.last = cur.status; draw(false); } }, 4000);
+}
+document.addEventListener('change', ev => {
+  const s = ev.target.closest && ev.target.closest('select[data-aassign]');
+  if (s && s.value) { const v = s.value; s.value = ''; openAgentDlg({ ticket: s.dataset.ticket, agent: v }); }
+});
+document.addEventListener('click', ev => { const b = ev.target.closest && ev.target.closest('[data-arun]'); if (b) { ev.preventDefault(); openRunDlg(+b.dataset.arun); } });
 
 // Ziehen
 document.addEventListener('dragstart', ev => {
@@ -1399,6 +1504,7 @@ document.getElementById('refresh').onclick = async () => {
 // ---------------------------------------------------------------- Einstellungen
 let S = null;          // Antwort von /api/settings
 let P = [];            // Arbeitskopie der Projekte
+let CN = [], AGC = []; // Arbeitskopien der SSH-Verbindungen und Agenten
 let view = 'overview';
 
 function setView(v) {
@@ -1471,7 +1577,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="sonar">Sonar</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -1557,6 +1663,14 @@ async function loadSettings() {
       ${S.secrets.sonar_token.set ? '<button id="sq-del">Gespeicherten Token löschen</button>' : ''}</div>
     <div id="sq-result"></div>`)}
 
+  ${sect('agents', 'Coding-Agenten', 'Lokale und über SSH/tmux erreichbare Agenten (Claude Code, Codex, Mistral Vibe, eigener Befehl), die du auf der Karte einem Ticket zuweist und startest. Je Agent legst du den Arbeitsordner fest; darunter liegt je Projekt ein Repository.', `
+    <div class="hint">Cloud-Agenten (Claude, Codex, Vibe) senden Prompt und Code an den Anbieter. Sie starten nur für Projekte, bei denen unter GitLab «Cloud-Agent erlaubt» angekreuzt ist (Standard: aus). tinyops fragt nie nach Passwörtern: SSH läuft mit Schlüsseln, ohne Rückfrage, mit strenger Host-Schlüsselprüfung.</div>
+    <h3>Verbindungen</h3>
+    <div id="cn-list"></div><div class="row"><button id="cn-add">Verbindung hinzufügen</button><span class="quiet small">«Lokal» (dieser Rechner) gibt es immer.</span></div>
+    <h3>Agenten</h3>
+    <div id="ag-list"></div><div class="row"><button id="ag-add">Agent hinzufügen</button></div>
+    <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
+
   ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist (gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern) und das Monatsbudget von Mistral (per Lesezeichen aus deinem Browser).', `
     <label class="check"><input type="checkbox" id="us-claude" ${S.usage.claude ? 'checked' : ''}><span><strong>Claude lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei von Claude Code)</span></span></label>
     ${field('us-claude-file', 'Pfad der Claude-Anmeldedatei', S.usage.claude_file, { ph: '~/.claude/.credentials.json', err: 'usage.claude_file' })}
@@ -1603,6 +1717,7 @@ async function loadSettings() {
   </div>
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
     <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
+  CN = (S.connections || []).map(c => ({ ...c })); AGC = (S.agents || []).map(a => ({ ...a })); renderAgentCfg();
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
   renderLlmKey();
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
@@ -1727,10 +1842,13 @@ $('viewSettings').addEventListener('click', ev => {
 function renderProjects() {
   $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="pchip"><span class="quiet">#${esc(p.id)}</span>
     <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename">
-    <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="Sonar-Schlüssel" aria-label="Sonar-Projektschlüssel" style="width:150px"><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
+    <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="Sonar-Schlüssel" aria-label="Sonar-Projektschlüssel" style="width:150px">
+    <input type="text" class="pa" data-pa="${i}" value="${esc(p.agent_dir || '')}" placeholder="Agent-Ordner" aria-label="Ordner des Repositories unter dem Arbeitsordner des Agenten (leer = Projektname)" title="Ordner unter dem Arbeitsordner des Agenten (leer = Projektname)">
+    <label class="quiet small" title="Erlaubt, dass Claude, Codex oder Vibe Prompt und Code dieses Projekts an ihren Anbieter senden"><input type="checkbox" data-pc="${i}" ${p.allow_cloud_agents ? 'checked' : ''}> Cloud-Agent erlaubt</label><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
     : '<div class="empty">Noch kein Projekt.</div>';
 }
-$('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; });
+$('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; const a = ev.target.dataset.pa; if (a !== undefined) P[+a].agent_dir = ev.target.value; });
+$('viewSettings').addEventListener('change', ev => { const c = ev.target.dataset.pc; if (c !== undefined) P[+c].allow_cloud_agents = ev.target.checked; });
 $('viewSettings').addEventListener('click', ev => {
   const d = ev.target.closest('[data-pdel]');
   if (d) { P.splice(+d.dataset.pdel, 1); renderProjects(); }
@@ -1780,6 +1898,71 @@ async function suggestIdentity() {
   });
 }
 
+// ---- Agenten: Einstellungen
+const agSlug = t => String(t || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 31);
+const connOptions = sel => '<option value="local"' + (sel === 'local' ? ' selected' : '') + '>lokal (dieser Rechner)</option>' + CN.map(c => { const id = c.id || agSlug(c.name); return `<option value="${esc(id)}" ${sel === id ? 'selected' : ''}>${esc(c.name || id)} (SSH)</option>`; }).join('');
+function refreshConnOptions() {   // nur die Auswahllisten, damit beim Tippen kein Feld den Fokus verliert
+  document.querySelectorAll('select[data-ag][data-f="connection"]').forEach(sel => { const a = AGC[+sel.dataset.ag]; sel.innerHTML = connOptions(a.connection || 'local'); });
+}
+function renderAgentCfg() {
+  const kinds = (S.agent_kinds || []);
+  const cn = $('cn-list'), ag = $('ag-list');
+  if (!cn || !ag) return;
+  cn.innerHTML = CN.length ? CN.map((c, i) => `<div class="agbox"><div class="grid3">
+      <label class="sm">Name<input type="text" data-cn="${i}" data-f="name" value="${esc(c.name || '')}" placeholder="dev-vm" maxlength="40"></label>
+      <label class="sm">Rechner<input type="text" data-cn="${i}" data-f="host" value="${esc(c.host || '')}" placeholder="dev.example.intern"></label>
+      <label class="sm">Benutzer<input type="text" data-cn="${i}" data-f="user" value="${esc(c.user || '')}" placeholder="adrian"></label>
+      <label class="sm">Port<input type="number" data-cn="${i}" data-f="port" value="${esc(c.port || 22)}"></label>
+      <label class="sm">Schlüsseldatei (optional)<input type="text" data-cn="${i}" data-f="identity_file" value="${esc(c.identity_file || '')}" placeholder="~/.ssh/id_ed25519"></label>
+      <label class="sm">Host-Schlüssel<select data-cn="${i}" data-f="host_key"><option value="strict" ${c.host_key !== 'accept-new' ? 'selected' : ''}>streng (muss bekannt sein)</option><option value="accept-new" ${c.host_key === 'accept-new' ? 'selected' : ''}>beim ersten Mal vertrauen</option></select></label>
+    </div><div class="row"><button data-cndel="${i}">Entfernen</button></div>
+    <div class="ferr" data-err="connections.${i}.name"></div><div class="ferr" data-err="connections.${i}.host"></div><div class="ferr" data-err="connections.${i}.user"></div><div class="ferr" data-err="connections.${i}.port"></div><div class="ferr" data-err="connections.${i}.identity_file"></div></div>`).join('')
+    : '<div class="quiet small" style="margin-bottom:8px">Noch keine SSH-Verbindung. Für Agenten auf diesem Rechner ist keine nötig.</div>';
+  const conOpts = connOptions;
+  ag.innerHTML = AGC.length ? AGC.map((a, i) => `<div class="agbox"><div class="grid3">
+      <label class="sm">Name<input type="text" data-ag="${i}" data-f="name" value="${esc(a.name || '')}" placeholder="claude-devvm" maxlength="40"></label>
+      <label class="sm">Art<select data-ag="${i}" data-f="kind">${kinds.map(k => `<option value="${esc(k.id)}" ${a.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></label>
+      <label class="sm">Verbindung<select data-ag="${i}" data-f="connection">${conOpts(a.connection || 'local')}</select></label>
+      <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/adrian/work"></label>
+      <label class="sm">Zusätzliche Argumente<input type="text" data-ag="${i}" data-f="extra_args" value="${esc(a.extra_args || '')}" placeholder="--model opus"></label>
+    </div>
+    ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud === false ? '' : 'checked'}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
+    <div class="row"><button data-agtest="${i}">Testen</button><button data-agdel="${i}">Entfernen</button><span class="quiet small">Prüft Verbindung, tmux, Arbeitsordner und Programm. Gespeichert wird erst mit «Speichern».</span></div>
+    <div id="ag-res-${i}"></div>
+    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div></div>`).join('')
+    : '<div class="quiet small" style="margin-bottom:8px">Noch kein Agent.</div>';
+}
+$('viewSettings').addEventListener('input', ev => {
+  const t = ev.target, f = t.dataset.f;
+  if (!f) return;
+  const v = t.type === 'checkbox' ? t.checked : t.value;
+  if (t.dataset.cn !== undefined) CN[+t.dataset.cn][f] = v;
+  if (t.dataset.ag !== undefined) AGC[+t.dataset.ag][f] = v;
+});
+$('viewSettings').addEventListener('change', ev => {
+  const t = ev.target, f = t.dataset.f;
+  if (!f) return;
+  if (t.dataset.cn !== undefined) { CN[+t.dataset.cn][f] = t.value; if (f === 'name') refreshConnOptions(); }
+  if (t.dataset.ag !== undefined) { const a = AGC[+t.dataset.ag]; a[f] = t.type === 'checkbox' ? t.checked : t.value; if (f === 'kind') renderAgentCfg(); }
+});
+$('viewSettings').addEventListener('click', async ev => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  if (b.id === 'cn-add') { CN.push({ name: '', host: '', user: '', port: 22, identity_file: '', host_key: 'strict' }); renderAgentCfg(); }
+  if (b.id === 'ag-add') { AGC.push({ name: '', kind: 'claude', connection: 'local', workspace_root: '', extra_args: '' }); renderAgentCfg(); }
+  if (b.dataset.cndel !== undefined) { const c = CN.splice(+b.dataset.cndel, 1)[0]; const id = c.id || agSlug(c.name); AGC.forEach(a => { if (a.connection === id) a.connection = 'local'; }); renderAgentCfg(); }
+  if (b.dataset.agdel !== undefined) { AGC.splice(+b.dataset.agdel, 1); renderAgentCfg(); }
+  if (b.dataset.agtest !== undefined) {
+    const i = +b.dataset.agtest, a = AGC[i], out = $('ag-res-' + i);
+    const c = a.connection && a.connection !== 'local' ? CN.find(x => (x.id || agSlug(x.name)) === a.connection) : null;
+    if (a.connection && a.connection !== 'local' && !c) { out.innerHTML = '<div class="banner bad">Diese Verbindung gibt es nicht.</div>'; return; }
+    await busy(b, 'Teste …', async () => {
+      try { out.innerHTML = stepsHtml(await api('POST', '/api/settings/test/agent', { connection: c ? { ...c, id: c.id || agSlug(c.name) } : null, agent: { kind: a.kind, workspace_root: a.workspace_root } })); }
+      catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+    });
+  }
+});
+
 // Speichern
 function collect() {
   const secrets = {};
@@ -1789,7 +1972,7 @@ function collect() {
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
-    projects: P,
+    projects: P, connections: CN, agents: AGC,
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
@@ -1829,6 +2012,10 @@ async function delSecrets(names, label) {
 load();
 setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 300000);   // der Server gleicht ohnehin nur alle cache_seconds ab
 setInterval(() => { if (state && state.jobs && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
+setInterval(() => {   // laufende Agenten: Stand nachfragen, aber keine offene Auswahl wegrendern
+  const ae = document.activeElement;
+  if (state && state.agents && state.agents.runs.some(r => r.active) && !$('agDlg').open && !(ae && ae.dataset && ae.dataset.aassign)) load();
+}, 5000);
 </script>
 </body>
 </html>

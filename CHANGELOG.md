@@ -5,6 +5,31 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.12.0]
+
+### Neu
+- **Coding-Agenten an Tickets:** Einstellungen → Coding-Agenten. Du legst **Verbindungen** an (SSH-Ziel mit Benutzer, Port, Schlüsseldatei; «lokal» gibt es immer)
+  und **Agenten** (Claude Code, Codex, Mistral Vibe oder eigener Befehl) mit Verbindung und **Arbeitsordner**. Unter dem Arbeitsordner liegt je Projekt ein Repository
+  (Ordnername = Projektname oder das neue Feld «Agent-Ordner» beim Projekt). «Testen» prüft Verbindung, tmux, Ordner und Programm.
+- **Zuweisen auf der Karte:** Auf jeder Board-Karte und jeder Story im Jira-Panel steht «Agent zuweisen …». Der Dialog zeigt Ziel, Ordner, Anbieter und den Prompt
+  (aus Key, Titel, Projekt, Branch, Link; Vorlage `prompts/agent-task.md`, vor dem Start änderbar). «Zuweisen & starten» oder «Nur zuweisen».
+  Auf der Karte steht je Lauf ein Chip mit dem Status **zugewiesen, läuft, fertig, fehlgeschlagen, abgebrochen, verloren**. Klick öffnet das Log (alle 4 s aktualisiert),
+  «Stoppen», «Entfernen» und einen kopierbaren `ssh -t … tmux attach`-Befehl zum Mitlesen und Eingreifen.
+- **Remote per SSH und tmux:** pro Lauf eine Sitzung `tinyops-<Nr>` auf dem Zielhost; Prompt, Befehl, Log und Exit-Code liegen in `~/.tinyops/runs/`.
+  Der Lauf überlebt einen Neustart von tinyops und eine getrennte SSH-Verbindung. **Lokal** startet ein losgelöster Prozess (`agentwrap.py`, auch unter Windows).
+- Ein Agent führt je Ordner höchstens einen Lauf gleichzeitig aus.
+
+### Sicherheit
+- **Cloud-Agenten (Claude, Codex, Vibe) starten nur für Projekte mit «Cloud-Agent erlaubt»** (Standard: aus), weil Prompt und Code an den Anbieter gehen.
+  Ohne Freigabe wird nicht einmal SSH aufgerufen. Eigene Befehle gelten standardmässig auch als Cloud; lokale Modelle lassen sich per `cloud: false` freigeben.
+- Der **Befehl** kommt aus eingebauten Vorlagen. Nur beim Typ «custom» steht er in der `config.json` (`command`, mit `{prompt_file}`); die Oberfläche kann ihn nicht setzen oder ändern.
+- Der Prompt wird als Datei übertragen (Heredoc mit eindeutigem Ende) und als ein einziges Argument gelesen, nie in eine Shell-Zeile eingebettet; getestet mit feindlichem Prompt.
+- Host, Benutzer, Argumente und Ordner werden streng geprüft (kein führender `-`, keine Shell-Zeichen). SSH läuft mit `BatchMode`, strenger Host-Schlüsselprüfung
+  (oder bewusst «beim ersten Mal vertrauen») und ohne Passwortabfrage. Ausgaben im Log werden von bekannten Secrets und Token-Formen (GitLab, GitHub, `sk-…`, Bearer, Private Keys) bereinigt.
+
+### Hinweis
+- Das Docker-Image enthält keinen SSH-Client; für Remote-Agenten aus dem Container ein Image mit `openssh-client` und die Schlüssel als Volume bereitstellen.
+
 ## [0.11.0]
 
 ### Neu

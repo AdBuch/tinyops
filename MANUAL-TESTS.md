@@ -113,6 +113,21 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 8.14 | MR mit mindestens zwei Analysen in Sonar | Kurve und ▼/▲ neben dem Gate; Tooltip nennt Anfang, Ende, Datum und Quelle «Sonar-Verlauf» (stimmt mit Sonar überein?) |
 | 8.15 | Report an einem solchen MR | Abschnitt «Verlauf» mit Tabelle; Schwere heisst hoch/mittel/gering (Auswirkung), nicht blocker/major |
 
+## 9. Coding-Agenten (ab 0.12.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 9.1 | Verbindung zum Entwicklungsrechner anlegen, Agent mit Arbeitsordner, «Testen» | Vier grüne Schritte; ohne bekannten Host-Schlüssel die Meldung mit dem Hinweis `ssh <rechner>` |
+| 9.2 | Test mit falschem Benutzer oder Schlüssel | «Anmeldung abgelehnt», keine Passwortabfrage im Terminal von tinyops |
+| 9.3 | Projekt ohne «Cloud-Agent erlaubt»: Claude-Agent zuweisen | Rote Meldung im Dialog, «Zuweisen & starten» gesperrt; auf dem Zielhost startet nichts |
+| 9.4 | Freigabe ankreuzen, Karte zuweisen und starten | Chip «läuft»; auf dem Zielhost `tmux ls` zeigt `tinyops-<Nr>`; das Repository liegt unter Arbeitsordner/Projektname |
+| 9.5 | Log im Dialog, dann den kopierten `ssh -t … tmux attach`-Befehl im Terminal | Gleiche Ausgabe; Mitlesen und Eingreifen geht; Trennen (Strg-b d) lässt den Lauf weiterlaufen |
+| 9.6 | tinyops neu starten, während der Agent läuft | Chip bleibt «läuft», danach «fertig» mit dem richtigen Exit-Code |
+| 9.7 | «Stoppen» | Chip «abgebrochen», Sitzung weg |
+| 9.8 | Der echte Claude-Aufruf: Nimmt `claude -p "<Prompt>"` den Prompt wie erwartet, arbeitet er im Repository, legt er den Branch an? | Genau das, sonst «Zusätzliche Argumente» oder `custom` mit eigenem Befehl nutzen (Rückmeldung bitte mit Fehlermeldung des Agenten) |
+| 9.9 | Dasselbe mit Codex (`codex exec`) und Vibe (`vibe -p`) | Die Aufrufe sind aus der Dokumentation abgeleitet, nicht getestet: Abweichungen melden |
+| 9.10 | Lokaler Agent (Windows und Linux) | Läuft losgelöst weiter, wenn tinyops beendet wird; «Stoppen» beendet den Prozessbaum |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

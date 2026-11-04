@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import agents
 import fnmatch
 import links
 import llm
@@ -41,7 +42,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.11.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.12.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -120,6 +121,8 @@ DEFAULTS = {
         "{namespace}", "--wait=false",
     ],
     "agent_command": [],
+    "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
+    "agents": [],
     "idea_cap": 25,
     "idea_expire_days": 30,
     "jira": {},
@@ -1133,6 +1136,8 @@ class App:
         self._usage_cache, self._usage_lock = None, threading.Lock()
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
+        self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
+        self._agent_poll_busy = False
         self._types_cache = {}
         self._by_key = {}
         self.problems = []
@@ -1984,8 +1989,69 @@ class App:
             "ticket": self.ticket_meta(),
             "pools": self.pools_view(data),
             "ai": self.store.ai_accounts() if self.has("ai") else [],
+            "agents": self.agents_view(),
         })
         return data
+
+    # -- Coding-Agenten an Tickets
+    def agents_view(self):
+        """Agenten und Läufe für die Oberfläche. Der Stand der laufenden Läufe wird im Hintergrund abgefragt (SSH kann dauern)."""
+        v = self.agents.view()
+        if any(r["active"] for r in v["runs"]) and not self._agent_poll_busy:
+            self._agent_poll_busy = True
+
+            def work():
+                try:
+                    self.agents.poll()
+                except Exception as e:   # Abfrage darf die Oberfläche nie stören
+                    log.warning("Agenten-Abfrage: %s", scrub(e))
+                finally:
+                    self._agent_poll_busy = False
+            threading.Thread(target=work, daemon=True).start()
+        return v
+
+    def agent_action(self, action, b):
+        svc = self.agents
+        try:
+            if action == "prompt":
+                return svc.prompt_info(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
+                                       b.get("title") or "", b.get("key") or "", b.get("url") or "")
+            if action == "assign":
+                rid = svc.assign(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch"), b.get("title"))
+                return {"id": rid}
+            if action == "start":
+                rid = svc.start(self._rid(b), b.get("prompt"), self._pid(b.get("project_id")), b.get("branch"))
+                return {"id": rid}
+            if action == "stop":
+                svc.stop(self._rid(b))
+                return {"ok": True}
+            if action == "remove":
+                svc.remove(self._rid(b))
+                return {"ok": True}
+            if action == "refresh":
+                svc.poll(force=True)
+                return svc.view()
+            if action == "tail":
+                return {"text": svc.tail(self._rid(b), int(b.get("lines") or 80))}
+        except agents.AgentError as e:
+            raise UserError(str(e))
+        raise UserError("Unbekannte Aktion.")
+
+    @staticmethod
+    def _pid(v):
+        if v in (None, ""):
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            raise UserError("project_id muss eine Zahl sein.")
+
+    @staticmethod
+    def _rid(b):
+        try:
+            return int(b.get("run"))
+        except (TypeError, ValueError):
+            raise UserError("Lauf-Nummer fehlt.")
 
     # -- Prompts
     def prompt_names(self):
@@ -2220,7 +2286,7 @@ def make_handler(app):
                 # -- vorerst ausgeblendete Funktionen
                 needs = ("ideas" if path.startswith("/api/ideas") else
                          "ai" if path.startswith("/api/ai/") else
-                         "testenv" if path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/agent", "/api/prompt")) else "")
+                         "testenv" if (path == "/api/agent" or path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/prompt"))) else "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
                 if method == "POST" and path == "/api/links":
@@ -2231,6 +2297,8 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "POST" and path.startswith("/api/agents/"):
+                    return self._send(200, app.agent_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/ai/"):
                     return self._send(200, app.ai_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path == "/api/ticket/draft":
@@ -2324,6 +2392,10 @@ def make_handler(app):
             if path == "/api/settings/test/sonar":
                 res = settings.test_sonar(body, stored)
                 hlog.info("Test Sonar: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
+            if path == "/api/settings/test/agent":
+                res = settings.test_agent(body, stored)
+                hlog.info("Test Agent: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
             if path == "/api/settings/test/llm":
                 res = settings.test_llm(body, stored)

@@ -321,6 +321,20 @@ Mistral hat keine Schnittstelle fürs Restkontingent, die Budgets stehen nur auf
 `usage_percentage` ist ein Prozentwert (0,159 bei 30 $ = 0,05 $ verbraucht). Nach 36 Stunden zeigt die Kachel «veraltet»; nach dem Monatswechsel «abgelaufener Monat».
 Voraussetzung: tinyops muss in diesem Browser unter der gewohnten Adresse erreichbar (und angemeldet) sein. Ändert Mistral die Seite, meldet das Lesezeichen «Keine Budgetdaten gefunden».
 
+## 4p. Coding-Agenten an Tickets (neu in 0.12.0)
+
+Agenten sind CLI-Programme (Claude Code, Codex, Mistral Vibe oder dein eigener Befehl), die auf diesem Rechner oder per SSH auf einem anderen laufen. Du weist sie auf der Karte einem Ticket zu; der Status steht danach direkt auf der Karte.
+
+1. Einstellungen → **Coding-Agenten** → «Verbindung hinzufügen» (Name, Rechner, Benutzer, Port, optional Schlüsseldatei). Auf dem Zielhost müssen `tmux` und der Agent installiert und angemeldet sein, und der SSH-Schlüssel muss ohne Passwortabfrage funktionieren (ssh-agent). Der Host-Schlüssel muss bekannt sein: einmal im Terminal `ssh <rechner>` ausführen.
+2. «Agent hinzufügen»: Name, Art, Verbindung (oder lokal), **Arbeitsordner** (auf dem Zielhost absolut, z. B. `/home/adrian/work`), optional zusätzliche Argumente (`--model opus`). «Testen» zeigt, woran es hängt.
+3. Unter GitLab → Projekte: optional **Agent-Ordner** (Standard: Projektname; das Repository muss unter dem Arbeitsordner liegen) und **Cloud-Agent erlaubt**.
+4. Auf der Karte «Agent zuweisen …», Prompt prüfen, «Zuweisen & starten». Der Chip zeigt den Stand; ein Klick öffnet das Log, «Stoppen» beendet die Sitzung.
+
+Stände: *zugewiesen* (noch nicht gestartet), *läuft*, *fertig* (Exit 0), *fehlgeschlagen* (Exit ≠ 0 oder Start gescheitert), *abgebrochen* (von dir), *verloren* (Sitzung ohne Exit-Datei weg, z. B. Neustart des Zielhosts). Ist der Zielhost kurz nicht erreichbar, bleibt der Lauf auf *läuft* mit Hinweis «Status unbekannt».
+
+**DLP:** Claude, Codex und Vibe senden Prompt und Code an den Anbieter. Sie starten deshalb nur, wenn beim Projekt «Cloud-Agent erlaubt» angekreuzt ist (Standard: aus). Ein eigener Befehl mit lokalem Modell: in der `config.json` beim Agenten `"cloud": false` und `"command": "mein-agent {prompt_file}"` setzen. Den Befehl kann die Oberfläche nicht ändern.
+Der Prompt enthält nur Key, Titel, Projekt, Branch und Link plus die Regeln aus `prompts/agent-task.md` (kein Merge, kein Push auf geschützte Branches, kein Force-Push). **Das ist eine Bitte an den Agenten, keine technische Sperre:** Was der Agent mit seinen eigenen Zugangsdaten auf dem Zielhost darf, bestimmen dort die Rechte. Gib ihm dort nur, was er braucht (zum Beispiel keinen Token mit Merge-Recht auf geschützte Branches).
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.

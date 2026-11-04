@@ -252,7 +252,60 @@ class _SnapMixin:
         return [(r["ts"], json.loads(r["vals"])) for r in reversed(rows)]
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin):
+class _AgentMixin:
+    """Zuweisungen und Läufe von Coding-Agenten an Tickets (siehe agents.py). Der Prompt wird mitgespeichert, damit man sieht, was beauftragt wurde."""
+    _COLS = ("agent", "ticket", "project_id", "branch", "title", "status", "workdir", "prompt", "note", "exit_code", "created", "started", "finished")
+
+    def agent_run_add(self, agent, ticket, project_id, branch, title):
+        with self._conn(True) as c:
+            if c.execute("select count(*) from agent_runs").fetchone()[0] >= 2000:
+                c.execute("delete from agent_runs where status not in ('zugewiesen','l\u00e4uft') and id in (select id from agent_runs order by id limit 500)")
+            cur = c.execute("insert into agent_runs(agent, ticket, project_id, branch, title, status, created) values(?,?,?,?,?,'zugewiesen',?)",
+                            (agent, ticket, project_id, branch, title, time.time()))
+            return cur.lastrowid
+
+    def agent_run(self, rid):
+        with self._conn() as c:
+            if c is None:
+                return None
+            r = c.execute("select * from agent_runs where id=?", (rid,)).fetchone()
+            return dict(r) if r else None
+
+    def agent_runs(self, ticket=None, status=None, limit=500):
+        q, a = "select * from agent_runs", []
+        w = []
+        if ticket is not None:
+            w.append("ticket=?")
+            a.append(ticket)
+        if status is not None:
+            w.append("status=?")
+            a.append(status)
+        if w:
+            q += " where " + " and ".join(w)
+        q += " order by id desc limit ?"
+        a.append(limit)
+        with self._conn() as c:
+            return [] if c is None else [dict(r) for r in c.execute(q, a)]
+
+    def agent_run_update(self, rid, **kw):
+        bad = [k for k in kw if k not in self._COLS]
+        if bad:
+            raise ValueError("unbekannte Spalte: %s" % bad)
+        if not kw:
+            return
+        with self._conn(True) as c:
+            c.execute("update agent_runs set %s where id=?" % ", ".join("%s=?" % k for k in kw), list(kw.values()) + [rid])
+
+    def agent_run_delete(self, rid):
+        with self._conn(True) as c:
+            c.execute("delete from agent_runs where id=?", (rid,))
+
+    def agent_run_drop_ticket(self, ticket):
+        with self._conn(True) as c:
+            c.execute("delete from agent_runs where ticket=? and status not in ('l\u00e4uft')", (ticket,))
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -276,6 +329,11 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin):
                 conn.execute("create table if not exists task_stage(key text primary key, stage text not null, updated real not null)")
                 conn.execute("create table if not exists sonar_snap(scope text not null, ts real not null, vals text not null)")
                 conn.execute("create index if not exists sonar_snap_scope on sonar_snap(scope, ts)")
+                conn.execute("create table if not exists agent_runs(id integer primary key autoincrement, agent text not null, ticket text not null, project_id integer,"
+                             " branch text not null default '', title text not null default '', status text not null, workdir text not null default '',"
+                             " prompt text not null default '', note text not null default '', exit_code integer, created real not null,"
+                             " started real, finished real)")
+                conn.execute("create index if not exists agent_runs_ticket on agent_runs(ticket)")
                 yield conn
         finally:
             conn.close()

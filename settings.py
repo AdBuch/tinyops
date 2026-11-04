@@ -12,6 +12,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
+import agents
 import llm
 import net
 import secretstore as store
@@ -506,6 +507,56 @@ def test_sonar(form, stored):
     return r.result()
 
 
+def test_agent(form, stored):
+    """Prüft einen Agenten: Verbindung (bei SSH), tmux, Arbeitsordner und das Programm des Agenten. Schreibt nur ~/.tinyops/runs auf dem Zielhost.
+    form: connection {name, host, user, port, identity_file, host_key} oder leer für lokal, agent {kind, workspace_root, extra_args}."""
+    r = Report()
+    errs = {}
+    conns = agents.clean_connections([form["connection"]] if form.get("connection") else [], errs)
+    a = form.get("agent") or {}
+    kind = a.get("kind") if a.get("kind") in agents.KINDS else "claude"
+    conn = conns[0] if conns else None
+    steps = (("conn", "Verbindung"), ("tmux", "tmux"), ("ws", "Arbeitsordner"), ("bin", "Agent-Programm"))
+    if form.get("connection") and (errs or conn is None):
+        r.add("conn", "Verbindung", "fail", "; ".join(errs.values()) or "Angaben unvollständig.", "Name, Rechner und Port ausfüllen.")
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    root = str(a.get("workspace_root") or "").strip()
+    if not root or len(root) > 300 or "\n" in root or root.startswith("-"):
+        r.add("ws", "Arbeitsordner", "fail", "Arbeitsordner fehlt oder ist ungültig.")
+        return r.result()
+    agent = {"kind": kind, "workspace_root": root, "connection": conn["id"] if conn else "local", "extra_args": ""}
+    try:
+        facts = agents.probe(agent, conn)
+    except agents.AgentError as e:
+        r.add("conn", "Verbindung", "fail", str(e))
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    r.add("conn", "Verbindung", "ok", ("lokal (%s)" % facts["os"]) if conn is None else "%s antwortet (%s)" % (conn["host"], facts["os"]))
+    if conn is None:
+        r.add("tmux", "tmux", "ok", "wird lokal nicht gebraucht (losgelöster Prozess)")
+    elif facts["tmux"]:
+        r.add("tmux", "tmux", "ok", "gefunden")
+    else:
+        r.add("tmux", "tmux", "fail", "auf dem Zielhost nicht installiert", "Installieren, z. B. «sudo apt install tmux».")
+    if not facts["writable"]:
+        r.add("ws", "Arbeitsordner", "fail", "~/.tinyops/runs ist nicht beschreibbar", "Schreibrechte im Home-Verzeichnis des Benutzers prüfen.")
+    elif facts["workspace"]:
+        r.add("ws", "Arbeitsordner", "ok", "%s vorhanden (Repositories liegen darunter)" % root)
+    else:
+        r.add("ws", "Arbeitsordner", "fail", "%s existiert nicht" % root, "Ordner anlegen und die Repositories dort klonen.")
+    if facts["bin"] is None:
+        r.add("bin", "Agent-Programm", "ok", "eigener Befehl: nur in der config.json setzbar, hier nicht prüfbar")
+    elif facts["bin"]:
+        r.add("bin", "Agent-Programm", "ok", "%s: %s" % (agents.KINDS[kind]["bin"], facts["bin"]))
+    else:
+        r.add("bin", "Agent-Programm", "fail", "«%s» ist im PATH nicht zu finden" % agents.KINDS[kind]["bin"],
+              "Anmelden und Programm installieren; getestet wird mit der Login-Shell des Benutzers (wie beim Start).")
+    return r.result(cloud=bool(agents.KINDS[kind]["provider"] and kind != "custom"))
+
+
 def test_jira(form, stored):
     """form: url, auth, username, secret, ca_bundle, project_keys, issue_types, jql, story_limit."""
     r = Report()
@@ -775,7 +826,11 @@ def view(cfg, config_path, features_default=None):
     kr = store._keyring()
     return {
         "gitlab": {"url": cfg.get("gitlab_url", ""), "ca_bundle": cfg.get("ca_bundle", "")},
-        "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", "")} for p in cfg.get("projects", [])],
+        "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", ""),
+                      "agent_dir": p.get("agent_dir", ""), "allow_cloud_agents": bool(p.get("allow_cloud_agents", False))} for p in cfg.get("projects", [])],
+        "connections": [dict(c) for c in cfg.get("connections") or []],
+        "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
+        "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"]} for k, v in agents.KINDS.items()],
         "branch_filter": {
             "emails": sorted(set(bf.get("emails", [])) | set(cfg.get("my_emails", []))), "names": bf.get("names", []),
             "agent_emails": bf.get("agent_emails", []), "agent_names": bf.get("agent_names", []),
@@ -841,6 +896,19 @@ def build_config(current, p):
                 entry["sonar_key"] = sk
             else:
                 entry.pop("sonar_key", None)
+        if "agent_dir" in item:
+            ad = str(item.get("agent_dir") or "").strip()
+            if not agents.valid_agent_dir(ad):
+                errors["projects"] = "Der Agent-Ordner «%s» ist ungültig (relativ, ohne «..», nur Buchstaben, Ziffern und . _ - /)." % ad[:40]
+            elif ad:
+                entry["agent_dir"] = ad
+            else:
+                entry.pop("agent_dir", None)
+        if "allow_cloud_agents" in item:
+            if item.get("allow_cloud_agents"):
+                entry["allow_cloud_agents"] = True
+            else:
+                entry.pop("allow_cloud_agents", None)
         if pid not in [x["id"] for x in projects]:
             projects.append(entry)
     cfg["projects"] = projects
@@ -937,6 +1005,11 @@ def build_config(current, p):
         sc["max_items"] = _int(sq.get("max_items"), "sonar.max_items", 1, 200, errors, 40)
         sc["report_max"] = _int(sq.get("report_max"), "sonar.report_max", 10, 1000, errors, 200)
         cfg["sonar"] = sc
+
+    if "connections" in p or "agents" in p:
+        conns = agents.clean_connections(p.get("connections") if "connections" in p else cfg.get("connections"), errors)
+        cfg["connections"] = conns
+        cfg["agents"] = agents.clean_agents(p.get("agents") if "agents" in p else cfg.get("agents"), {c["id"] for c in conns}, current.get("agents"), errors)
 
     f = p.get("features") or {}
     cfg["features"] = {k: bool(f.get(k, False)) for k in CONFIG_KEYS_FEATURES}
