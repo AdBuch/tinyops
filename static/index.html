@@ -122,6 +122,12 @@
   .chip.tk { background: var(--focus-bg); color: var(--focus); }
   .chip.out { background: transparent; border: 1px dashed var(--quiet); color: var(--quiet); }
   .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .sqdot { font-size: 9px; vertical-align: 1px; }
+  .sqdot.bad { color: var(--bad); }
+  .sqdot.ok { color: var(--ok, #1d7a4d); }
+  .chip.sq-ok { background: var(--ok-bg, #e3f3ea); color: var(--ok, #1d7a4d); }
+  .chip.sq-bad { background: var(--bad-bg, #fbe5e3); color: var(--bad); }
+  .chip.sq-none { background: transparent; color: var(--quiet); border: 1px dashed var(--line); }
   .chip.agent { background: transparent; border-color: var(--focus); color: var(--focus); }
   .chip.draft { background: var(--warn-bg); color: var(--warn); }
   .empty { color: var(--quiet); padding: 16px 18px; }
@@ -398,6 +404,7 @@
   <a id="pJi" class="conn" href="#settings" style="display:none"></a>
   <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
   <span id="fetched"></span>
+  <span id="ver" class="quiet small" title="tinyops-Version"></span>
   <button id="ideaBtn" class="idea-btn" title="Idee festhalten (Taste i)" hidden>+ Idee</button>
   <button id="logBtn" class="quiet-btn">Log</button>
   <button id="refresh">Neu laden</button>
@@ -537,12 +544,21 @@ const LS = {
 const filt = { q: '', proj: LS.get('proj', ''), agent: LS.get('agent', false), notk: LS.get('notk', false), stale: LS.get('stale', false) };
 
 // Warum steht das hier? Eine Zeile, die sagt, was von dir erwartet wird.
+const SQ = { OK: ['Gate grün', 'sq-ok'], ERROR: ['Gate rot', 'sq-bad'], WARN: ['Gate Warnung', 'warn'], NONE: ['Sonar: keine Analyse', 'sq-none'], UNKNOWN: ['Sonar: Fehler', 'sq-none'] };
+function sonarChip(it) {
+  const s = it.sonar; if (!s || !SQ[s.status]) return '';
+  const [t, c] = SQ[s.status];
+  const why = (s.failed || []).concat(s.detail ? [s.detail] : []).join('\n');
+  const tag = `<span style="opacity:.75">Sonar</span> ${esc(t.replace('Sonar: ', ''))}`;
+  return s.url ? `<a class="chip ${c}" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(why)}">${tag}</a>` : `<span class="chip ${c}" title="${esc(why)}">${tag}</span>`;
+}
 function reasonOf(it) {
   if (it.kind === 'review') return { t: 'Review wartet auf dich', c: 'focus' };
   if (it.kind === 'assigned') return { t: 'Dir zugeteilt', c: 'focus' };
   if (it.kind === 'branch') return { t: it.ahead ? `${it.ahead} Commit${it.ahead === 1 ? '' : 's'} ohne MR` : 'Branch ohne MR', c: '' };
   if (it.draft) return { t: 'Draft', c: '' };
   if (it.pipeline === 'failed') return { t: 'Pipeline rot', c: 'bad' };
+  if (it.sonar && it.sonar.status === 'ERROR') return { t: 'Quality Gate rot', c: 'bad' };
   if (it.pipeline === 'success') return { t: 'Bereit zum Mergen', c: 'focus' };
   if (['running', 'pending', 'created', 'waiting_for_resource'].includes(it.pipeline)) return { t: 'Pipeline läuft', c: '' };
   return { t: 'Offen', c: '' };
@@ -576,7 +592,7 @@ function ageHtml(it) {
 function row(it) {
   const r = reasonOf(it);
   const mr = it.iid ? `!${it.iid}` : '';
-  const chips = [ticketChip(it)];
+  const chips = [ticketChip(it), sonarChip(it)];
   if (it.draft && it.kind !== 'branch') chips.push('<span class="chip draft">Draft</span>');
   if (it.by_agent) chips.push('<span class="chip agent" title="Commits vom Agenten (Konto oder Co-Authored-By)">Agent</span>');
   else if (it.kind === 'branch' && it.by_me) chips.push('<span class="chip" title="Mindestens ein Commit von dir">von mir</span>');
@@ -633,7 +649,7 @@ function storiesTile() {
   for (let i = 0; i < n; i++) {
     const s = j.stories[i];
     if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
-    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>`).join('');
+    const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="Quality Gate rot">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>`).join('');
     slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
       <div class="top"><span class="key">${esc(s.key)}</span>${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       ${s.url ? `<a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>` : `<span class="sum">${esc(s.summary)}</span>`}
@@ -710,7 +726,7 @@ function renderLeft() {
   $('fnotk').parentElement.hidden = !(state.jira && state.jira.ok);
 
   const mine = state.mine;
-  const needs = state.review.concat(state.assigned, mine.filter(i => i.kind === 'mr' && (i.pipeline === 'failed' || (i.pipeline === 'success' && !i.draft)))).filter(matches);
+  const needs = state.review.concat(state.assigned, mine.filter(i => i.kind === 'mr' && (i.pipeline === 'failed' || (i.sonar && i.sonar.status === 'ERROR') || (i.pipeline === 'success' && !i.draft)))).filter(matches);
   const needSet = new Set(needs);
   const mrs = mine.filter(i => i.kind === 'mr' && matches(i) && !needSet.has(i));
   const branches = mine.filter(i => i.kind === 'branch' && matches(i));
@@ -790,6 +806,7 @@ function renderHeader() {
   else if (state.jira) { ji.innerHTML = dot('bad', 'Jira'); ji.title = state.jira.error; }
   else { ji.innerHTML = dot('off', 'Jira'); ji.title = 'Nicht eingerichtet'; }
   $('demo').style.display = state.demo ? '' : 'none';
+  $('ver').textContent = state.version ? 'v' + state.version : '';
   const syncing = state.sync && state.sync.running;
   $('fetched').textContent = syncing ? 'synchronisiert …' : 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
   $('refresh').disabled = !!syncing;
@@ -1000,7 +1017,7 @@ function boardCard(c) {
     ...c.pools.map(p => `<span class="chip tk" title="Kategorie">${esc(p.name)}${c.idea_id ? '' : `<button class="x" data-bpoolrem="${esc(c.id)}" data-pool="${p.id}" title="Aus der Kategorie nehmen" aria-label="Aus der Kategorie nehmen">×</button>`}</span>`)].join('');
   const title = c.title || (c.known === false ? '(Ticket nicht lesbar)' : '');
   const sum = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
-  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}</a>`).join('');
+  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="' + esc(x.sonar_detail || 'Quality Gate rot') + '">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}</a>`).join('');
   const act = isIdea
     ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>`
     : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
@@ -1333,7 +1350,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="sonar">Sonar</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -1403,6 +1420,21 @@ async function loadSettings() {
       ${(S.secrets.jira_token.set || S.secrets.jira_password.set) ? '<button id="ji-del">Gespeicherte Zugangsdaten löschen</button>' : ''}</div>
     <div id="ji-result"></div>`)}
 
+  ${sect('sonar', 'SonarQube', 'Zeigt das Quality Gate je MR und Branch. Nur lesend: tinyops stellt ausschliesslich GET-Anfragen. Den Sonar-Schlüssel trägst du je Projekt unter GitLab ein.', `
+    <label class="check"><input type="checkbox" id="sq-on" ${S.sonar.enabled ? 'checked' : ''}><span><strong>Sonar einschalten</strong></span></label>
+    <div class="grid2">
+      ${field('sq-url', 'Adresse', S.sonar.url, { err: 'sonar.url', ph: 'https://sonar.example.intern', help: 'Läuft Sonar unter einem Kontextpfad, gehört er dazu (https://host/sonar).' })}
+      ${field('sq-secret', 'Token', '', { type: 'password', err: 'sonar_token', ph: S.secrets.sonar_token.set ? '•••••••• gespeichert' : '', help: secretHelp('sonar_token', 'Token') + ' Ein User-Token reicht; es braucht «Browse» auf den Projekten.' })}
+    </div>
+    <div class="grid2">
+      ${field('sq-cache', 'Zwischenspeicher in Sekunden', S.sonar.cache_seconds, { type: 'number', err: 'sonar.cache_seconds', help: 'So lange gilt ein Ergebnis, bevor erneut gefragt wird.' })}
+      ${field('sq-max', 'Höchstens so viele Prüfungen je Abgleich', S.sonar.max_items, { type: 'number', err: 'sonar.max_items' })}
+    </div>
+    <div class="hint">Quality Gates je Merge Request gibt es nur in SonarQube ab Developer Edition. In der Community Edition zeigt tinyops sie für Branches nur, wenn dort mehrere Branches analysiert werden; sonst steht «keine Analyse».</div>
+    <div class="row"><button class="primary" id="sq-test">Verbindung testen</button>
+      ${S.secrets.sonar_token.set ? '<button id="sq-del">Gespeicherten Token löschen</button>' : ''}</div>
+    <div id="sq-result"></div>`)}
+
   ${sect('llm', 'KI-Entwurf (lokal)', 'Ein Sprachmodell auf deinem Rechner oder im Büro-Netz schreibt den ersten Entwurf eines Tickets. Ohne Modell nimmt der Dialog eine Vorlage.', `
     <label class="check"><input type="checkbox" id="lm-on" ${S.llm.enabled ? 'checked' : ''}><span><strong>KI-Entwurf einschalten</strong></span></label>
     <div class="grid2">
@@ -1443,6 +1475,7 @@ async function loadSettings() {
     if (p && (!cur || S.llm.providers.some(x => x.url === cur))) $('lm-url').value = p.url;
     renderLlmKey();
   };
+  $('sq-test').onclick = testSonar; if ($('sq-del')) $('sq-del').onclick = () => delSecrets(['sonar_token'], 'Sonar-Token');
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
   $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
@@ -1504,6 +1537,14 @@ function jiForm() {
     only_active_sprints: $('ji-sprint').checked };
 }
 
+function sqForm() { return { url: val('sq-url'), ca_bundle: val('gl-ca'), secret: $('sq-secret').value, projects: P }; }
+async function testSonar() {
+  const out = $('sq-result');
+  await busy($('sq-test'), 'Teste …', async () => {
+    try { out.innerHTML = stepsHtml(await api('POST', '/api/settings/test/sonar', sqForm())); }
+    catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
 async function testGitlab() {
   const out = $('gl-result');
   await busy($('gl-test'), 'Teste …', async () => {
@@ -1533,10 +1574,11 @@ $('viewSettings').addEventListener('click', ev => {
 // Projekte
 function renderProjects() {
   $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="pchip"><span class="quiet">#${esc(p.id)}</span>
-    <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename"><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
+    <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename">
+    <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="Sonar-Schlüssel" aria-label="Sonar-Projektschlüssel" style="width:150px"><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
     : '<div class="empty">Noch kein Projekt.</div>';
 }
-$('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; });
+$('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; });
 $('viewSettings').addEventListener('click', ev => {
   const d = ev.target.closest('[data-pdel]');
   if (d) { P.splice(+d.dataset.pdel, 1); renderProjects(); }
@@ -1591,6 +1633,7 @@ function collect() {
   const secrets = {};
   if ($('gl-token').value.trim()) secrets.gitlab_token = $('gl-token').value;
   if ($('ji-secret').value.trim()) secrets[val('ji-auth') === 'basic' ? 'jira_password' : 'jira_token'] = $('ji-secret').value;
+  if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
@@ -1600,6 +1643,7 @@ function collect() {
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
       wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
+    sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     secrets,
@@ -1615,6 +1659,7 @@ async function saveSettings() {
       await loadSettings(); await load();
       if (S.gitlab.url) testGitlab();
       if (S.jira.url) testJira();
+      if (S.sonar.enabled && S.sonar.url) testSonar();
     } catch (e) {
       showErrors(e.data && e.data.errors);
       toast(e.message);

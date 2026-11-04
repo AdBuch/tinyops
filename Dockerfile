@@ -1,5 +1,7 @@
 # tinyops: nur Python-Standardbibliothek, kein pip install nötig.
 FROM python:3.13-slim
+ARG VERSION=unbekannt
+LABEL org.opencontainers.image.title="tinyops" org.opencontainers.image.version="${VERSION}"
 
 RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin tinyops \
  && mkdir /data && chown 10001:10001 /data

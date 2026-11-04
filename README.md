@@ -1,4 +1,6 @@
-# tinyops 2.6: Arbeitspanel
+# tinyops: Arbeitspanel
+
+Version 0.7.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -6,7 +8,7 @@ Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen),
 gegen ein Limit zählen, die Review-Queue und dir zugeteilte MRs zeigen, offene Branches mit deinen oder Agent-Commits zeigen, eine Ideenbox
 führen, pro MR eine Testumgebung im Cluster starten und fertige Prompts füllen.
 
-**Kann bewusst nicht:** approven, mergen, pushen, in Jira schreiben. Das Panel liest nur.
+**Kann bewusst nicht:** approven, mergen, pushen. In Jira schreibt es nur mit ausdrücklichem Opt-in (`jira.allow_create`) und Bestätigung, SonarQube und GitLab liest es nur.
 
 ## 1. Ansehen (ohne GitLab und Jira)
 
@@ -268,6 +270,19 @@ Zweite Seite «Board» mit den Spalten **Ideenpool → Geplant → Umsetzung →
 * API: `POST /api/board/assign|unassign` (`key` oder `ref`, `pool_id`), `add` und `plan_idea` nehmen `pool_id`.
 * Layout: höchstens 4 Kacheln nebeneinander; in schmalen Kacheln rutschen die Knöpfe unter den Titel, statt ihn zu überdecken.
 
+## 4l. SonarQube: Quality Gate je MR und Branch (neu in 0.7.0)
+
+Aus per Voreinstellung. Einschalten unter Einstellungen → Sonar (Adresse, Token) und je GitLab-Projekt den **Sonar-Projektschlüssel** eintragen.
+Der Token kommt wie alle Secrets in den Schlüsselbund oder in `TINYOPS_SONAR_TOKEN`, nie in die `config.json`.
+
+* tinyops fragt ausschliesslich per GET `api/qualitygates/project_status` (MR: `pullRequest=<iid>`, Branch: `branch=<name>`).
+  Der Chip zeigt «Gate grün», «Gate rot» (mit den verletzten Bedingungen im Tooltip und Link zu Sonar), «Warnung» oder «keine Analyse».
+* Ein rotes Gate setzt den MR unter «Braucht dich». Im Board und in den Stories erscheint ein Punkt am MR-Chip.
+* Je Abgleich höchstens `sonar.max_items` Abfragen (Standard 40), Ergebnisse `sonar.cache_seconds` (Standard 300) im Speicher.
+  Ein falscher Token bricht die Sonar-Abfragen mit einer klaren Meldung ab, ein einzelner Fehler nur diesen Eintrag.
+* **Edition:** Gates je Merge Request liefert SonarQube erst ab Developer Edition. In der Community Edition steht für MRs «keine Analyse».
+* Der Test in den Einstellungen und `--preflight` prüfen Erreichbarkeit, Token und, ob die eingetragenen Schlüssel existieren.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
@@ -365,7 +380,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 
 ## 11. Ehrliche Grenzen
 
-- Getestet: 54 Tests (darunter die Verbindungstests gegen Fake-GitLab/Jira inkl. TLS, Weiterleitung, 401/403/404/503, CAPTCHA, und der ganze Weg über den Server), Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
+- Getestet: über 140 Tests (darunter die Verbindungstests gegen Fake-GitLab/Jira inkl. TLS, Weiterleitung, 401/403/404/503, CAPTCHA, und der ganze Weg über den Server), Demo-Modus, GitLab und Jira gegen Fake-Server (Bearer, Basic, falscher Token),
   Zugriffsschutz, Secret-Rechte, Schwärzung, Oberfläche im Headless-Browser.
   **Nicht getestet:** dein echtes Jira 9.4 und GitLab 19.2, `helm`/`kubectl` gegen dein Cluster, der Schlüsselbund,
   Windows, Python unter 3.13.

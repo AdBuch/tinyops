@@ -1,0 +1,238 @@
+"""SonarQube-Anbindung: Quality Gate pro MR und Branch (nur lesend), Einstellungen, Test, Sync."""
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+import server  # noqa: E402
+import settings  # noqa: E402
+import sonar  # noqa: E402
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def wait(port):
+    for _ in range(80):
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            return
+        except OSError:
+            time.sleep(0.1)
+    raise RuntimeError("Server startet nicht")
+
+
+class Describe(unittest.TestCase):
+    def test_conditions_in_words(self):
+        self.assertEqual(sonar.describe({"metricKey": "new_coverage", "actualValue": "61.2", "errorThreshold": "80", "comparator": "LT"}),
+                         "Abdeckung neuer Code 61.2 % (mindestens 80 %)")
+        self.assertEqual(sonar.describe({"metricKey": "new_vulnerabilities", "actualValue": "2", "errorThreshold": "0", "comparator": "GT"}),
+                         "Neue Schwachstellen 2 (höchstens 0)")
+        self.assertIn("C", sonar.describe({"metricKey": "new_security_rating", "actualValue": "3.0", "errorThreshold": "1", "comparator": "GT"}))
+        self.assertIn("foo bar", sonar.describe({"metricKey": "foo_bar", "actualValue": "1", "errorThreshold": "0", "comparator": "GT"}))   # unbekannte Metrik bleibt lesbar
+
+    def test_auth_header_is_basic_with_empty_password(self):
+        import base64
+        h = sonar.headers("abc")
+        self.assertEqual(base64.b64decode(h["Authorization"].split()[1]).decode(), "abc:")
+
+
+class WithMock(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.port = free_port()
+        cls.proc = subprocess.Popen([sys.executable, str(ROOT / "tests" / "mock_sonar.py"), str(cls.port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        wait(cls.port)
+        cls.base = "http://127.0.0.1:%d" % cls.port
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.proc.terminate()
+        cls.proc.wait(5)
+
+
+class ClientTests(WithMock):
+    def test_gate_states(self):
+        c = sonar.Client(self.base, "sqtoken")
+        self.assertEqual(c.gate("dlp-core", pr=7)["status"], "OK")
+        r = c.gate("dlp-core", pr=8)
+        self.assertEqual(r["status"], "ERROR")
+        self.assertEqual(len(r["failed"]), 2)                    # nur die roten Bedingungen
+        self.assertIn("pullRequest=8", r["url"])
+        self.assertEqual(c.gate("dlp-core", branch="feature-b")["status"], "WARN")
+        none = c.gate("dlp-core", pr=9)
+        self.assertEqual(none["status"], "NONE")
+        self.assertIn("keine Analyse", none["detail"])
+        with self.assertRaises(sonar.SonarError) as cm:
+            c.gate("dlp-core", branch="kaputt")
+        self.assertFalse(cm.exception.auth)
+
+    def test_wrong_token_is_auth_error(self):
+        with self.assertRaises(sonar.SonarError) as cm:
+            sonar.Client(self.base, "falsch").gate("dlp-core", pr=7)
+        self.assertTrue(cm.exception.auth)
+        self.assertNotIn("falsch", str(cm.exception))
+
+    def test_unreachable(self):
+        with self.assertRaises(sonar.SonarError):
+            sonar.Client("http://127.0.0.1:%d" % free_port(), "x").gate("k", pr=1)
+
+
+class SettingsTests(WithMock):
+    def stored(self, tok=""):
+        return lambda name: (tok, "Test") if name == "sonar_token" else ("", "")
+
+    def test_good_and_bad_key(self):
+        r = settings.test_sonar({"url": self.base, "secret": "sqtoken", "projects": [{"id": 1, "name": "core", "sonar_key": "dlp-core"}]}, self.stored())
+        self.assertTrue(r["ok"], r)
+        self.assertEqual({s["id"]: s["status"] for s in r["steps"]}["keys"], "ok")
+        r = settings.test_sonar({"url": self.base, "secret": "sqtoken", "projects": [{"id": 1, "name": "core", "sonar_key": "gibt-es-nicht"}]}, self.stored())
+        keys = next(s for s in r["steps"] if s["id"] == "keys")
+        self.assertEqual(keys["status"], "warn")
+        self.assertIn("gibt-es-nicht", keys["detail"])
+
+    def test_wrong_token_and_missing_token(self):
+        r = settings.test_sonar({"url": self.base, "secret": "falsch"}, self.stored())
+        self.assertFalse(r["ok"])
+        self.assertNotIn("falsch", json.dumps(r))
+        r = settings.test_sonar({"url": self.base}, self.stored())
+        self.assertFalse(r["ok"])
+        self.assertIn("Kein Token", json.dumps(r, ensure_ascii=False))
+        self.assertTrue(settings.test_sonar({"url": self.base}, self.stored("sqtoken"))["steps"])   # gespeicherter Token wird genommen
+
+    def test_no_url_and_no_keys_hint(self):
+        self.assertFalse(settings.test_sonar({"url": ""}, self.stored())["ok"])
+        r = settings.test_sonar({"url": self.base, "secret": "sqtoken", "projects": [{"id": 1, "name": "x"}]}, self.stored())
+        self.assertEqual(next(s for s in r["steps"] if s["id"] == "keys")["status"], "warn")
+
+    def test_save_validation_and_view(self):
+        cur = {"projects": [{"id": 1, "name": "core"}], "sonar": {}}
+        cfg, err = settings.build_config(cur, {"projects": [{"id": 1, "name": "core", "sonar_key": "dlp-core"}],
+                                               "sonar": {"enabled": True, "url": self.base + "/", "cache_seconds": "120", "max_items": "10"}})
+        self.assertEqual(err, {}, err)
+        self.assertEqual(cfg["projects"][0]["sonar_key"], "dlp-core")
+        self.assertEqual((cfg["sonar"]["url"], cfg["sonar"]["cache_seconds"], cfg["sonar"]["max_items"]), (self.base, 120, 10))
+        v = settings.view(cfg, "/x/config.json")
+        self.assertEqual(v["projects"][0]["sonar_key"], "dlp-core")
+        self.assertTrue(v["sonar"]["enabled"])
+        _, err = settings.build_config(cur, {"sonar": {"enabled": True, "url": ""}})
+        self.assertIn("sonar.url", err)
+        _, err = settings.build_config(cur, {"sonar": {"enabled": False, "url": "kaputt"}})
+        self.assertIn("sonar.url", err)
+        _, err = settings.build_config(cur, {"projects": [{"id": 1, "sonar_key": "a b;c"}]})
+        self.assertIn("projects", err)
+        cfg, _ = settings.build_config(cfg, {"projects": [{"id": 1, "name": "core", "sonar_key": ""}]})
+        self.assertNotIn("sonar_key", cfg["projects"][0])                       # leer = Schlüssel entfernen
+        self.assertIn("sonar_token", settings.SECRET_FIELDS)
+
+
+class SyncTests(WithMock):
+    def app(self, **sc):
+        self.tmp = tempfile.TemporaryDirectory()
+        cfg = server.load_config(None)
+        cfg["data_dir"] = self.tmp.name
+        cfg["sonar"] = dict({"enabled": True, "url": self.base, "cache_seconds": 300, "max_items": 40}, **sc)
+        cfg["projects"] = [{"id": 1, "name": "dlp-core", "sonar_key": "dlp-core"}, {"id": 2, "name": "ohne-key"}]
+        a = server.App(cfg, True, {}, Path("/nonexistent/c.json"))
+        a.sonar = sonar.Client(self.base, "sqtoken")      # echter Client gegen den Mock statt Demo
+        a.demo = False
+        return a
+
+    def tearDown(self):
+        if getattr(self, "tmp", None):
+            self.tmp.cleanup()
+
+    def test_items_get_gate_and_summary(self):
+        a = self.app()
+        a.client.fetch = lambda sink=None, step=None: {"me": "me", "errors": [], "assigned": [], "review": [],
+            "mine": [{"kind": "mr", "iid": 7, "branch": "feature/DLP-1-a", "title": "A", "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "success", "draft": False, "age_days": 1},
+                     {"kind": "mr", "iid": 8, "branch": "x", "title": "B", "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "success", "draft": False, "age_days": 1},
+                     {"kind": "branch", "iid": None, "branch": "feature-b", "title": "C", "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "none", "draft": False, "age_days": 1},
+                     {"kind": "branch", "iid": None, "branch": "kaputt", "title": "D", "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "none", "draft": False, "age_days": 1},
+                     {"kind": "mr", "iid": 3, "branch": "y", "title": "E", "project_id": 2, "project": "ohne-key", "url": "u", "pipeline": "none", "draft": False, "age_days": 1}]}
+        ov = a.overview()
+        st = {i["title"]: (i.get("sonar") or {}).get("status") for i in ov["mine"]}
+        self.assertEqual(st, {"A": "OK", "B": "ERROR", "C": "WARN", "D": "UNKNOWN", "E": None})   # Projekt ohne Schlüssel wird nicht gefragt
+        self.assertEqual((ov["sonar"]["checked"], ov["sonar"]["red"], ov["sonar"]["warn"], ov["sonar"]["failed"]), (4, 1, 1, 1))
+        b = next(c for c in ov["board"]["cards"] if c["items"] and c["items"][0]["iid"] == 8)
+        self.assertEqual(b["items"][0]["sonar"], "ERROR")
+        self.assertIn("Abdeckung", b["items"][0]["sonar_detail"])
+
+    def test_wrong_token_aborts_with_clear_error(self):
+        a = self.app()
+        a.sonar = sonar.Client(self.base, "falsch")
+        ov = a.overview()
+        self.assertFalse(ov["sonar"]["ok"])
+        self.assertTrue(any("Sonar" in e for e in ov["errors"]))
+        self.assertTrue(all("sonar" not in i for i in ov["mine"]))
+
+    def test_cache_limit_and_off_by_default(self):
+        import urllib.request
+        a = self.app(max_items=2)
+        a.client.fetch = lambda sink=None, step=None: {"me": "me", "errors": [], "assigned": [], "review": [],
+            "mine": [{"kind": "mr", "iid": n, "branch": "b%d" % n, "title": "T%d" % n, "project_id": 1, "project": "dlp-core", "url": "u", "pipeline": "none", "draft": False, "age_days": 1} for n in (7, 8, 9)]}
+        calls = lambda: len([c for c in json.load(urllib.request.urlopen(self.base + "/_calls")) if "qualitygates" in c])
+        before = calls()
+        ov = a.overview()
+        self.assertEqual(ov["sonar"]["skipped"], 1)
+        self.assertEqual(calls() - before, 2)
+        a.cache_t = 0.0
+        a.overview()
+        self.assertEqual(calls() - before, 2)                    # zweiter Abgleich: aus dem Zwischenspeicher
+        with tempfile.TemporaryDirectory() as d:
+            cfg = server.load_config(None)
+            cfg["data_dir"] = d
+            off = server.App(cfg, False, {"gitlab_token": "x"}, Path("/nonexistent/c.json"))
+            self.assertIsNone(off.sonar)                          # ohne Einschalten gibt es keine Sonar-Anfragen
+            cfg["sonar"] = {"enabled": True, "url": self.base}
+            self.assertTrue(any("Sonar-Token" in p for p in server.App(cfg, False, {"gitlab_token": "x"}, Path("/nonexistent/c.json")).problems))
+
+    def test_demo_shows_all_states(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = server.load_config(None)
+            cfg["data_dir"] = d
+            ov = server.App(cfg, True, {}, Path("/nonexistent/c.json")).overview()
+            seen = {(i.get("sonar") or {}).get("status") for i in ov["mine"] + ov["review"] + ov["assigned"]}
+            self.assertTrue({"OK", "ERROR"} <= seen, seen)
+
+
+class Preflight(WithMock):
+    def test_preflight_includes_sonar(self):
+        gp = free_port()
+        g = subprocess.Popen([sys.executable, str(ROOT / "tests" / "mock_gitlab.py"), str(gp)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            wait(gp)
+            with tempfile.TemporaryDirectory() as tmp:
+                cfg = Path(tmp, "config.json")
+                cfg.write_text(json.dumps({"gitlab_url": "http://127.0.0.1:%d" % gp, "data_dir": str(Path(tmp, "data")),
+                                           "projects": [{"id": 1, "name": "dlp-core", "sonar_key": "dlp-core"}],
+                                           "sonar": {"enabled": True, "url": self.base}}))
+                env = {k: v for k, v in os.environ.items() if not k.startswith(("TINYOPS_", "GITLAB_TOKEN"))}
+                env.update(TINYOPS_HOME=tmp, TINYOPS_GITLAB_TOKEN="secret", TINYOPS_SONAR_TOKEN="sqtoken")
+                r = subprocess.run([sys.executable, str(ROOT / "server.py"), "--preflight", "--config", str(cfg)], env=env, capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("Sonar", r.stdout)
+                self.assertIn("Quality Gates geprüft", r.stdout)
+                self.assertNotIn("sqtoken", r.stdout)
+                env["TINYOPS_SONAR_TOKEN"] = ""
+                r = subprocess.run([sys.executable, str(ROOT / "server.py"), "--preflight", "--config", str(cfg)], env=env, capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 1)
+                self.assertIn("Sonar-Token: fehlt", r.stdout)
+        finally:
+            g.terminate()
+            g.wait(5)
+
+
+if __name__ == "__main__":
+    unittest.main()

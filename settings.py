@@ -15,6 +15,7 @@ from pathlib import Path
 import llm
 import net
 import secretstore as store
+import sonar
 import sprint
 import tlog
 
@@ -23,7 +24,7 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key")
+SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
@@ -412,6 +413,76 @@ def test_llm(form, stored):
     return r.result(models=models[:40])
 
 
+def test_sonar(form, stored):
+    """Prüft SonarQube (nur lesend): Adresse, Verbindung, Anmeldung, Version und die Projektschlüssel der GitLab-Projekte.
+    form: url, ca_bundle, secret/token, projects [{id, name, sonar_key}]."""
+    r = Report()
+    base, ok = _check_url(r, form.get("url"), "sonar")
+    steps = (("api", "Sonar-API"), ("auth", "Anmeldung"), ("keys", "Projektschlüssel"))
+    if not ok:
+        return r.result()
+    ctx = _check_connection(r, base, form.get("ca_bundle"))
+    if ctx is None:
+        for sid, t in steps:
+            r.skip(sid, t)
+        return r.result()
+    try:
+        resp = _get(base, "/api/system/status", {"Accept": "application/json"}, ctx)
+        data = net.parse_json(resp)
+        if resp["status"] == 200 and isinstance(data, dict) and "version" in data:
+            r.add("api", "Sonar-API", "ok", "SonarQube %s (%s)" % (data["version"], data.get("status", "?")))
+        elif resp["status"] in (301, 302, 303, 307, 308):
+            r.add("api", "Sonar-API", "fail", "HTTP %d: Weiterleitung nach %s" % (resp["status"], resp["headers"].get("location", "?")), _redirect_hint(resp, base))
+        else:
+            r.add("api", "Sonar-API", "fail", "HTTP %d: %s" % (resp["status"], _msg(resp)),
+                  "Kein SonarQube unter dieser Adresse? Läuft es unter einem Kontextpfad (https://host/sonar)? Dann gehört der Pfad in die Adresse.")
+    except net.NetError as e:
+        r.add("api", "Sonar-API", "fail", e.detail, net_hint(e.kind))
+    if r.blocked:
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    tok, src = _token(form, stored, "sonar_token")
+    if not tok:
+        r.add("auth", "Anmeldung", "fail", "Kein Token eingegeben oder gespeichert.",
+              "In Sonar: Mein Konto → Sicherheit → Token erzeugen (Typ «User Token»). Er braucht «Browse» auf den Projekten.")
+        r.skip("keys", "Projektschlüssel")
+        return r.result()
+    hdr = sonar.headers(tok)
+    try:
+        resp = net.probe(base + "/api/authentication/validate", hdr, ctx, timeout=10)
+        data = net.parse_json(resp)
+        if resp["status"] == 200 and isinstance(data, dict) and data.get("valid"):
+            r.add("auth", "Anmeldung", "ok", "Token gilt (%s)" % src)
+        else:
+            r.add("auth", "Anmeldung", "fail", "Token wird abgelehnt (HTTP %d)." % resp["status"],
+                  "Token abgelaufen oder falsch kopiert? Es muss ein Benutzer-Token sein, kein Passwort.")
+    except net.NetError as e:
+        r.add("auth", "Anmeldung", "fail", e.detail, net_hint(e.kind))
+    if r.blocked:
+        r.skip("keys", "Projektschlüssel")
+        return r.result()
+    mapped = [(p.get("name") or p.get("id"), (p.get("sonar_key") or "").strip()) for p in (form.get("projects") or []) if (p.get("sonar_key") or "").strip()]
+    if not mapped:
+        r.add("keys", "Projektschlüssel", "warn", "Bei keinem GitLab-Projekt ist ein Sonar-Schlüssel eingetragen.",
+              "Ohne Schlüssel zeigt das Panel nichts von Sonar. Der Schlüssel steht in Sonar unter Projekt → Projektinformationen.")
+        return r.result()
+    bad, good = [], []
+    for name, key in mapped:
+        try:
+            resp = net.probe(base + "/api/components/show?" + urllib.parse.urlencode({"component": key}), hdr, ctx, timeout=10)
+        except net.NetError as e:
+            r.add("keys", "Projektschlüssel", "fail", e.detail, net_hint(e.kind))
+            return r.result()
+        (good if resp["status"] == 200 else bad).append("%s → %s%s" % (name, key, "" if resp["status"] == 200 else " (HTTP %d)" % resp["status"]))
+    if bad:
+        r.add("keys", "Projektschlüssel", "warn", "Nicht gefunden oder nicht sichtbar: %s" % "; ".join(bad),
+              "Schlüssel genau wie in Sonar schreiben (Gross-/Kleinschreibung zählt). Der Token braucht «Browse» auf dem Projekt.")
+    else:
+        r.add("keys", "Projektschlüssel", "ok", "; ".join(good))
+    return r.result()
+
+
 def test_jira(form, stored):
     """form: url, auth, username, secret, ca_bundle, project_keys, issue_types, jql, story_limit."""
     r = Report()
@@ -681,7 +752,7 @@ def view(cfg, config_path, features_default=None):
     kr = store._keyring()
     return {
         "gitlab": {"url": cfg.get("gitlab_url", ""), "ca_bundle": cfg.get("ca_bundle", "")},
-        "projects": [{"id": p["id"], "name": p.get("name", str(p["id"]))} for p in cfg.get("projects", [])],
+        "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", "")} for p in cfg.get("projects", [])],
         "branch_filter": {
             "emails": sorted(set(bf.get("emails", [])) | set(cfg.get("my_emails", []))), "names": bf.get("names", []),
             "agent_emails": bf.get("agent_emails", []), "agent_names": bf.get("agent_names", []),
@@ -698,6 +769,8 @@ def view(cfg, config_path, features_default=None):
                 "allow_remote": bool((cfg.get("llm") or {}).get("allow_remote", False)),
                 "timeout": (cfg.get("llm") or {}).get("timeout", 120),
                 "providers": [{"id": k, "label": v.label, "url": v.default_url} for k, v in llm.PROVIDERS.items()]},
+        "sonar": {"enabled": bool((cfg.get("sonar") or {}).get("enabled", False)), "url": (cfg.get("sonar") or {}).get("url", ""),
+                  "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40)},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
         "storage": {"keyring": bool(kr), "file": str(store.secrets_file()),
@@ -732,6 +805,14 @@ def build_config(current, p):
         entry = dict(old.get(pid, {}))
         entry["id"] = pid
         entry["name"] = (str(item.get("name") or pid).strip() or str(pid))[:80]
+        if "sonar_key" in item:
+            sk = str(item.get("sonar_key") or "").strip()
+            if sk and not re.fullmatch(r"[A-Za-z0-9_.:\-]{1,400}", sk):
+                errors["projects"] = "Der Sonar-Projektschlüssel «%s» enthält unerlaubte Zeichen (erlaubt: Buchstaben, Ziffern, - _ . :)." % sk[:40]
+            elif sk:
+                entry["sonar_key"] = sk
+            else:
+                entry.pop("sonar_key", None)
         if pid not in [x["id"] for x in projects]:
             projects.append(entry)
     cfg["projects"] = projects
@@ -799,6 +880,21 @@ def build_config(current, p):
             except llm.LlmError as e:
                 errors["llm.url"] = str(e)
         cfg["llm"] = lc
+
+    sq = p.get("sonar")
+    if sq is not None:
+        sc = dict(cfg.get("sonar") or {})
+        sc["enabled"] = bool(sq.get("enabled", False))
+        url, _ = _base(sq.get("url"))
+        u = urllib.parse.urlparse(url)
+        if url and (u.scheme not in ("http", "https") or not u.hostname):
+            errors["sonar.url"] = "Muss mit https:// (oder http://) beginnen."
+        elif sc["enabled"] and not url:
+            errors["sonar.url"] = "Zum Einschalten fehlt die Adresse."
+        sc["url"] = url
+        sc["cache_seconds"] = _int(sq.get("cache_seconds"), "sonar.cache_seconds", 30, 3600, errors, 300)
+        sc["max_items"] = _int(sq.get("max_items"), "sonar.max_items", 1, 200, errors, 40)
+        cfg["sonar"] = sc
 
     f = p.get("features") or {}
     cfg["features"] = {k: bool(f.get(k, False)) for k in CONFIG_KEYS_FEATURES}

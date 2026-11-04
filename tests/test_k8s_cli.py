@@ -1,6 +1,7 @@
 """deploy/k8s.py mit falschen kubectl/docker-Programmen: prüft die Befehle, ohne einen Cluster zu brauchen (nur POSIX)."""
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -111,7 +112,7 @@ class Cli(unittest.TestCase):
         r, calls = self.run_cli("build", env={"TINYOPS_DOCKER": "podman"})
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(calls[0]["prog"], "podman")
-        self.assertEqual(calls[0]["args"][:3], ["build", "-t", "reg.firma.ch/team/tinyops:t1"])
+        self.assertEqual(calls[0]["args"][:5], ["build", "--build-arg", "VERSION=" + re.search(r"^VERSION = \"([^\"]+)\"", (ROOT / "server.py").read_text(), re.M).group(1), "-t", "reg.firma.ch/team/tinyops:t1"])
 
     def test_purge_and_reseed_need_confirmation(self):
         for cmd in ("purge", "reseed"):

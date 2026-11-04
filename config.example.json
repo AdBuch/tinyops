@@ -25,6 +25,7 @@
     {
       "id": 123,
       "name": "dlp-core",
+      "sonar_key": "",
       "chart": "./helm/dlp-core",
       "repo_path": "/home/du/work/dlp-core",
       "tag_template": "{sha8}",
@@ -65,5 +66,6 @@
     "url": "http://127.0.0.1:11434",
     "model": "",
     "allow_remote": false
-  }
+  },
+  "sonar": {"enabled": false, "url": "https://sonar.example.intern", "cache_seconds": 300, "max_items": 40}
 }

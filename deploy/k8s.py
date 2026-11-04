@@ -33,6 +33,7 @@ SECRET = "tinyops"
 KEYS = [("TINYOPS_ACCESS_TOKEN", None, "Zugriffstoken für das Panel (leer lassen: wird erzeugt)"),
         ("TINYOPS_GITLAB_TOKEN", "GITLAB_TOKEN", "GitLab-Token (read_api)"),
         ("TINYOPS_JIRA_TOKEN", "JIRA_TOKEN", "Jira-Token (leer lassen, wenn Jira nicht genutzt wird)"),
+        ("TINYOPS_SONAR_TOKEN", "SONAR_TOKEN", "Sonar-Token (leer lassen, wenn Sonar nicht genutzt wird)"),
         ("TINYOPS_LLM_KEY", "LLM_KEY", "Schlüssel des Sprachmodells (meist leer)")]
 
 
@@ -89,27 +90,43 @@ class Ctx:
 
     # -- Image
     def tag(self):
+        """Image-Tag. Sauberer Stand genau auf dem Release-Tag vX.Y.Z: «X.Y.Z». Sonst «X.Y.Z-<sha>» (Docker erlaubt kein «+»);
+        mit lokalen Änderungen zusätzlich «-dirty-HHMMSS». TINYOPS_TAG überschreibt alles."""
         if os.environ.get("TINYOPS_TAG"):
             return os.environ["TINYOPS_TAG"]
+        ver = version()
         try:
-            sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
-            dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
-            return sha + ("-dirty-" + time.strftime("%H%M%S") if dirty else "")
+            git = lambda *x: subprocess.run(["git", *x], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+            sha = git("rev-parse", "--short", "HEAD")
+            dirty = git("status", "--porcelain")
+            on_tag = subprocess.run(["git", "describe", "--exact-match", "--tags", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip() == "v" + ver
+            if on_tag and not dirty:
+                return ver
+            return "%s-%s%s" % (ver, sha, "-dirty-" + time.strftime("%H%M%S") if dirty else "")
         except (OSError, subprocess.CalledProcessError):
-            return time.strftime("%Y%m%d-%H%M%S")
+            return "%s-%s" % (ver, time.strftime("%Y%m%d-%H%M%S"))
 
     def image(self):
         self.need_registry()
         return "%s/%s:%s" % (self.registry, APP, self.tag())
 
 
+def version():
+    """Die Version steht nur in server.py (VERSION); hier gelesen, ohne server.py zu importieren."""
+    import re
+    m = re.search(r'^VERSION = "(\d+\.\d+\.\d+)"', (ROOT / "server.py").read_text(encoding="utf-8"), re.M)
+    if not m:
+        die("VERSION in server.py nicht gefunden.")
+    return m.group(1)
+
+
 def cmd_test(c, a):
-    c.run([sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "tests")])
+    c.run([sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "tests"), "-p", "test_*.py"])
 
 
 def cmd_build(c, a):
     img = c.image()
-    c.run([c.docker, "build", "-t", img, str(ROOT)])
+    c.run([c.docker, "build", "--build-arg", "VERSION=" + version(), "-t", img, str(ROOT)])
     print("Image: %s" % img)
     return img
 

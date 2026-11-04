@@ -31,6 +31,7 @@ from pathlib import Path
 import fnmatch
 import links
 import llm
+import sonar
 import net
 import secretstore as store
 import settings
@@ -39,7 +40,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "2.5"
+VERSION = "0.7.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -78,6 +79,7 @@ log = tlog.get("app")
 hlog = tlog.get("http")
 glog = tlog.get("gitlab")
 jlog = tlog.get("jira")
+slog = tlog.get("sonar")
 rlog = tlog.get("refresh")
 joblog = tlog.get("job")
 alog = tlog.get("access")
@@ -130,6 +132,13 @@ LLM_DEFAULTS = {
     "model": "",
     "timeout": 120,                # Sekunden ohne ein Byte Antwort, bis abgebrochen wird (grosse Modelle laden beim ersten Aufruf lange)
     "allow_remote": False,         # nur das eigene Netz, solange das nicht ausdrücklich an ist (DLP)
+}
+
+SONAR_DEFAULTS = {
+    "enabled": False,
+    "url": "",
+    "cache_seconds": 300,      # ein Quality Gate ändert sich nur nach einer neuen Analyse: nicht bei jedem Abgleich neu fragen
+    "max_items": 40,           # höchstens so viele MRs/Branches pro Abgleich prüfen (eigene zuerst)
 }
 
 JIRA_DEFAULTS = {
@@ -215,6 +224,12 @@ def jira_cfg(cfg):
     j = dict(JIRA_DEFAULTS)
     j.update(cfg.get("jira") or {})
     return j
+
+
+def sonar_cfg(cfg):
+    c = dict(SONAR_DEFAULTS)
+    c.update(cfg.get("sonar") or {})
+    return c
 
 
 def llm_cfg(cfg):
@@ -902,6 +917,26 @@ class DemoClient:
                 "sha": "a1b2c3d4e5f60718", "url": "https://gitlab.example/demo/%s" % iid}
 
 
+class DemoSonar:
+    """Erfundene Quality Gates für die Demo: stabil pro MR/Branch."""
+    base = "https://sonar.example"
+
+    def gate(self, key, pr=None, branch=None):
+        import zlib
+        n = zlib.crc32(("%s|%s|%s" % (key, pr, branch)).encode()) % 5
+        url = "%s/dashboard?id=%s" % (self.base, key)
+        if n in (0, 1):
+            return {"status": "OK", "failed": [], "url": url, "detail": "bestanden"}
+        if n == 2:
+            f = [sonar.describe({"metricKey": "new_coverage", "actualValue": "61.2", "errorThreshold": "80", "comparator": "LT"}),
+                 sonar.describe({"metricKey": "new_vulnerabilities", "actualValue": "2", "errorThreshold": "0", "comparator": "GT"})]
+            return {"status": "ERROR", "failed": f, "url": url, "detail": "; ".join(f)}
+        if n == 3:
+            f = [sonar.describe({"metricKey": "new_duplicated_lines_density", "actualValue": "4.1", "errorThreshold": "3", "comparator": "GT"})]
+            return {"status": "WARN", "failed": f, "url": url, "detail": "; ".join(f)}
+        return {"status": "NONE", "failed": [], "url": url, "detail": "keine Analyse"}
+
+
 class DemoJira:
     base = "https://jira.example"
     _DATA = {
@@ -1034,6 +1069,8 @@ class App:
         self.cfg = cfg
         self.jc = jira_cfg(cfg)
         self.lc = llm_cfg(cfg)
+        self.sc = sonar_cfg(cfg)
+        self.sonar, self._sonar_cache = None, {}
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
         self._types_cache = {}
@@ -1052,6 +1089,7 @@ class App:
         if self.demo:
             self.client = DemoClient(cfg)
             self.jira = DemoJira(self.jc)
+            self.sonar = DemoSonar()
             if not self.proj_cfg:
                 self.proj_cfg = {1: {"id": 1, "name": "dlp-core", "chart": "./helm/dlp-core"}}
             return
@@ -1075,6 +1113,13 @@ class App:
                     self.jira = JiraClient(self.jc, jira_auth_header(self.jc, secrets), ctx)
                 except SystemExit as e:
                     self.problems.append(str(e))
+        if self.sc["enabled"]:
+            if not self.sc["url"]:
+                self.problems.append("Sonar-Adresse fehlt.")
+            elif not secrets.get("sonar_token"):
+                self.problems.append("Sonar-Token fehlt.")
+            else:
+                self.sonar = sonar.Client(self.sc["url"], secrets["sonar_token"], ctx)
         for pr in self.problems:
             log.warning("Konfiguration unvollständig: %s", pr)
 
@@ -1207,7 +1252,7 @@ class App:
     def sync_view(self):
         with self.sync_lock:
             sy = self.sync
-            steps = sorted((dict(x) for x in sy["steps"]), key=lambda x: x["id"] == "ji-link")   # Verknüpfen kommt zuletzt
+            steps = sorted((dict(x) for x in sy["steps"]), key=lambda x: {"ji-link": 1, "sonar": 2}.get(x["id"], 0))   # Verknüpfen und Sonar kommen zuletzt
             return {"running": sy["running"], "n": sy["n"], "started": sy["started"], "finished": sy["finished"],
                     "steps": steps, "done": sum(1 for x in steps if x["status"] in ("ok", "err")), "total": len(steps),
                     "secs": round((sy["finished"] or time.time()) - sy["started"], 1) if sy["started"] else 0}
@@ -1222,7 +1267,9 @@ class App:
         """Alle MRs und Branches eines Tickets: ein Ticket kann beliebig viele haben."""
         return [{"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"],
                  "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link")),
-                 "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", "")}
+                 "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
+                 "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""),
+                 "sonar_url": (it.get("sonar") or {}).get("url", "")}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1305,7 +1352,8 @@ class App:
     @staticmethod
     def _linked_ref(it):
         return {"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"], "pipeline": it["pipeline"],
-                "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", "")}
+                "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
+                "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", "")}
 
     def board_action(self, action, body):
         st = self.store
@@ -1410,6 +1458,8 @@ class App:
             pre_thread = threading.Thread(target=early, daemon=True)
             pre_thread.start()
             step("ji-link", "Tickets mit Branches verknüpfen", "wait")
+        if self.sonar:
+            step("sonar", "Sonar: Quality Gates", "wait")
 
         def pre():
             pre_thread.join()
@@ -1437,10 +1487,75 @@ class App:
                 self._by_key = {}
         else:
             data["jira"] = None
+        data["sonar"] = self._sonar(data, step)
         rlog.info("Auffrischen #%d fertig in %.1f s: %d eigene Einträge, %d Review, %d zugeteilt, %d Fehler",
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
         return data
+
+    def _sonar(self, data, step):
+        """Quality Gate jedes MR und Branches (nur lesend). Ergebnisse stehen danach in it["sonar"]; ein einzelner Fehler stoppt nichts,
+        falsche Zugangsdaten brechen ab, weil alle weiteren Abfragen dasselbe Ergebnis hätten."""
+        if not self.sonar:
+            return None
+        title = "Sonar: Quality Gates"
+        step("sonar", title, "run")
+        keys = {pid: p.get("sonar_key") for pid, p in self.proj_cfg.items() if p.get("sonar_key")}
+        if self.demo:
+            keys = {pid: p.get("sonar_key") or p.get("name", str(pid)) for pid, p in self.proj_cfg.items()}
+            keys.update({1: "dlp-core", 2: "dlp-ui"})
+        cand = [it for lst in ("mine", "assigned", "review") for it in data[lst] if keys.get(it["project_id"]) and (it.get("iid") or it["kind"] == "branch")]
+        out = {"enabled": True, "ok": True, "error": "", "checked": 0, "red": 0, "warn": 0, "none": 0, "failed": 0, "skipped": max(0, len(cand) - int(self.sc["max_items"]))}
+        cand = cand[:int(self.sc["max_items"])]
+        if not cand:
+            step("sonar", title, "ok", "keine MRs/Branches mit Sonar-Schlüssel" if not keys else "nichts zu prüfen")
+            return out
+        now, ttl = time.time(), float(self.sc["cache_seconds"])
+        stop = threading.Event()
+
+        def one(it):
+            if stop.is_set():
+                return
+            key = keys[it["project_id"]]
+            pr = it["iid"] if it.get("iid") else None
+            br = None if pr else it["branch"]
+            hit = self._sonar_cache.get((key, pr, br))
+            if hit and now - hit[0] < ttl:
+                it["sonar"] = hit[1]
+                return
+            try:
+                res = self.sonar.gate(key, pr=pr, branch=br)
+            except sonar.SonarError as e:
+                if e.auth:
+                    out["ok"], out["error"] = False, str(e)
+                    stop.set()
+                    return
+                it["sonar"] = {"status": "UNKNOWN", "failed": [], "url": "", "detail": str(e)}
+                out["failed"] += 1
+                return
+            self._sonar_cache[(key, pr, br)] = (time.time(), res)
+            it["sonar"] = res
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            list(pool.map(one, cand))
+        for it in cand:
+            s = (it.get("sonar") or {}).get("status")
+            if s:
+                out["checked"] += 1
+                out["red"] += s == "ERROR"
+                out["warn"] += s == "WARN"
+                out["none"] += s == "NONE"
+        if not out["ok"]:
+            step("sonar", title, "err", out["error"])
+            slog.error("%s", out["error"])
+            data["errors"].append(out["error"])
+        else:
+            detail = "%d geprüft, %d nicht bestanden%s" % (out["checked"], out["red"], ", %d Fehler" % out["failed"] if out["failed"] else "")
+            if out["skipped"]:
+                detail += ", %d übersprungen (Limit %d)" % (out["skipped"], int(self.sc["max_items"]))
+            step("sonar", title, "err" if out["failed"] and not out["checked"] else "ok", detail)
+            slog.info("%s", detail)
+        return out
 
     def _partial_view(self):
         """Zwischenstand während der ersten Synchronisation: schon geladene Listen, Jira-Stories ohne Zuordnung."""
@@ -1458,6 +1573,7 @@ class App:
                             "stories": [dict(x, items=[], no_mr=False, in_progress=True) for x in (st or [])]}
         else:
             data["jira"] = None
+        data["sonar"] = {"enabled": True, "ok": True, "loading": True} if self.sonar else None
         return data
 
     def helpdesk(self):
@@ -1658,7 +1774,7 @@ class App:
         if not self.configured:
             return {"configured": False, "problems": list(self.problems), "me": "", "mine": [], "review": [], "assigned": [],
                     "errors": [], "jira": None, "wip": 0, "wip_limit": self.cfg["wip_limit"], "stale_days": self.cfg["stale_days"],
-                    "demo": self.demo, "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
+                    "demo": self.demo, "version": VERSION, "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
                     "agent_enabled": False, "prompts": [], "fetched": time.time(), "helpdesk": None}
         with self.cache_lock:
             expired = self.cache is None or time.time() - self.cache_t > self.cfg["cache_seconds"]
@@ -1682,7 +1798,7 @@ class App:
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
             "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
-            "helpdesk": self.helpdesk(), "configured": True, "problems": list(self.problems),
+            "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "problems": list(self.problems),
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
@@ -2016,6 +2132,10 @@ def make_handler(app):
                 res = settings.test_jira(body, stored)
                 hlog.info("Test Jira: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
+            if path == "/api/settings/test/sonar":
+                res = settings.test_sonar(body, stored)
+                hlog.info("Test Sonar: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
             if path == "/api/settings/test/llm":
                 res = settings.test_llm(body, stored)
                 hlog.info("Test KI: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
@@ -2079,6 +2199,8 @@ def resolve_secrets(cfg, demo, show=False):
     names.append("access_token")
     if llm_cfg(cfg).get("enabled"):
         names.append("llm_key")
+    if not demo and sonar_cfg(cfg).get("enabled"):
+        names.append("sonar_token")
     out = {}
     for name in names:
         try:
@@ -2132,6 +2254,8 @@ def run_preflight(cfg, config_path, demo):
     if not demo:
         line("ok" if secrets.get("gitlab_token") else "fail", "GitLab-Token", "gefunden" if secrets.get("gitlab_token") else "fehlt (TINYOPS_GITLAB_TOKEN, --set-secret oder Einstellungen)")
     jc = jira_cfg(cfg)
+    if sonar_cfg(cfg).get("enabled") and not demo:
+        line("ok" if secrets.get("sonar_token") else "fail", "Sonar-Token", "gefunden" if secrets.get("sonar_token") else "fehlt (TINYOPS_SONAR_TOKEN, Einstellungen)")
     if jc["url"] and not demo:
         n = "jira_token" if jc["auth"] == "bearer" else "jira_password"
         line("ok" if secrets.get(n) else "fail", "Jira-Zugang (%s)" % n, "gefunden" if secrets.get(n) else "fehlt")
@@ -2155,6 +2279,10 @@ def run_preflight(cfg, config_path, demo):
                                               "only_active_sprints": bool(jc.get("only_active_sprints", True))}, stored))
         else:
             print("\nJira\n%snicht eingerichtet" % marks["info"])
+        sc = sonar_cfg(cfg)
+        if sc.get("enabled"):
+            steps("Sonar", settings.test_sonar({"url": sc["url"], "ca_bundle": cfg.get("ca_bundle", ""),
+                                                "projects": [{"id": p["id"], "name": p.get("name"), "sonar_key": p.get("sonar_key", "")} for p in cfg["projects"]]}, stored))
         lc = llm_cfg(cfg)
         if lc.get("enabled"):
             steps("Lokales Sprachmodell", settings.test_llm({"provider": lc["provider"], "url": lc["url"], "model": lc.get("model", ""),
@@ -2177,6 +2305,9 @@ def run_preflight(cfg, config_path, demo):
             except Exception as e:   # auch ein Absturz ist ein Befund
                 line("fail", "Durchlauf", "%s: %s" % (type(e).__name__, e))
             else:
+                sq = data.get("sonar") or {}
+                if sq.get("enabled"):
+                    line("info", "Sonar", "%d Quality Gates geprüft, %d nicht bestanden" % (sq.get("checked", 0), sq.get("red", 0)))
                 j = data.get("jira") or {}
                 line("info", "Ergebnis", "%d eigene Einträge, %d Review, %d zugeteilt, %s in %.1f s" % (
                     len(data["mine"]), len(data["review"]), len(data["assigned"]),
@@ -2193,6 +2324,7 @@ def main():
     ap.add_argument("--delete-secret", metavar="NAME", help="Secret löschen")
     ap.add_argument("--list-secrets", action="store_true", help="zeigt, woher welches Secret kommt (nie den Wert)")
     ap.add_argument("--preflight", action="store_true", help="prüft Config, Secrets, GitLab, Jira und Sprachmodell und macht einen Probe-Durchlauf (Exit-Code 1 bei Problemen)")
+    ap.add_argument("--version", action="version", version="tinyops " + VERSION)
     ap.add_argument("-v", "--verbose", action="store_true", help="Log auf DEBUG: jede Anfrage, jede Branch-Entscheidung")
     ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
     ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
