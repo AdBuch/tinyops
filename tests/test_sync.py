@@ -25,6 +25,19 @@ class SyncTests(unittest.TestCase):
         os.environ.pop("TINYOPS_DEMO_DELAY", None)
         self.tmp.cleanup()
 
+    def test_defaults_sync_rarely_and_branches_get_create_mr_link(self):
+        self.assertEqual(server.DEFAULTS["cache_seconds"], 300)               # GitLab/Jira nur alle 5 Minuten
+        self.assertEqual(server.USAGE_DEFAULTS["cache_seconds"], 300)
+        self.assertEqual(self.app.cfg["cache_seconds"], 300)
+        ov = self.app.overview()
+        br = [i for i in ov["mine"] if i["kind"] == "branch"]
+        self.assertTrue(br)
+        for b in br:
+            self.assertIn("/-/merge_requests/new?merge_request%5Bsource_branch%5D=", b["create_mr_url"])
+        self.assertTrue(all(not i.get("create_mr_url") for i in ov["mine"] if i["kind"] == "mr"))
+        card = next(c for c in ov["board"]["cards"] for x in c["items"] if x["iid"] is None)
+        self.assertTrue(any(x["create_mr_url"] for x in card["items"] if x["iid"] is None))
+
     def test_overview_returns_immediately_with_progress_and_partial_data(self):
         t0 = time.time()
         ov = self.app.overview(wait=False)

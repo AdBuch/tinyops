@@ -106,6 +106,9 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 8.7 | Dasselbe mit Codex | Ebenso; nur mit ChatGPT-Anmeldung (`codex login`), nicht mit reinem API-Schlüssel |
 | 8.8 | Mistral anzeigen ankreuzen, speichern, Lesezeichen in die Leiste ziehen, auf `admin.mistral.ai` anklicken | Neuer Tab mit tinyops, Meldung «Mistral-Stand übernommen», Kachel zeigt Vibe und API Monat mit Dollar-Werten wie auf der Mistral-Seite |
 | 8.9 | Lesezeichen auf einer anderen Seite anklicken | Hinweis, erst admin.mistral.ai zu öffnen; nichts wird gesendet |
+| 8.10 | Übersicht neu laden (F5) | Box «KI-Kontingent» unter der Ideenbox ist zu und zeigt nur die Zeile mit Prozentwerten; Klick öffnet sie |
+| 8.11 | An einem Branch ohne MR «MR erstellen» | GitLab öffnet das Formular für einen neuen MR mit dem Branch als Quelle |
+| 8.12 | Panel 10 Minuten offen lassen (Log auf DEBUG) | GitLab/Jira werden höchstens alle 5 Minuten abgefragt, nicht jede Minute |
 
 ## Rückmeldung
 

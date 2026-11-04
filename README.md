@@ -1,6 +1,6 @@
 # tinyops: Arbeitspanel
 
-Version 0.9.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
+Version 0.10.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -303,6 +303,9 @@ Aus per Voreinstellung. Einstellungen → KI-Kontingent: «Claude lesen» und/od
 * **DLP:** Der Report enthält Dateipfade, Zeilennummern, Regelnamen und Sonar-Meldungen (die manchmal Bezeichner aus dem Code nennen), aber keinen Quelltext.
   Er geht nirgends hin, ausser in deine Zwischenablage. Was du damit machst (z. B. in einen Cloud-Chat einfügen), entscheidest du; bei Kundenprojekten vorher lesen.
 * Hotspots brauchen die Berechtigung «Administer Security Hotspots» bzw. «Browse»; sonst steht im Report «Nicht lesbar».
+
+> Ab 0.10.0 steht der Stand der Abos als eingeklappte Box «KI-Kontingent» unter der Ideenbox (Klick öffnet, ein Reload schliesst sie wieder).
+> «MR erstellen» an Branches ohne MR öffnet in GitLab das Formular für einen neuen Merge Request. Abgleich höchstens alle `cache_seconds` (Standard 300).
 
 ## 4o. Mistral im KI-Kontingent per Lesezeichen (neu in 0.9.0)
 

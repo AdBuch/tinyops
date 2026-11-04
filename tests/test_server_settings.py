@@ -113,6 +113,9 @@ class Flow(unittest.TestCase):
                 self.assertEqual(ov["me"], "me")
                 self.assertTrue(ov["jira"]["ok"])
                 self.assertTrue(any(i["kind"] == "branch" and i["branch"] == "agent/DLP-130-retry" for i in ov["mine"]))
+                br = next(i for i in ov["mine"] if i["kind"] == "branch" and i["branch"] == "agent/DLP-130-retry")
+                self.assertIn("/-/merge_requests/new?merge_request%5Bsource_branch%5D=agent%2FDLP-130-retry", br["create_mr_url"])   # Branch ohne MR: Link zum Anlegen
+                self.assertTrue(all(not i.get("create_mr_url") for i in ov["mine"] if i["kind"] == "mr"))
                 names = [(i["kind"], i["branch"]) for i in ov["mine"]]
                 self.assertNotIn(("branch", "release/2.0"), names)   # release/* wird standardmäßig ignoriert
                 self.assertNotIn(("mr", "release/1.5"), names)

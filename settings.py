@@ -773,7 +773,7 @@ def view(cfg, config_path, features_default=None):
         "usage": {"claude": bool((cfg.get("usage") or {}).get("claude")), "codex": bool((cfg.get("usage") or {}).get("codex")),
                   "mistral": bool((cfg.get("usage") or {}).get("mistral")), "bookmarklet_src": usage.BOOKMARKLET_JS,
                   "claude_file": (cfg.get("usage") or {}).get("claude_file", ""), "codex_file": (cfg.get("usage") or {}).get("codex_file", ""),
-                  "cache_seconds": (cfg.get("usage") or {}).get("cache_seconds", 120)},
+                  "cache_seconds": (cfg.get("usage") or {}).get("cache_seconds", 300)},
         "sonar": {"enabled": bool((cfg.get("sonar") or {}).get("enabled", False)), "url": (cfg.get("sonar") or {}).get("url", ""),
                   "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40),
                   "report_max": (cfg.get("sonar") or {}).get("report_max", 200)},
@@ -897,7 +897,7 @@ def build_config(current, p):
             if len(f) > 300 or "\x00" in f:
                 errors["usage.%s_file" % k] = "Ungültiger Pfad."
             uc[k + "_file"] = f
-        uc["cache_seconds"] = _int(us.get("cache_seconds"), "usage.cache_seconds", 30, 3600, errors, 120)
+        uc["cache_seconds"] = _int(us.get("cache_seconds"), "usage.cache_seconds", 30, 3600, errors, 300)
         cfg["usage"] = uc
 
     sq = p.get("sonar")

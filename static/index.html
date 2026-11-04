@@ -122,6 +122,16 @@
   .chip.tk { background: var(--focus-bg); color: var(--focus); }
   .chip.out { background: transparent; border: 1px dashed var(--quiet); color: var(--quiet); }
   .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  #usageBox { margin-top: 14px; }
+  #usageDet summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  #usageDet summary::-webkit-details-marker { display: none; }
+  #usageDet .usum-h { font-weight: 700; font-size: 15px; margin-right: 4px; }
+  #usageDet summary::after { content: '▾'; color: var(--quiet); margin-left: auto; }
+  #usageDet[open] summary::after { content: '▴'; }
+  #usageSum { display: contents; }
+  .ucp { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--ok-bg, #e3f3ea); color: var(--ok, #1d7a4d); white-space: nowrap; }
+  .ucp.low { background: var(--warn-bg); color: var(--warn); } .ucp.empty { background: var(--bad-bg); color: var(--bad); } .ucp.na { background: transparent; color: var(--quiet); border: 1px dashed var(--line); }
+  #usageDetail { margin-top: 8px; }
   .sqlinks { display: inline-flex; gap: 6px; margin-left: 6px; align-items: center; }
   .sqlink { font-size: 12px; color: var(--quiet); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font-family: inherit; }
   .sqlink:hover { color: var(--ink); }
@@ -440,6 +450,10 @@
       <div id="ideas"></div>
     </div>
    </div>
+   <div id="usageBox" hidden>
+    <details id="usageDet"><summary><span class="usum-h">KI-Kontingent</span><span id="usageSum"></span></summary>
+      <div id="usageDetail" class="card"></div></details>
+   </div>
    <div id="jobsBox" hidden>
     <h2>Test-Jobs</h2>
     <div id="jobs"></div>
@@ -552,8 +566,9 @@ const SQ_HAS = { OK: 1, WARN: 1, ERROR: 1 };
 function sqRepAttrs(x) { return `data-sqrep="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch || '')}"`; }
 // Kleine Links hinter einem MR-Chip: Sonar-Dashboard, Findings in Sonar, Findings als Markdown ins Clipboard
 function sqLinks(x) {
-  if (!SQ_HAS[x.sonar] && !x.sonar_url) return '';
   const a = [];
+  if (!x.iid && x.create_mr_url) a.push(`<a class="sqlink" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener" title="In GitLab einen Merge Request für diesen Branch anlegen">MR erstellen</a>`);
+  if (!SQ_HAS[x.sonar] && !x.sonar_url) return a.length ? `<span class="sqlinks">${a.join('')}</span>` : '';
   if (x.sonar_url) a.push(`<a class="sqlink" href="${esc(x.sonar_url)}" target="_blank" rel="noopener" title="Dashboard in Sonar">Sonar</a>`);
   if (x.sonar_issues_url && SQ_HAS[x.sonar]) a.push(`<a class="sqlink" href="${esc(x.sonar_issues_url)}" target="_blank" rel="noopener" title="Offene Findings in Sonar">Findings</a>`);
   if (SQ_HAS[x.sonar]) a.push(`<button class="sqlink" ${sqRepAttrs(x)} title="Findings als Markdown-Report in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">Report kopieren</button>`);
@@ -620,7 +635,8 @@ function row(it) {
   }
   if (it.no_ticket) acts.push(`<button data-tk="1" data-p="${it.project_id}" data-i="${it.iid ?? ''}" data-b="${esc(it.branch)}" data-cu="${esc(it.create_url || '')}">Ticket anlegen</button>`);
   if (state.jira && state.jira.ok) acts.push(`<button class="quiet-btn" data-assign="1" data-p="${it.project_id}" data-b="${esc(it.branch)}" data-t="${esc(it.title)}" data-iid="${it.iid ?? ''}" title="Ticket von Hand zuordnen (oder die Zeile auf eine Story ziehen)">${it.ticket || it.ticket_unknown ? 'Ticket ändern' : 'Zuordnen'}</button>`);
-  acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Öffnen</a>`);
+  if (it.kind === 'branch' && it.create_mr_url) acts.push(`<a class="btn" href="${esc(it.create_mr_url)}" target="_blank" rel="noopener" title="In GitLab einen Merge Request für diesen Branch anlegen">MR erstellen</a>`);
+  acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener" title="${it.kind === 'branch' ? 'Branch in GitLab' : 'Merge Request in GitLab'}">${it.kind === 'branch' ? 'Branch öffnen' : 'MR öffnen'}</a>`);
   const parts = [];
   if (F().testenv && it.iid && it.can_deploy) {
     const opts = state.prompts.map(p => `<option>${esc(p)}</option>`).join('');
@@ -760,11 +776,6 @@ function renderLeft() {
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
   if (F().ai) tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
-  if ((state.usage_providers || []).length) {
-    const u = usageData;
-    tiles.usage = { title: 'KI-Kontingent', src: 'local', count: u ? u.items.filter(i => i.ok).length + '/' + u.items.length : '…',
-      hint: 'gelesen, inoffizielle Schnittstellen', body: usageBody() };
-  }
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
@@ -841,7 +852,10 @@ function renderAside() {
   $('ideasBox').hidden = !f.ideas;
   $('ideaBtn').hidden = !f.ideas;
   $('jobsBox').hidden = !f.testenv;
-  const on = !!(f.ideas || f.testenv);
+  const hasUsage = !!(state.usage_providers || []).length;
+  $('usageBox').hidden = !hasUsage;
+  renderUsageBox();
+  const on = !!(f.ideas || f.testenv || hasUsage);
   $('aside').hidden = !on;
   document.querySelector('.bn[data-view=ideas]').hidden = !f.ideas;
   $('viewOverview').classList.toggle('withaside', on);
@@ -985,9 +999,27 @@ $('board').addEventListener('click', ev => { const b = ev.target.closest('button
 const MIME = 'application/x-tinyops';
 const AI_PRESETS = { claude: ['Claude.ai', 5, 100, '%'], chatgpt: ['ChatGPT', 5, 100, '%'], mistral: ['Mistral Vibe', 5, 100, '%'], local: ['Lokales Modell', 24, 0, 'Anfragen'], other: ['Anderes Konto', 5, 100, '%'] };
 const AI_LABEL = { claude: 'Claude', chatgpt: 'ChatGPT', mistral: 'Mistral', local: 'Lokal', other: 'Konto' };
+function fmtReset(secs) { if (secs < 86400) return fmtLeft(secs); const h = Math.round(secs / 3600), d = Math.floor(h / 24); return d + ' d' + (h % 24 ? ' ' + (h % 24) + ' h' : ''); }
 function fmtAgo(ts) { const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60)); return m >= 2880 ? Math.round(m / 1440) + ' Tagen' : m >= 120 ? Math.round(m / 60) + ' h' : m + ' min'; }
 function fmtLeft(secs) { const m = Math.max(0, Math.round(secs / 60)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; }
-let usageData = null, usageT = 0;
+let usageData = null, usageT = 0, usageOpen = false;   // nach einem Reload ist die Box immer zu: sie öffnet sich nur per Klick
+const WIN_SHORT = { '5 h': '5 h', 'Woche': 'Woche', 'Woche Opus': 'Opus', 'Vibe Monat': 'Vibe', 'API Monat': 'API' };
+function renderUsageBox() {
+  if (!(state && (state.usage_providers || []).length)) return;
+  const det = $('usageDet');
+  const sum = !usageData ? '<span class="ucp na">frage ab …</span>' : usageData.items.map(a => {
+    if (!a.ok) return `<span class="ucp na" title="${esc(a.error)}">${esc(a.name.split(' ')[0])}: n/a</span>`;
+    return a.windows.map(w => {
+      const c = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : '';
+      return `<span class="ucp ${c}" title="${esc(a.name)}, ${esc(w.label)}: ${esc(w.left_pct)} % frei${a.stale ? ' (veraltet)' : ''}">${esc(a.name.split(' ')[0])} ${esc(WIN_SHORT[w.label] || w.label)} ${Math.round(w.left_pct)} %${a.stale ? ' ⚠' : ''}</span>`;
+    }).join('');
+  }).join('');
+  $('usageSum').innerHTML = sum;
+  if (det.open !== usageOpen) det.open = usageOpen;
+  $('usageDetail').innerHTML = usageOpen ? usageBody() : '';
+  if ($('us-live')) $('us-live').innerHTML = usageData ? usageBody() : '';
+}
+document.addEventListener('toggle', ev => { if (ev.target && ev.target.id === 'usageDet') { usageOpen = ev.target.open; renderUsageBox(); } }, true);
 function usageBody() {
   if (!usageData) return '<div class="empty">Frage Kontingent ab …</div>';
   const rows = usageData.items.map(a => {
@@ -995,19 +1027,19 @@ function usageBody() {
     const ws = a.windows.map(w => {
       const st = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : 'ok';
       return `<div class="aibar s-${st}" title="${esc(w.used_pct)} % verbraucht"><i style="width:${w.left_pct}%"></i></div>
-        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + (w.secs_left >= 86400 ? Math.floor(w.secs_left / 86400) + ' d ' + Math.round(w.secs_left % 86400 / 3600) + ' h' : fmtLeft(w.secs_left))}</span></div>`;
+        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + fmtReset(w.secs_left)}</span></div>`;
     }).join('');
     const age = a.manual ? `<div class="aimeta"><span class="quiet small">${a.stale ? '<b style="color:var(--warn)">Stand ist alt.</b> ' : ''}Zuletzt per Lesezeichen gesendet vor ${fmtAgo(a.fetched)}.</span></div>` : '';
     return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b>${a.stale ? '<span class="chip warn">veraltet</span>' : ''}</div>${ws}${age}</div>`;
   }).join('');
   const ago = Math.max(0, Math.round((Date.now() / 1000 - usageData.fetched) / 60));
-  return rows + `<div class="aimeta"><span class="quiet small">Stand vor ${ago} min · <a href="#" data-usage-refresh="1">neu abfragen</a>. Mistral Vibe hat keine Abfrage.</span></div>`;
+  return rows + `<div class="aimeta"><span class="quiet small">Stand vor ${ago} min · <a href="#" data-usage-refresh="1">neu abfragen</a></span></div>`;
 }
 async function loadUsage(fresh) {
   if (!(state && (state.usage_providers || []).length)) { usageData = null; return; }
   if (!fresh && usageData && Date.now() - usageT < 30000) return;
   usageT = Date.now();
-  try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderLeft(); } catch (e) { /* nächstes Mal */ }
+  try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderUsageBox(); } catch (e) { /* nächstes Mal */ }
 }
 document.addEventListener('click', async ev => {
   const b = ev.target.closest && ev.target.closest('[data-sqrep]');
@@ -1516,6 +1548,7 @@ async function loadSettings() {
     ${field('us-codex-file', 'Pfad der Codex-Anmeldedatei', S.usage.codex_file, { ph: '~/.codex/auth.json', err: 'usage.codex_file' })}
     ${field('us-cache', 'Zwischenspeicher in Sekunden', S.usage.cache_seconds, { type: 'number', err: 'usage.cache_seconds' })}
     <div class="hint">Das Token wird nur gelesen, nie erneuert, gespeichert oder geloggt, und nur an api.anthropic.com bzw. chatgpt.com geschickt. Läuft tinyops im Container, muss die Datei dort eingehängt sein; ist das Token abgelaufen, einmal <code>claude</code> bzw. <code>codex</code> starten. Erst speichern, dann testen.</div>
+    <div id="us-live"></div>
     <div class="row"><button class="primary" id="us-test">Jetzt abfragen</button></div>
     <div id="us-result"></div>`)}
 
@@ -1552,7 +1585,7 @@ async function loadSettings() {
   </div>
   <div class="savebar"><button class="primary" id="st-save" ${S.demo ? 'disabled' : ''}>Speichern</button>
     <span class="quiet small" id="st-msg">Änderungen gelten sofort nach dem Speichern, ohne Neustart.</span></div>`;
-  renderJiraSecret(); renderProjects(); renderBookmarklet();
+  renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
   renderLlmKey();
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
     const p = S.llm.providers.find(x => x.id === $('lm-prov').value), cur = val('lm-url');
@@ -1776,7 +1809,7 @@ async function delSecrets(names, label) {
 }
 
 load();
-setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 60000);
+setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 300000);   // der Server gleicht ohnehin nur alle cache_seconds ab
 setInterval(() => { if (state && state.jobs && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
 </script>
 </body>

@@ -41,7 +41,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.9.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.10.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -102,7 +102,7 @@ DEFAULTS = {
     "projects": [],
     "wip_limit": 2,
     "stale_days": 7,
-    "cache_seconds": 30,
+    "cache_seconds": 300,      # GitLab/Jira höchstens alle 5 Minuten abgleichen; «Neu laden» erzwingt es
     "bind": "127.0.0.1",
     "port": 8765,
     "allowed_hosts": [],
@@ -142,7 +142,7 @@ USAGE_DEFAULTS = {
     "mistral": False,          # Mistral: Stand kommt per Lesezeichen aus dem Browser (kein Zugriff auf die Sitzung)
     "claude_file": "",         # leer = ~/.claude/.credentials.json
     "codex_file": "",          # leer = ~/.codex/auth.json
-    "cache_seconds": 120,
+    "cache_seconds": 300,
 }
 
 SONAR_DEFAULTS = {
@@ -677,6 +677,7 @@ class GitLabClient:
                         "can_deploy": False, "age_days": age_days(ts), "state": "kein-mr",
                         "ahead": info["ahead"], "by_me": info["by_me"], "by_agent": info["by_agent"],
                         "last_author": commit.get("author_name", ""),
+                        "create_mr_url": proj.get("web_url", "") + "/-/merge_requests/new?merge_request%5Bsource_branch%5D=" + urllib.parse.quote(b["name"], safe=""),
                     })
                 glog.info("%s: %d eigene MRs (%d ignoriert), %d Branches geprüft, %d angezeigt, %d zu alt", name, len(mrs),
                           ignored_mrs, checked, shown_b, skipped)
@@ -882,6 +883,8 @@ class DemoClient:
             "updated_at": self._ago(days), "sha": "a1b2c3d4e5f60718", "author": "demo",
             "can_deploy": iid is not None, "age_days": days,
         }
+        if iid is None:
+            item["create_mr_url"] = "https://gitlab.example/demo/-/merge_requests/new?merge_request%5Bsource_branch%5D=" + urllib.parse.quote(branch, safe="")
         item["state"] = derive_state(item) if kind == "mr" else "review"
         return item
 
@@ -1385,7 +1388,8 @@ class App:
                  "pipeline": it["pipeline"], "project_id": it["project_id"], "manual": bool(it.get("manual_link")),
                  "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
                  "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""),
-                 "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", "")}
+                 "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
+                 "create_mr_url": it.get("create_mr_url", "")}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1469,7 +1473,8 @@ class App:
     def _linked_ref(it):
         return {"project": it["project"], "branch": it["branch"], "iid": it["iid"], "url": it["url"], "kind": it["kind"], "pipeline": it["pipeline"],
                 "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
-                "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", "")}
+                "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
+                 "create_mr_url": it.get("create_mr_url", "")}
 
     def board_action(self, action, body):
         st = self.store

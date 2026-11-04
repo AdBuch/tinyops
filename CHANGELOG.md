@@ -5,6 +5,19 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.10.0]
+
+### Neu
+- **KI-Kontingent unter der Ideenbox:** eine eingeklappte Box mit einer Zeile pro Fenster (Claude 5 h und Woche, Codex, Mistral Vibe und API).
+  Sie klappt nur per Klick auf und nach jedem Reload wieder zu; das Neuladen im Hintergrund lässt eine geöffnete Box offen. Details (Reset, Dollarwerte, Alter) stehen
+  in der aufgeklappten Box und, wenn aktiviert, auch in den Einstellungen unter KI-Kontingent. Die Kachel im Raster entfällt.
+- **Links an MRs und Branches:** «MR öffnen» bzw. «Branch öffnen», «Sonar» und «Findings» an jedem Eintrag; **«MR erstellen»** an Branches ohne MR
+  (öffnet in GitLab das Formular für einen neuen Merge Request mit dem Branch als Quelle), auch an den Branch-Chips in Stories und Board.
+
+### Geändert
+- **Abgleich seltener:** GitLab und Jira werden höchstens alle 5 Minuten abgeglichen (vorher 30 s), die Oberfläche fragt alle 5 Minuten nach (vorher 60 s),
+  das Kontingent wird 5 Minuten zwischengespeichert. «Neu laden» erzwingt weiterhin einen frischen Abgleich. Steht `cache_seconds` in deiner `config.json`, gilt dieser Wert.
+
 ## [0.9.0]
 
 ### Neu
