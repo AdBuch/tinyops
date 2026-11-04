@@ -5,6 +5,18 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.8.0]
+
+### Neu
+- **KI-Kontingent (nur lesend, standardmässig aus):** Kachel mit dem freien Rest im 5-Stunden- und Wochenfenster von **Claude** und **Codex**.
+  Gelesen über die inoffiziellen Schnittstellen, die auch die CLIs nutzen (`api.anthropic.com/api/oauth/usage`, `chatgpt.com/backend-api/wham/usage`),
+  mit dem Token aus der Anmeldedatei des jeweiligen CLI. Das Token wird nur gelesen, nie erneuert, gespeichert oder geloggt.
+  Jeder Fehler erscheint als «nicht abrufbar» mit Grund, nie als geratene Zahl. Einstellungen mit Test, Preflight-Zeile, Zwischenspeicher.
+- Mistral Vibe hat keine Abfrage und bleibt bei den von Hand gepflegten KI-Konten (Einstellungen → Weiteres).
+
+### Bekannte Grenzen
+- Beide Schnittstellen sind undokumentiert und können sich ändern; sie wurden nur gegen einen Fake-Server getestet, nicht gegen echte Konten.
+
 ## [0.7.0]
 
 ### Neu

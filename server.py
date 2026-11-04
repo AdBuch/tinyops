@@ -32,6 +32,7 @@ import fnmatch
 import links
 import llm
 import sonar
+import usage
 import net
 import secretstore as store
 import settings
@@ -40,7 +41,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.7.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.8.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -80,6 +81,7 @@ hlog = tlog.get("http")
 glog = tlog.get("gitlab")
 jlog = tlog.get("jira")
 slog = tlog.get("sonar")
+slog_u = tlog.get("usage")
 rlog = tlog.get("refresh")
 joblog = tlog.get("job")
 alog = tlog.get("access")
@@ -132,6 +134,14 @@ LLM_DEFAULTS = {
     "model": "",
     "timeout": 120,                # Sekunden ohne ein Byte Antwort, bis abgebrochen wird (grosse Modelle laden beim ersten Aufruf lange)
     "allow_remote": False,         # nur das eigene Netz, solange das nicht ausdrücklich an ist (DLP)
+}
+
+USAGE_DEFAULTS = {
+    "claude": False,           # Rest des Claude-Abos lesen (inoffizielle Schnittstelle, Token aus der Anmeldedatei des CLI)
+    "codex": False,            # dasselbe für Codex
+    "claude_file": "",         # leer = ~/.claude/.credentials.json
+    "codex_file": "",          # leer = ~/.codex/auth.json
+    "cache_seconds": 120,
 }
 
 SONAR_DEFAULTS = {
@@ -224,6 +234,12 @@ def jira_cfg(cfg):
     j = dict(JIRA_DEFAULTS)
     j.update(cfg.get("jira") or {})
     return j
+
+
+def usage_cfg(cfg):
+    c = dict(USAGE_DEFAULTS)
+    c.update(cfg.get("usage") or {})
+    return c
 
 
 def sonar_cfg(cfg):
@@ -1071,6 +1087,8 @@ class App:
         self.lc = llm_cfg(cfg)
         self.sc = sonar_cfg(cfg)
         self.sonar, self._sonar_cache = None, {}
+        self.uc = usage_cfg(cfg)
+        self._usage_cache, self._usage_lock = None, threading.Lock()
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
         self._types_cache = {}
@@ -1126,6 +1144,36 @@ class App:
     @property
     def configured(self):
         return self.client is not None
+
+    def usage_providers(self):
+        return [k for k in ("claude", "codex") if self.uc.get(k)]
+
+    def usage_view(self, fresh=False):
+        """Rest-Kontingent der Abos. Zwischengespeichert; jeder Anbieter einzeln, ein Fehler stoppt die anderen nicht."""
+        prov = self.usage_providers()
+        if not prov:
+            return {"enabled": False, "items": [], "fetched": 0}
+        with self._usage_lock:
+            c = self._usage_cache
+            if c and not fresh and time.time() - c["fetched"] < float(self.uc["cache_seconds"]) and c["kinds"] == prov:
+                return c
+            if self.demo:
+                now = time.time()
+                items = [{"id": "claude", "name": "Claude", "ok": True, "error": "", "fetched": now, "windows": [
+                            {"label": "5 h", "used_pct": 62.0, "left_pct": 38.0, "resets_at": now + 5400, "secs_left": 5400},
+                            {"label": "Woche", "used_pct": 41.0, "left_pct": 59.0, "resets_at": now + 3 * 86400, "secs_left": 3 * 86400}]},
+                         {"id": "codex", "name": "Codex (ChatGPT)", "ok": False, "fetched": now, "windows": [],
+                          "error": "Anmeldedatei nicht gefunden (~/.codex/auth.json). Im Container: Datei als Volume einhängen."}]
+                items = [i for i in items if i["id"] in prov]
+            else:
+                items = []
+                for k in prov:
+                    r = usage.fetch(k, self.uc.get(k + "_file") or None)
+                    if not r["ok"]:
+                        slog_u.warning("%s: %s", r["name"], r["error"])
+                    items.append(r)
+            self._usage_cache = {"enabled": True, "items": items, "fetched": time.time(), "kinds": list(prov)}
+            return self._usage_cache
 
     def has(self, name):
         return feature(self.cfg, name)
@@ -1798,7 +1846,7 @@ class App:
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
             "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
-            "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "problems": list(self.problems),
+            "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "usage_providers": self.usage_providers(), "problems": list(self.problems),
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
@@ -2061,6 +2109,9 @@ def make_handler(app):
                     with app.cache_lock:
                         app.cache_t = 0.0
                     return self._send(200, {"started": app.start_sync(), "sync": app.sync_view()})
+                if method == "GET" and path == "/api/usage":
+                    v = app.usage_view(fresh="fresh=1" in (parsed.query or ""))
+                    return self._send(200, {k: v[k] for k in ("enabled", "items", "fetched")})
                 if method == "GET" and path == "/api/overview":
                     data = app.overview(wait=False)
                     data["ideas"] = app.ideas.list() if app.has("ideas") and app.ideas else []
@@ -2279,6 +2330,13 @@ def run_preflight(cfg, config_path, demo):
                                               "only_active_sprints": bool(jc.get("only_active_sprints", True))}, stored))
         else:
             print("\nJira\n%snicht eingerichtet" % marks["info"])
+        uc = usage_cfg(cfg)
+        if uc.get("claude") or uc.get("codex"):
+            print("\nKI-Kontingent")
+            for k in ("claude", "codex"):
+                if uc.get(k):
+                    r = usage.fetch(k, uc.get(k + "_file") or None)
+                    line("ok" if r["ok"] else "warn", r["name"], ", ".join("%s: %s %% frei" % (w["label"], w["left_pct"]) for w in r["windows"]) if r["ok"] else r["error"])
         sc = sonar_cfg(cfg)
         if sc.get("enabled"):
             steps("Sonar", settings.test_sonar({"url": sc["url"], "ca_bundle": cfg.get("ca_bundle", ""),

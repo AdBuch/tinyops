@@ -769,6 +769,9 @@ def view(cfg, config_path, features_default=None):
                 "allow_remote": bool((cfg.get("llm") or {}).get("allow_remote", False)),
                 "timeout": (cfg.get("llm") or {}).get("timeout", 120),
                 "providers": [{"id": k, "label": v.label, "url": v.default_url} for k, v in llm.PROVIDERS.items()]},
+        "usage": {"claude": bool((cfg.get("usage") or {}).get("claude")), "codex": bool((cfg.get("usage") or {}).get("codex")),
+                  "claude_file": (cfg.get("usage") or {}).get("claude_file", ""), "codex_file": (cfg.get("usage") or {}).get("codex_file", ""),
+                  "cache_seconds": (cfg.get("usage") or {}).get("cache_seconds", 120)},
         "sonar": {"enabled": bool((cfg.get("sonar") or {}).get("enabled", False)), "url": (cfg.get("sonar") or {}).get("url", ""),
                   "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40)},
         "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
@@ -880,6 +883,18 @@ def build_config(current, p):
             except llm.LlmError as e:
                 errors["llm.url"] = str(e)
         cfg["llm"] = lc
+
+    us = p.get("usage")
+    if us is not None:
+        uc = dict(cfg.get("usage") or {})
+        for k in ("claude", "codex"):
+            uc[k] = bool(us.get(k, False))
+            f = str(us.get(k + "_file") or "").strip()
+            if len(f) > 300 or "\x00" in f:
+                errors["usage.%s_file" % k] = "Ungültiger Pfad."
+            uc[k + "_file"] = f
+        uc["cache_seconds"] = _int(us.get("cache_seconds"), "usage.cache_seconds", 30, 3600, errors, 120)
+        cfg["usage"] = uc
 
     sq = p.get("sonar")
     if sq is not None:

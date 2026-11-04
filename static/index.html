@@ -670,7 +670,7 @@ function applyLayout(l) {
 applyLayout(LS.get('layout', 'tiles'));
 $('layoutSeg').addEventListener('click', ev => { const b = ev.target.closest('button[data-layout]'); if (b) { LS.set('layout', b.dataset.layout); applyLayout(b.dataset.layout); } });
 function tileHtml(id, t, open, mini) {
-  const src = id === 'stories' ? 'jira' : (id === 'pools' || id === 'ai') ? 'local' : 'gl';
+  const src = id === 'stories' ? 'jira' : (id === 'pools' || id === 'ai' || id === 'usage') ? 'local' : 'gl';
   const body = t.body;
   return `<section class="tile t-${src} ${open ? 'open' : ''} ${mini ? 'mini' : ''}" data-tile="${id}">
     <div class="thead" data-toggle="${id}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? 'Verkleinern' : 'Auf halbe Bildschirmbreite öffnen'}">
@@ -741,6 +741,11 @@ function renderLeft() {
   tiles.br = { title: 'Offene Branches', count: branches.length, body: listBody(branches, 'Keine offenen Branches mit Commits von dir oder deinem Agenten.'),
     hint: state.ignore_patterns && state.ignore_patterns.length ? `ignoriert: ${state.ignore_patterns.map(esc).join(', ')}` : '' };
   if (F().ai) tiles.ai = { title: 'KI-Konten', src: 'local', count: (state.ai || []).length, hint: 'Stand trägst du ein, der Anbieter liefert ihn nicht', body: aiBody() };
+  if ((state.usage_providers || []).length) {
+    const u = usageData;
+    tiles.usage = { title: 'KI-Kontingent', src: 'local', count: u ? u.items.filter(i => i.ok).length + '/' + u.items.length : '…',
+      hint: 'gelesen, inoffizielle Schnittstellen', body: usageBody() };
+  }
   const ids = Object.keys(tiles);
   openTiles = openTiles.filter(id => ids.includes(id)).slice(-2);
   const open = ids.filter(id => openTiles.includes(id));
@@ -828,7 +833,7 @@ async function load() {
   clearTimeout(pollT);
   try {
     state = await api('GET', '/api/overview');
-    renderHeader(); renderLeft(); renderAside(); renderBoard();
+    renderHeader(); renderLeft(); renderAside(); renderBoard(); loadUsage(false);
     if (state.features.ideas) renderIdeas();
     if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
@@ -962,6 +967,28 @@ const MIME = 'application/x-tinyops';
 const AI_PRESETS = { claude: ['Claude.ai', 5, 100, '%'], chatgpt: ['ChatGPT', 5, 100, '%'], mistral: ['Mistral Vibe', 5, 100, '%'], local: ['Lokales Modell', 24, 0, 'Anfragen'], other: ['Anderes Konto', 5, 100, '%'] };
 const AI_LABEL = { claude: 'Claude', chatgpt: 'ChatGPT', mistral: 'Mistral', local: 'Lokal', other: 'Konto' };
 function fmtLeft(secs) { const m = Math.max(0, Math.round(secs / 60)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; }
+let usageData = null, usageT = 0;
+function usageBody() {
+  if (!usageData) return '<div class="empty">Frage Kontingent ab …</div>';
+  const rows = usageData.items.map(a => {
+    if (!a.ok) return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b><span class="chip warn">nicht abrufbar</span></div><div class="aimeta"><span>${esc(a.error)}</span></div></div>`;
+    const ws = a.windows.map(w => {
+      const st = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : 'ok';
+      return `<div class="aibar s-${st}" title="${esc(w.used_pct)} % verbraucht"><i style="width:${w.left_pct}%"></i></div>
+        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}</span><span>${w.secs_left == null ? '' : 'Reset in ' + (w.secs_left >= 86400 ? Math.floor(w.secs_left / 86400) + ' d ' + Math.round(w.secs_left % 86400 / 3600) + ' h' : fmtLeft(w.secs_left))}</span></div>`;
+    }).join('');
+    return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b></div>${ws}</div>`;
+  }).join('');
+  const ago = Math.max(0, Math.round((Date.now() / 1000 - usageData.fetched) / 60));
+  return rows + `<div class="aimeta"><span class="quiet small">Stand vor ${ago} min · <a href="#" data-usage-refresh="1">neu abfragen</a>. Mistral Vibe hat keine Abfrage.</span></div>`;
+}
+async function loadUsage(fresh) {
+  if (!(state && (state.usage_providers || []).length)) { usageData = null; return; }
+  if (!fresh && usageData && Date.now() - usageT < 30000) return;
+  usageT = Date.now();
+  try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderLeft(); } catch (e) { /* nächstes Mal */ }
+}
+document.addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('[data-usage-refresh]')) { ev.preventDefault(); loadUsage(true); } });
 function aiBody() {
   const acc = state.ai || [];
   const rows = acc.map(a => {
@@ -1350,7 +1377,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="sonar">Sonar</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="sonar">Sonar</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -1435,6 +1462,16 @@ async function loadSettings() {
       ${S.secrets.sonar_token.set ? '<button id="sq-del">Gespeicherten Token löschen</button>' : ''}</div>
     <div id="sq-result"></div>`)}
 
+  ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist. Gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern. Mistral Vibe bietet keine Abfrage.', `
+    <label class="check"><input type="checkbox" id="us-claude" ${S.usage.claude ? 'checked' : ''}><span><strong>Claude lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei von Claude Code)</span></span></label>
+    ${field('us-claude-file', 'Pfad der Claude-Anmeldedatei', S.usage.claude_file, { ph: '~/.claude/.credentials.json', err: 'usage.claude_file' })}
+    <label class="check"><input type="checkbox" id="us-codex" ${S.usage.codex ? 'checked' : ''}><span><strong>Codex lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei des Codex-CLI, ChatGPT-Anmeldung nötig)</span></span></label>
+    ${field('us-codex-file', 'Pfad der Codex-Anmeldedatei', S.usage.codex_file, { ph: '~/.codex/auth.json', err: 'usage.codex_file' })}
+    ${field('us-cache', 'Zwischenspeicher in Sekunden', S.usage.cache_seconds, { type: 'number', err: 'usage.cache_seconds' })}
+    <div class="hint">Das Token wird nur gelesen, nie erneuert, gespeichert oder geloggt, und nur an api.anthropic.com bzw. chatgpt.com geschickt. Läuft tinyops im Container, muss die Datei dort eingehängt sein; ist das Token abgelaufen, einmal <code>claude</code> bzw. <code>codex</code> starten. Erst speichern, dann testen.</div>
+    <div class="row"><button class="primary" id="us-test">Jetzt abfragen</button></div>
+    <div id="us-result"></div>`)}
+
   ${sect('llm', 'KI-Entwurf (lokal)', 'Ein Sprachmodell auf deinem Rechner oder im Büro-Netz schreibt den ersten Entwurf eines Tickets. Ohne Modell nimmt der Dialog eine Vorlage.', `
     <label class="check"><input type="checkbox" id="lm-on" ${S.llm.enabled ? 'checked' : ''}><span><strong>KI-Entwurf einschalten</strong></span></label>
     <div class="grid2">
@@ -1475,6 +1512,7 @@ async function loadSettings() {
     if (p && (!cur || S.llm.providers.some(x => x.url === cur))) $('lm-url').value = p.url;
     renderLlmKey();
   };
+  $('us-test').onclick = testUsage;
   $('sq-test').onclick = testSonar; if ($('sq-del')) $('sq-del').onclick = () => delSecrets(['sonar_token'], 'Sonar-Token');
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
@@ -1537,6 +1575,16 @@ function jiForm() {
     only_active_sprints: $('ji-sprint').checked };
 }
 
+async function testUsage() {
+  const out = $('us-result');
+  await busy($('us-test'), 'Frage …', async () => {
+    try {
+      const r = await api('GET', '/api/usage?fresh=1');
+      out.innerHTML = r.enabled ? r.items.map(a => a.ok ? `<div class="banner" style="background:var(--ok-bg);color:var(--ok)">${esc(a.name)}: ${a.windows.map(w => esc(w.label) + ' ' + esc(w.left_pct) + ' % frei').join(', ')}</div>` : `<div class="banner bad">${esc(a.name)}: ${esc(a.error)}</div>`).join('')
+        : '<div class="banner warn">Nichts eingeschaltet (oder noch nicht gespeichert).</div>';
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
 function sqForm() { return { url: val('sq-url'), ca_bundle: val('gl-ca'), secret: $('sq-secret').value, projects: P }; }
 async function testSonar() {
   const out = $('sq-result');
@@ -1643,6 +1691,7 @@ function collect() {
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
       wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
+    usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
@@ -1656,7 +1705,7 @@ async function saveSettings() {
       const r = await api('POST', '/api/settings/save', collect());
       const where = Object.entries(r.secrets || {}).map(([k, v]) => `${k}: ${v}`).join('; ');
       toast('Gespeichert' + (where ? ' (' + where + ')' : ''));
-      await loadSettings(); await load();
+      await loadSettings(); usageData = null; await load();
       if (S.gitlab.url) testGitlab();
       if (S.jira.url) testJira();
       if (S.sonar.enabled && S.sonar.url) testSonar();

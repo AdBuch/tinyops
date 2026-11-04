@@ -1,6 +1,6 @@
 # tinyops: Arbeitspanel
 
-Version 0.7.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
+Version 0.8.0 (Semantic Versioning, siehe [CHANGELOG.md](CHANGELOG.md): neue Funktion = minor, Korrektur = patch).
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -282,6 +282,17 @@ Der Token kommt wie alle Secrets in den Schlüsselbund oder in `TINYOPS_SONAR_TO
   Ein falscher Token bricht die Sonar-Abfragen mit einer klaren Meldung ab, ein einzelner Fehler nur diesen Eintrag.
 * **Edition:** Gates je Merge Request liefert SonarQube erst ab Developer Edition. In der Community Edition steht für MRs «keine Analyse».
 * Der Test in den Einstellungen und `--preflight` prüfen Erreichbarkeit, Token und, ob die eingetragenen Schlüssel existieren.
+
+## 4m. KI-Kontingent: Claude und Codex (neu in 0.8.0)
+
+Aus per Voreinstellung. Einstellungen → KI-Kontingent: «Claude lesen» und/oder «Codex lesen» ankreuzen, speichern, «Jetzt abfragen».
+
+* Claude: `GET https://api.anthropic.com/api/oauth/usage`, Token aus `~/.claude/.credentials.json`. Codex: `GET https://chatgpt.com/backend-api/wham/usage`,
+  Token aus `~/.codex/auth.json` (ChatGPT-Anmeldung, ein reiner API-Schlüssel reicht nicht). Pfade lassen sich ändern.
+* **Inoffiziell:** Beide Schnittstellen sind nicht dokumentiert und können sich ohne Ankündigung ändern oder gesperrt werden. Dann steht in der Kachel «nicht abrufbar» mit Grund.
+* Das Token wird nur gelesen (nie erneuert, kopiert oder geloggt) und nur an den genannten Host geschickt. Ist es abgelaufen: einmal `claude` bzw. `codex` im Terminal starten.
+* Im Container müssen die Dateien eingehängt sein (z. B. als Secret-Volume, schreibgeschützt). Das Manifest tut das bewusst nicht von selbst.
+* Mistral Vibe bietet keine Abfrage; dafür bleiben die von Hand gepflegten KI-Konten (Einstellungen → Weiteres).
 
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
