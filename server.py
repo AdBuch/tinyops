@@ -30,6 +30,7 @@ from pathlib import Path
 
 import agents
 import fnmatch
+import flow
 import links
 import llm
 import sonar
@@ -42,7 +43,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.12.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.13.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -547,6 +548,7 @@ class GitLabClient:
             "updated_at": mr.get("updated_at", ""), "sha": mr.get("sha", ""),
             "author": (mr.get("author") or {}).get("username", ""),
             "can_deploy": pid in self.proj_cfg,
+            "merge_status": mr.get("detailed_merge_status") or "",   # GitLab ab 15.6: mergeable, not_approved, conflict, ...
         }
         item["age_days"] = age_days(item["updated_at"])
         item["state"] = derive_state(item) if kind == "mr" else "review"
@@ -910,6 +912,7 @@ class DemoClient:
             self._item("mr", 35, "Sonar: Findings Welle 1", "agent/sonar-wave-1", 3, "failed"),
             self._item("mr", 29, "Labelo: Graph-Client Refactoring", "feature/DLP-103-labelo-client", 9, "success", draft=True),
         ]
+        mine[1]["merge_status"] = "not_approved"
         for name, days, ahead, by_me, by_agent in (
                 ("feature/proxo-mapping", 14, 5, True, False),
                 ("idea/ui-prototype", 22, 2, True, True),
@@ -1137,6 +1140,10 @@ class App:
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
         self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
+        if self.demo and not self.store.flow_stats()["total_xp"]:
+            t = time.time()      # Demo: ein paar erfundene Erfolge der letzten Tage, damit der Spielstand etwas zeigt
+            for i, (k, ph, xp, d) in enumerate((("DLP-098", 7, 60, 3), ("DLP-099", 4, 20, 2), ("DLP-101", 4, 10, 1), ("DLP-102", 4, 20, 1), ("DLP-103", 3, 10, 0))):
+                self.store.flow_event_once("demo:%d" % i, k, "", "phase", ph, xp, "", t - d * 86400 - 600)
         self._agent_poll_busy = False
         self._types_cache = {}
         self._by_key = {}
@@ -1450,7 +1457,8 @@ class App:
                  "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""),
                  "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
                  "sonar_trend": (it.get("sonar") or {}).get("trend"),
-                 "create_mr_url": it.get("create_mr_url", "")}
+                 "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
+                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent"))}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1536,7 +1544,8 @@ class App:
                 "project_id": it["project_id"], "manual": False, "draft": bool(it.get("draft")), "ref": it.get("ref", ""), "author": it.get("author", ""),
                 "sonar": (it.get("sonar") or {}).get("status", ""), "sonar_detail": (it.get("sonar") or {}).get("detail", ""), "sonar_url": (it.get("sonar") or {}).get("url", ""), "sonar_issues_url": (it.get("sonar") or {}).get("issues_url", ""),
                  "sonar_trend": (it.get("sonar") or {}).get("trend"),
-                 "create_mr_url": it.get("create_mr_url", "")}
+                 "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
+                 "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent"))}
 
     def board_action(self, action, body):
         st = self.store
@@ -1979,6 +1988,17 @@ class App:
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["stale"] = it["age_days"] >= stale
         data["board"] = self._board(data)
+        agents_v = self.agents_view()
+        by_ticket = {}
+        for r in agents_v["runs"]:
+            by_ticket.setdefault(r["ticket"], []).append(r)
+        try:
+            data["flow"] = flow.build(data["board"]["cards"], self.store, by_ticket, complete=not data["loading"] and not data.get("errors"),
+                                      goal=int((self.cfg.get("flow") or {}).get("daily_goal", 3)))
+            data["flow"]["reviews"] = flow.review_view(data)
+        except Exception as e:   # der Ablauf ist eine Ansicht; er darf die Übersicht nie verhindern
+            log.warning("Ablauf: %s", scrub(e))
+            data["flow"] = None
         data.update({
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
@@ -1989,9 +2009,29 @@ class App:
             "ticket": self.ticket_meta(),
             "pools": self.pools_view(data),
             "ai": self.store.ai_accounts() if self.has("ai") else [],
-            "agents": self.agents_view(),
+            "agents": agents_v,
         })
         return data
+
+    # -- Teilschritte (Checkliste je Karte)
+    def flow_action(self, action, b):
+        st = self.store
+        try:
+            if action == "add":
+                return {"id": st.check_add(str(b.get("key") or ""), b.get("text"))}
+            if action == "toggle":
+                r = st.check_toggle(int(b.get("id")), b.get("done"))
+                if r["done"]:
+                    st.flow_event_once("check:%d" % r["id"], r["key"], "", "check", -1, flow.XP_CHECK, r["text"])
+                return {"done": bool(r["done"]), "stats": st.flow_stats(int((self.cfg.get("flow") or {}).get("daily_goal", 3)))}
+            if action == "delete":
+                st.check_delete(int(b.get("id")))
+                return {"ok": True}
+        except (TypeError, ValueError):
+            raise UserError("Teilschritt-Nummer fehlt.")
+        except links.LinkError as e:
+            raise UserError(str(e))
+        raise UserError("Unbekannte Aktion.")
 
     # -- Coding-Agenten an Tickets
     def agents_view(self):
@@ -2297,6 +2337,8 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "POST" and path.startswith("/api/flow/"):
+                    return self._send(200, app.flow_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/agents/"):
                     return self._send(200, app.agent_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/ai/"):

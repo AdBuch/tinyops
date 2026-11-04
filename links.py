@@ -305,7 +305,107 @@ class _AgentMixin:
             c.execute("delete from agent_runs where ticket=? and status not in ('l\u00e4uft')", (ticket,))
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin):
+class _FlowMixin:
+    """Fortschritt je Vorhaben (höchste je erreichte Station), Erfolge für den Spielstand und Teilschritte (Checkliste)."""
+    def flow_states(self):
+        with self._conn() as c:
+            return {} if c is None else {r["key"]: dict(r) for r in c.execute("select * from flow_state")}
+
+    def flow_record(self, rows, now=None):
+        """rows: (id, key, title, phase). Neue Karten zählen nicht; Punkte nur für eine Station, die noch nie erreicht wurde."""
+        now = now or time.time()
+        events = []
+        with self._conn(True) as c:
+            seen = {r["key"]: dict(r) for r in c.execute("select * from flow_state")}
+            for cid, key, title, phase in rows:
+                s = seen.get(cid)
+                if s is None:
+                    c.execute("insert into flow_state(key, phase, max_phase, ts) values(?,?,?,?)", (cid, phase, phase, now))
+                    continue
+                if phase > s["max_phase"]:
+                    xp = 10 * (phase - s["max_phase"]) + (30 if phase == 7 else 0)
+                    c.execute("insert into flow_events(ref, key, title, kind, phase, xp, text, ts) values(?,?,?,?,?,?,?,?)",
+                              ("", key or cid, title, "phase", phase, xp, "", now))
+                    events.append((cid, phase, xp))
+                    c.execute("update flow_state set phase=?, max_phase=?, ts=? where key=?", (phase, phase, now, cid))
+                elif phase != s["phase"]:
+                    c.execute("update flow_state set phase=?, ts=? where key=?", (phase, now, cid))
+            c.execute("delete from flow_events where ts < ?", (now - 400 * 86400,))
+        return events
+
+    def flow_event_once(self, ref, key, title, kind, phase, xp, text, now=None):
+        with self._conn(True) as c:
+            if c.execute("select 1 from flow_events where ref=?", (ref,)).fetchone():
+                return False
+            c.execute("insert into flow_events(ref, key, title, kind, phase, xp, text, ts) values(?,?,?,?,?,?,?,?)",
+                      (ref, key, title, kind, phase, xp, text, now or time.time()))
+            return True
+
+    def flow_stats(self, goal=3, now=None):
+        now = now or time.time()
+        day = lambda ts: time.strftime("%Y-%m-%d", time.localtime(ts))
+        with self._conn() as c:
+            rows = [] if c is None else [dict(r) for r in c.execute("select * from flow_events order by id desc limit 5000")]
+        today = day(now)
+        t_rows = [r for r in rows if day(r["ts"]) == today]
+        days = {day(r["ts"]) for r in rows}
+        streak, d = 0, now
+        if today not in days:
+            d -= 86400          # heute noch nichts: die Serie zählt bis gestern und reisst erst morgen
+        while day(d) in days:
+            streak += 1
+            d -= 86400
+        week = []
+        for i in range(6, -1, -1):
+            ds = day(now - i * 86400)
+            week.append({"day": ds, "n": sum(1 for r in rows if day(r["ts"]) == ds)})
+        total = sum(r["xp"] for r in rows)
+        steps = len(t_rows)          # jeder Haken zählt: kleine Schritte sollen sich lohnen
+        return {"today_xp": sum(r["xp"] for r in t_rows), "today_steps": steps, "goal": goal, "goal_met": steps >= goal,
+                "streak": streak, "week": week, "total_xp": total, "level": 1 + total // 200, "level_xp": total % 200, "level_size": 200,
+                "last_id": rows[0]["id"] if rows else 0,
+                "recent": [{"id": r["id"], "key": r["key"], "title": r["title"], "kind": r["kind"], "phase": r["phase"], "xp": r["xp"],
+                            "text": r["text"], "ts": r["ts"]} for r in rows[:8]]}
+
+    # ---- Teilschritte
+    def checklists(self):
+        with self._conn() as c:
+            if c is None:
+                return {}
+            out = {}
+            for r in c.execute("select * from checklist order by key, pos, id"):
+                out.setdefault(r["key"], []).append(dict(r))
+            return out
+
+    def check_add(self, key, text):
+        text = " ".join(str(text or "").split())
+        if not text or len(text) > 200:
+            raise LinkError("Der Teilschritt fehlt oder ist länger als 200 Zeichen.")
+        if not key or len(key) > 200:
+            raise LinkError("Die Karte fehlt.")
+        with self._conn(True) as c:
+            n = c.execute("select count(*), coalesce(max(pos), 0) from checklist where key=?", (key,)).fetchone()
+            if n[0] >= 30:
+                raise LinkError("Höchstens 30 Teilschritte je Karte. Teil die Aufgabe lieber auf.")
+            return c.execute("insert into checklist(key, text, done, pos, created) values(?,?,0,?,?)", (key, text, n[1] + 1, time.time())).lastrowid
+
+    def check_toggle(self, cid, done=None):
+        with self._conn(True) as c:
+            r = c.execute("select * from checklist where id=?", (cid,)).fetchone()
+            if not r:
+                raise LinkError("Diesen Teilschritt gibt es nicht (mehr).")
+            new = (not r["done"]) if done is None else bool(done)
+            c.execute("update checklist set done=?, done_ts=? where id=?", (int(new), time.time() if new else None, cid))
+            r = dict(r)
+            r["done"] = int(new)
+            return r
+
+    def check_delete(self, cid):
+        with self._conn(True) as c:
+            c.execute("delete from checklist where id=?", (cid,))
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -334,6 +434,12 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin):
                              " prompt text not null default '', note text not null default '', exit_code integer, created real not null,"
                              " started real, finished real)")
                 conn.execute("create index if not exists agent_runs_ticket on agent_runs(ticket)")
+                conn.execute("create table if not exists flow_state(key text primary key, phase integer not null, max_phase integer not null, ts real not null)")
+                conn.execute("create table if not exists flow_events(id integer primary key autoincrement, ref text not null default '', key text not null,"
+                             " title text not null default '', kind text not null, phase integer not null, xp integer not null, text text not null default '', ts real not null)")
+                conn.execute("create index if not exists flow_events_ref on flow_events(ref)")
+                conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
+                             " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
                 yield conn
         finally:
             conn.close()

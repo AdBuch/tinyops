@@ -335,6 +335,26 @@ Stände: *zugewiesen* (noch nicht gestartet), *läuft*, *fertig* (Exit 0), *fehl
 **DLP:** Claude, Codex und Vibe senden Prompt und Code an den Anbieter. Sie starten deshalb nur, wenn beim Projekt «Cloud-Agent erlaubt» angekreuzt ist (Standard: aus). Ein eigener Befehl mit lokalem Modell: in der `config.json` beim Agenten `"cloud": false` und `"command": "mein-agent {prompt_file}"` setzen. Den Befehl kann die Oberfläche nicht ändern.
 Der Prompt enthält nur Key, Titel, Projekt, Branch und Link plus die Regeln aus `prompts/agent-task.md` (kein Merge, kein Push auf geschützte Branches, kein Force-Push). **Das ist eine Bitte an den Agenten, keine technische Sperre:** Was der Agent mit seinen eigenen Zugangsdaten auf dem Zielhost darf, bestimmen dort die Rechte. Gib ihm dort nur, was er braucht (zum Beispiel keinen Token mit Merge-Recht auf geschützte Branches).
 
+## 4q. Fokus: ein Ablauf, ein nächster Schritt (neu in 0.13.0)
+
+Die Startansicht beantwortet eine Frage: **Was mache ich jetzt?** Jedes Vorhaben (Jira-Ticket, eigene Aufgabe, Branch oder MR, auch ohne Ticket) liegt auf derselben Strecke:
+
+| Station | erkannt an | nächster Schritt (Beispiele) |
+|---|---|---|
+| Planen | Ticket ohne Branch, nicht in Arbeit | Loslegen (Branch-Befehl kopieren) |
+| Branch | in Arbeit, aber kein Branch mit dem Key | Branch anlegen |
+| Code | Branch ohne MR | MR erstellen, oder der nächste Teilschritt |
+| MR | Draft-MR | Draft fertigstellen |
+| Prüfen | MR offen | Pipeline reparieren, Sonar-Findings beheben, Konflikt lösen, Kommentare klären; warten auf CI oder Review |
+| Testen | Pipeline grün, Gate ok, nichts offen | Manuell testen → «Getestet» |
+| Mergen | von dir als getestet markiert | MR öffnen und mergen |
+| Fertig | von dir abgeschlossen, oder MR weg nach «Prüfen» → «Abschliessen» | – |
+
+Übersteuern: im Detail-Panel auf eine Station klicken oder die Karte im Board verschieben; «Automatisch» nimmt das zurück. Blocker und Warten bleiben trotzdem sichtbar.
+Branch und MR sind Tatsachen aus GitLab und lassen sich nicht von Hand setzen. tinyops merged nie selbst und ändert in Jira nichts.
+
+Der Spielstand zählt nur echten Fortschritt (eine noch nie erreichte Station, ein abgehakter Teilschritt, ein fertiger Agentenlauf). Das Tagesziel stellst du in der `config.json` ein: `"flow": {"daily_goal": 3}`.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.

@@ -128,6 +128,20 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 9.9 | Dasselbe mit Codex (`codex exec`) und Vibe (`vibe -p`) | Die Aufrufe sind aus der Dokumentation abgeleitet, nicht getestet: Abweichungen melden |
 | 9.10 | Lokaler Agent (Windows und Linux) | Läuft losgelöst weiter, wenn tinyops beendet wird; «Stoppen» beendet den Prozessbaum |
 
+## 10. Fokus und Ablauf (ab 0.13.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 10.1 | Panel öffnen | Startet in «Fokus»; oben «Jetzt dran» mit einer Aufgabe, gross der nächste Schritt und ein Knopf |
+| 10.2 | Je ein Vorhaben mit: nur Ticket, Branch ohne MR, Draft-MR, MR mit roter Pipeline, MR grün | Stationen Branch, Code, MR, Prüfen (rot), Testen; passende Knöpfe |
+| 10.3 | MR mit offenen Diskussionen, ohne Freigabe, mit Konflikt (GitLab 19.2) | «Kommentare klären», «Review abwarten» (unter «Läuft gerade»), «Konflikt lösen» |
+| 10.4 | «Getestet» an einem grünen MR, dann in GitLab mergen, Panel neu laden | Station Mergen, danach «Abschliessen»; Klick setzt Fertig, die Feier erscheint einmal |
+| 10.5 | Teilschritte anlegen und abhaken | Erster offener Haken ist der nächste Schritt; Ring zählt mit; ab- und wieder anhaken zählt nicht doppelt |
+| 10.6 | Board | Karten stehen in derselben Spalte wie die Station in Fokus; Klick öffnet das Panel |
+| 10.7 | Einstellungen lang scrollen | Kopfzeile und linke Navigation bleiben stehen; die Navigation markiert den Abschnitt |
+| 10.8 | Sonar mit Projekt-Analyse-Token | Meldung «keine Berechtigung (HTTP 403) … User-Token» statt «Anmeldung abgelehnt» |
+| 10.9 | Tastatur: j, k, Enter, a, n, Esc | Auswahl springt, Panel öffnet und schliesst, «a» führt den Schritt der Zeile aus |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

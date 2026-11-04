@@ -233,6 +233,13 @@
   .pchip { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); font-size: 13px; margin: 0 6px 6px 0; }
   .pchip button { border: 0; background: transparent; padding: 0 2px; font-size: 15px; line-height: 1; }
   .pchip input { width: 150px; padding: 2px 6px; font-size: 13px; }
+  .ptab { display: grid; gap: 2px; margin-bottom: 10px; }
+  .ptab .ph, .ptab .pr { display: grid; grid-template-columns: 64px minmax(140px, 1.3fr) minmax(120px, 1.3fr) minmax(110px, 1fr) 96px 28px; gap: 8px; align-items: center; }
+  .ptab .ph { font-size: 12px; color: var(--quiet); font-weight: 600; padding: 0 4px 4px; border-bottom: 1px solid var(--line); }
+  .ptab .pr { padding: 3px 4px; border-radius: 8px; } .ptab .pr:hover { background: var(--raised); }
+  .ptab input[type=text] { width: 100%; min-width: 0; padding: 4px 8px; font-size: 13px; }
+  .ptab .pc { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--quiet); white-space: nowrap; }
+  @media (max-width: 800px) { .ptab .ph { display: none; } .ptab .pr { grid-template-columns: 1fr 1fr; } }
   .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--ground) 94%, transparent); backdrop-filter: blur(8px);
              border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 14px; justify-content: center; align-items: center; z-index: 6; }
   table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -283,7 +290,7 @@
   #bottomnav { display: none; }
 
   @media (min-width: 961px) {
-    html, body { height: 100%; }
+    html, body { min-height: 100%; }   /* nicht height: sonst scrollt die feste Kopfzeile nach 100vh mit weg */
     #viewOverview { height: calc(100vh - 52px); overflow: hidden; }
     #viewOverview > * { min-height: 0; }
     #left .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-columns: repeat(auto-fit, minmax(max(380px, calc((100% - 3 * 16px) / 4)), 1fr)); }
@@ -315,7 +322,7 @@
     #viewOverview { padding-bottom: 90px; grid-template-columns: minmax(0, 1fr) !important; }
     #viewSettings { padding-bottom: 150px; }
     .savebar { bottom: 58px; }
-    #bottomnav { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; height: 58px;
+    #bottomnav { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; height: 58px;
                  background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
     #bottomnav button { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
                         font-size: 12px; font-weight: 650; color: var(--quiet); }
@@ -403,6 +410,12 @@
   .bcard .bact { display: flex; gap: 4px; justify-content: flex-end; }
   .bcard .bact button { padding: 2px 9px; }
   .bcard .links { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bcard { cursor: pointer; box-shadow: inset 3px 0 0 var(--kc, transparent); }
+  .bcard.k-wait { box-shadow: none; }
+  .bcard .mrchip { cursor: grab; font-size: 12px; }
+  .bnext { display: flex; gap: 6px; align-items: center; color: var(--kc); font-size: 12.5px; font-weight: 650; }
+  .bnext .ic { width: 15px; height: 15px; vertical-align: 0; }
+  .bnext span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bempty { color: var(--quiet); font-size: 13px; padding: 6px 4px; }
   @media (max-width: 960px) { #viewBoard { padding: 14px 16px 100px; } .bcols { grid-template-columns: repeat(7, 78vw); scroll-snap-type: x mandatory; } .bcol { scroll-snap-align: start; } .bgroup { display: none; } }
   .aiacc { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
@@ -419,14 +432,177 @@
   .aiadd input[data-aiin="name"] { flex: 1 1 140px; min-width: 0; } .aiadd input[type=number] { width: 78px; flex: 0 0 auto; } .aiadd input[data-aiin="unit"] { width: 88px; flex: 0 0 auto; }
   .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
   .pick button { display: inline-flex; gap: 6px; align-items: center; }
+  /* ================= Fokus: eine Strecke, ein nächster Schritt ================= */
+  :root { --k-do: var(--focus); --k-blocked: var(--bad); --k-wait: #6f7590; --k-done: var(--ok); --xp: #a86b00; --xp-bg: #fbefd4; --tiny: #4d5666; --tiny-bg: #e8ebf0; }
+  @media (prefers-color-scheme: dark) { :root { --k-wait: #9aa0bd; --xp: #f2bd57; --xp-bg: #3a2c10; --tiny: #c2c8d3; --tiny-bg: #262c36; } }
+  .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; }
+  #viewFocus { max-width: 1680px; margin: 0 auto; padding: 18px 28px 60px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
+  #fMain { min-width: 0; display: grid; gap: 18px; }
+  #fList { display: grid; gap: 22px; }
+  #fAlerts:empty, #fHero:empty { display: none; }
+  #fAlerts { display: grid; gap: 6px; }
+  .falert { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--bad-bg); color: var(--bad); font-size: 13.5px; }
+  .falert .ic { width: 16px; height: 16px; }
+  .falert span { flex: 1; min-width: 0; }
+  .falert button { padding: 2px 10px; font-size: 12.5px; }
+  .st { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 5px; font-size: 11.5px; font-weight: 650; letter-spacing: .01em; }
+  .st-jira { background: var(--jira-bg); color: var(--jira); } .st-gl { background: var(--gl-bg); color: var(--gl); } .st-tiny { background: var(--tiny-bg); color: var(--tiny); } .st-gh { background: var(--raised); color: var(--ink); }
+  .fkey { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--quiet); white-space: nowrap; }
+
+  /* Strecke */
+  .trk { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; width: 136px; flex: none; }
+  .trk li { flex: 1; position: relative; height: 14px; display: flex; align-items: center; justify-content: center; }
+  .trk li::before { content: ""; position: absolute; left: -50%; right: 50%; top: 50%; height: 2px; margin-top: -1px; background: var(--line); }
+  .trk li:first-child::before { display: none; }
+  .trk li.past::before, .trk li.now::before { background: color-mix(in srgb, var(--ink) 55%, transparent); }
+  .trk i { position: relative; z-index: 1; width: 7px; height: 7px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .trk li.past i { background: color-mix(in srgb, var(--ink) 55%, transparent); box-shadow: none; }
+  .trk li.now i { width: 13px; height: 13px; background: var(--kc, var(--k-do)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--kc, var(--k-do)) 22%, transparent); }
+  .k-blocked { --kc: var(--k-blocked); } .k-wait { --kc: var(--k-wait); } .k-done { --kc: var(--k-done); } .k-do { --kc: var(--k-do); }
+  .trk.big { width: 100%; align-items: flex-start; }
+  .trk.big li { height: auto; flex-direction: column; gap: 7px; }
+  .trk.big li::before { top: 9px; height: 3px; margin-top: 0; }
+  .trk.big i { width: 12px; height: 12px; margin-top: 3px; }
+  .trk.big li.now i { width: 20px; height: 20px; margin-top: -1px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--kc) 20%, transparent); }
+  .trk.big span { font-size: 12.5px; color: var(--quiet); font-weight: 600; }
+  .trk.big li.now span { color: var(--kc); font-weight: 750; }
+  .trk.big li.past span { color: var(--ink); }
+  .trk.pick li[data-st] { cursor: pointer; } .trk.pick li[data-st]:hover i { box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 25%, transparent); }
+  .k-wait .trk li.now i, .frow.k-wait .trk li.now i { animation: fpulse 2.2s ease-in-out infinite; }
+  @keyframes fpulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--kc) 0%, transparent); } }
+
+  /* Jetzt dran */
+  .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px 22px; display: grid; gap: 18px;
+          background-image: linear-gradient(115deg, color-mix(in srgb, var(--kc) 9%, transparent), transparent 55%); }
+  .hero .hhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .hero .htitle { font-size: 17px; font-weight: 650; color: var(--ink); }
+  .hero .hnext { display: flex; gap: 24px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
+  .hero .hstep { min-width: 0; max-width: 72ch; }
+  .hero .hlabel { font-size: 13px; font-weight: 700; color: var(--kc); display: inline-flex; gap: 6px; align-items: center; }
+  .hero h2 { margin: 2px 0 4px; font-size: 32px; line-height: 1.1; letter-spacing: -.02em; font-weight: 760; }
+  .hero p { margin: 0; color: var(--quiet); font-size: 15px; }
+  .hero .hbtns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button.big { font-size: 15px; padding: 10px 18px; border-radius: 11px; display: inline-flex; gap: 8px; align-items: center; }
+  .hero.k-blocked button.primary { background: var(--k-blocked); border-color: var(--k-blocked); }
+  .hero.calm { background-image: none; }
+  .hcalm { display: grid; gap: 4px; } .hcalm b { font-size: 20px; } .hcalm span { color: var(--quiet); }
+
+  /* Liste */
+  .fadd { display: flex; gap: 8px; }
+  .fadd input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+  .fgroup > h3 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+  .fgroup > h3 .count, .fgroup summary .count { color: var(--quiet); font-weight: 600; }
+  .fgroup > h3 small, .fgroup summary small { color: var(--quiet); font-weight: 400; font-size: 12.5px; }
+  .fgroup summary { cursor: pointer; font-weight: 700; font-size: 14px; margin-bottom: 6px; list-style: none; display: flex; gap: 8px; align-items: baseline; }
+  .fgroup summary::-webkit-details-marker { display: none; }
+  .fgroup summary::before { content: "▸"; color: var(--quiet); } .fgroup details[open] summary::before { content: "▾"; }
+  .flist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .frow { display: grid; grid-template-columns: 136px minmax(0, 1fr) minmax(200px, 34%) 150px; gap: 18px; align-items: center; padding: 10px 14px 10px 16px;
+          border-top: 1px solid var(--line); cursor: pointer; box-shadow: inset 3px 0 0 var(--kc); }
+  .frow:first-child { border-top: 0; }
+  .frow:hover { background: var(--raised); }
+  .frow.sel { background: var(--focus-bg); }
+  .frow.k-wait { box-shadow: inset 3px 0 0 transparent; }
+  .fmain { min-width: 0; display: grid; gap: 3px; }
+  .fl1 { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .ftitle { font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fl2 { display: flex; gap: 10px; align-items: center; min-width: 0; color: var(--quiet); font-size: 12.5px; overflow: hidden; white-space: nowrap; }
+  .fm { display: inline-flex; gap: 4px; align-items: center; } .fm .ic { width: 14px; height: 14px; vertical-align: 0; }
+  .fflag { color: var(--warn); font-weight: 600; }
+  .fnext { display: flex; gap: 8px; align-items: center; min-width: 0; color: var(--kc); }
+  .fnext > div { min-width: 0; display: grid; }
+  .fnext b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fnext small { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .fown { width: 18px; display: flex; }
+  .fgo { justify-self: end; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; max-width: 150px; overflow: hidden; }
+  .fgo span { overflow: hidden; text-overflow: ellipsis; }
+  .frow.k-do .fgo, .frow.k-blocked .fgo { border-color: color-mix(in srgb, var(--kc) 45%, var(--line)); color: var(--kc); font-weight: 650; }
+  .frow.k-do .fgo:hover, .frow.k-blocked .fgo:hover { background: var(--kc); color: var(--surface); }
+  .fgo.ghost { border-color: transparent; background: transparent; color: var(--quiet); }
+  .fempty { padding: 14px 16px; color: var(--quiet); }
+  .fkeys { color: var(--quiet); font-size: 12px; } .fkeys kbd { font: 11.5px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface); }
+
+  /* Spielstand und Seitenleiste */
+  #fRail { display: grid; gap: 16px; position: sticky; top: 68px; }
+  .rcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; }
+  .rcard > h3 { margin: 0; font-size: 13.5px; display: flex; justify-content: space-between; align-items: baseline; }
+  .rcard > h3 small { color: var(--quiet); font-weight: 500; }
+  .score { grid-template-columns: 86px 1fr; align-items: center; column-gap: 14px; }
+  .ring { position: relative; width: 86px; height: 86px; display: grid; place-items: center; }
+  .ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 8; }
+  .ring .bg { stroke: var(--raised); } .ring .fg { stroke: var(--focus); stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+  .score.met .ring .fg { stroke: var(--xp); }
+  .ring b { font-size: 26px; line-height: 1; } .ring small { position: absolute; bottom: 19px; font-size: 11px; color: var(--quiet); }
+  .ring .rin { display: grid; place-items: center; transform: translateY(-5px); }
+  .sinfo { display: grid; gap: 3px; font-size: 13px; }
+  .sinfo b { font-size: 14px; }
+  .xp { color: var(--xp); font-weight: 700; }
+  .streak { display: inline-flex; gap: 4px; align-items: center; color: var(--xp); font-weight: 650; } .streak .ic { width: 16px; height: 16px; }
+  .streak.off { color: var(--quiet); font-weight: 500; }
+  .score .lvl { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 12px; color: var(--quiet); }
+  .lbar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; } .lbar i { display: block; height: 100%; background: var(--xp); border-radius: 3px; }
+  .week { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; align-items: end; height: 34px; }
+  .week i { display: block; border-radius: 3px; background: color-mix(in srgb, var(--focus) 55%, transparent); min-height: 3px; height: calc(3px + var(--h) * 31px); }
+  .week i.zero { background: var(--raised); } .week i.today { background: var(--focus); }
+  .wdays { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; font-size: 10.5px; color: var(--quiet); text-align: center; margin-top: -6px; }
+  .recent { grid-column: 1 / -1; display: grid; gap: 4px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 12.5px; }
+  .recent li { display: flex; gap: 8px; min-width: 0; } .recent li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quiet); }
+  .recent li .xp { flex: none; width: 34px; text-align: right; }
+  .wip { display: grid; gap: 6px; }
+  .wipbar { display: flex; gap: 4px; } .wipbar i { flex: 1; height: 8px; border-radius: 4px; background: var(--raised); } .wipbar i.on { background: var(--jira); } .wipbar i.over { background: var(--bad); }
+  .ragent { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; } .ragent:hover b { color: var(--focus); }
+  .ragent .agspin { color: var(--k-wait); } .ragent span { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fRailUsage #usageBox { margin: 0; }
+
+  /* Detail-Panel auf der halben Seite */
+  #fx { position: fixed; top: 52px; right: 0; bottom: 0; width: min(50vw, 860px); z-index: 9; background: var(--surface); border-left: 1px solid var(--line);
+        box-shadow: -16px 0 40px rgba(10, 14, 22, .14); transform: translateX(102%); transition: transform .18s ease; display: flex; flex-direction: column; }
+  #fx.on { transform: none; }
+  #fx .fxhead { padding: 16px 22px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+  #fx .fxtop { display: flex; gap: 8px; align-items: center; }
+  #fx .fxtop .sp { flex: 1; }
+  #fx h2 { margin: 0; font-size: 20px; line-height: 1.25; letter-spacing: -.01em; }
+  #fx .fxbody { overflow: auto; padding: 18px 22px 40px; display: grid; gap: 22px; align-content: start; }
+  #fx h3 { margin: 0 0 8px; font-size: 13.5px; display: flex; gap: 8px; align-items: baseline; }
+  #fx h3 small { color: var(--quiet); font-weight: 500; }
+  .fxnext { border-radius: 12px; padding: 14px 16px; background: color-mix(in srgb, var(--kc) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kc) 30%, var(--line)); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .fxnext > div > b { font-size: 18px; color: var(--kc); display: block; } .fxnext > div > span { color: var(--quiet); }
+  .k-blocked .fxnext button.primary, .fxnext.k-blocked button.primary { background: var(--k-blocked); border-color: var(--k-blocked); }
+  .fxitem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .fxitem:first-of-type { border-top: 0; }
+  .fxitem .nm { min-width: 0; display: grid; gap: 2px; } .fxitem .nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fxitem .nm small { color: var(--quiet); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ibtns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .ibtn { display: inline-flex; gap: 5px; align-items: center; padding: 4px 9px; font-size: 12.5px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .ibtn:hover { text-decoration: none; border-color: var(--focus); } .ibtn .ic { width: 15px; height: 15px; vertical-align: 0; }
+  .ck { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .ck li { display: flex; gap: 10px; align-items: center; padding: 5px 6px; border-radius: 8px; }
+  .ck li:hover { background: var(--raised); }
+  .ck input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--ok); }
+  .ck li.done span { color: var(--quiet); text-decoration: line-through; }
+  .ck li span { flex: 1; } .ck li button { opacity: 0; border: 0; background: transparent; padding: 0 4px; color: var(--quiet); } .ck li:hover button { opacity: 1; }
+  .ckadd { display: flex; gap: 6px; margin-top: 6px; } .ckadd input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+  .fxfoot { display: flex; gap: 8px; flex-wrap: wrap; }
+  .burst { position: fixed; z-index: 30; pointer-events: none; width: 0; height: 0; }
+  .burst i { position: absolute; width: 7px; height: 7px; border-radius: 2px; background: var(--c); animation: bfly .8s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes bfly { to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
+  .toast.xpt { background: var(--xp-bg); color: var(--xp); font-weight: 700; border: 1px solid color-mix(in srgb, var(--xp) 35%, transparent); }
+  @media (prefers-reduced-motion: reduce) { #fx, .ring .fg { transition: none; } .trk li.now i { animation: none !important; } .burst { display: none; } }
+  @media (max-width: 1280px) { .frow { grid-template-columns: 110px minmax(0, 1fr) 130px; } .frow .fnext { display: none; } .trk { width: 110px; } }
+  @media (max-width: 960px) {
+    #viewFocus { grid-template-columns: minmax(0, 1fr); padding: 14px 16px 100px; } #fRail { position: static; }
+    #fx { width: 100vw; top: 0; z-index: 12; } .hero h2 { font-size: 25px; }
+    .frow { grid-template-columns: minmax(0, 1fr) auto; } .frow .trk { grid-column: 1 / -1; width: 136px; } .frow .fgo span { display: none; }
+    .trk.big li:not(.now) span { visibility: hidden; } .trk.big li.now span { white-space: nowrap; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>Arbeitspanel</h1>
-  <nav class="tabs"><button class="tab on" data-view="overview">Übersicht</button><button class="tab" data-view="board">Board</button><button class="tab" data-view="settings">Einstellungen</button></nav>
+  <nav class="tabs"><button class="tab on" data-view="focus" title="Was ist als Nächstes dran?">Fokus</button><button class="tab" data-view="board">Board</button><button class="tab" data-view="overview" title="Die bisherige Übersicht: alle MRs und Branches als Listen">Listen</button><button class="tab" data-view="settings">Einstellungen</button></nav>
   <span class="spacer"></span>
-  <span class="legend"><span class="src jira">Jira: Tickets, Stories</span><span class="src gl">GitLab: MRs, Branches</span></span>
   <a id="pGl" class="conn" href="#settings" style="display:none"></a>
   <a id="pJi" class="conn" href="#settings" style="display:none"></a>
   <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
@@ -434,10 +610,20 @@
   <span id="ver" class="quiet small" title="tinyops-Version"></span>
   <button id="ideaBtn" class="idea-btn" title="Idee festhalten (Taste i)" hidden>+ Idee</button>
   <button id="logBtn" class="quiet-btn">Log</button>
-  <button id="refresh">Neu laden</button>
+  <button id="refresh" title="GitLab, Jira und Sonar jetzt abgleichen">Neu laden</button>
 </header>
 
-<div id="viewOverview">
+<div id="viewFocus">
+  <section id="fMain">
+    <div id="fAlerts"></div>
+    <div id="fHero"></div>
+    <div class="fadd"><input id="fAdd" type="text" maxlength="200" autocomplete="off" placeholder="Neue Aufgabe, Idee oder Jira-Key (DLP-123) festhalten … (n)" aria-label="Neue Aufgabe"><button id="fAddBtn">Hinzufügen</button></div>
+    <div id="fList"></div>
+  </section>
+  <aside id="fRail"><div id="fRailCards"></div><div id="fRailUsage"></div></aside>
+</div>
+<aside id="fx" hidden aria-label="Details"></aside>
+<div id="viewOverview" hidden>
   <section id="left">
     <div id="banners"></div>
     <div id="syncbar" hidden></div>
@@ -483,13 +669,14 @@
     <label class="check"><input type="checkbox" id="bOrph"><span>MRs und Branches ohne Ticket zeigen</span></label>
   </div>
   <div class="bpools" id="bpools"></div>
-  <p class="bnote">Kategorien (Pools) sind Projekte oder Aufgabengruppen ohne Jira. Ideen ohne Kategorie bleiben im Ideenpool; ab «Geplant» braucht eine Aufgabe ohne Jira eine Kategorie. Umsetzung, Review und Test zählen als «in Arbeit» und erscheinen im Jira-Panel. Die Spalten gelten nur hier im Panel: In Jira wird nichts verändert.</p>
+  <p class="bnote">Die Spalten sind die Stationen aus «Fokus». Karte ziehen = Station von Hand setzen, Klick = Details. In Jira ändert sich nichts.
+    <span class="quiet" title="Kategorien sind Projekte oder Aufgabengruppen ohne Jira. Ideen ohne Kategorie bleiben im Ideenpool; ab «Geplant» braucht eine Aufgabe ohne Jira eine Kategorie. Umsetzung, Prüfen und Testen zählen als «in Arbeit».">Was sind Kategorien?</span></p>
   <div class="bcols" id="bcols"></div>
 </div>
 <div id="viewSettings" hidden></div>
 
 <nav id="bottomnav" aria-label="Hauptmenü">
-  <button class="bn on" data-view="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Übersicht</button>
+  <button class="bn on" data-view="focus"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg>Fokus</button>
   <button class="bn" data-view="board"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1.5"/><rect x="10" y="3" width="5" height="12" rx="1.5"/><rect x="17" y="3" width="4" height="8" rx="1.5"/></svg>Board</button>
   <button class="bn" data-view="ideas"><span class="nb"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg><b id="ideaBadge" hidden></b></span>Ideen</button>
   <button class="bn" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
@@ -886,7 +1073,7 @@ function renderAside() {
   const hasUsage = !!(state.usage_providers || []).length;
   $('usageBox').hidden = !hasUsage;
   renderUsageBox();
-  const on = !!(f.ideas || f.testenv || hasUsage);
+  const on = !!(f.ideas || f.testenv);
   $('aside').hidden = !on;
   document.querySelector('.bn[data-view=ideas]').hidden = !f.ideas;
   $('viewOverview').classList.toggle('withaside', on);
@@ -897,7 +1084,7 @@ async function load() {
   clearTimeout(pollT);
   try {
     state = await api('GET', '/api/overview');
-    renderHeader(); renderLeft(); renderAside(); renderBoard(); loadUsage(false);
+    renderHeader(); renderLeft(); renderAside(); renderBoard(); renderFocus(); loadUsage(false);
     if (state.features.ideas) renderIdeas();
     if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
@@ -1120,7 +1307,7 @@ document.addEventListener('change', ev => {
 
 // ---- Board: eine Karte pro Aufgabe, alle MRs und Branches eines Tickets zusammengeführt
 const STAGES = ['idea', 'planned', 'impl', 'review', 'test', 'tested', 'done'];
-const STAGE_LABEL = { idea: 'Ideenpool', planned: 'Geplant', impl: 'Umsetzung', review: 'Review', test: 'Test', tested: 'Getestet', done: 'Fertig' };
+const STAGE_LABEL = { idea: 'Ideen', planned: 'Geplant', impl: 'Umsetzung', review: 'Prüfen', test: 'Testen', tested: 'Mergen', done: 'Fertig' };
 $('bAddStage').innerHTML = STAGES.filter(x => x !== 'idea' || true).map(x => `<option value="${x}" ${x === 'planned' ? 'selected' : ''}>${STAGE_LABEL[x]}</option>`).join('');
 let selPool = LS.get('bPool', 0);    // 0 = alle
 let showOrph = LS.get('bOrph', true);
@@ -1132,28 +1319,31 @@ function poolOptions(sel, placeholder) {
   return (placeholder ? '<option value="">Kategorie wählen …</option>' : '<option value="">ohne Kategorie</option>') + ps.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
 }
 function boardCard(c) {
-  const i = STAGES.indexOf(c.stage);
   const isIdea = !!c.idea_id;
+  const d = state.flow && state.flow.items[c.id], n = d && d.next;
   const key = c.key ? `<span class="bkey ${c.local ? 'loc' : 'jira'}">${esc(c.key)}</span>` : `<span class="bkey loc">${c.orphan ? 'ohne Ticket' : 'Idee'}</span>`;
-  const chips = [c.local && c.key ? '<span class="chip">Lokal</span>' : '', c.status && !c.local ? `<span class="chip" title="Status in Jira">${esc(c.status)}</span>` : '',
-    c.jira_in_progress && c.stage !== 'impl' && c.stage !== 'review' && c.stage !== 'test' ? '<span class="chip warn" title="In Jira noch in Arbeit">Jira: in Arbeit</span>' : '',
+  const chips = [c.status && !c.local ? `<span class="chip" title="Status in Jira">${esc(c.status)}</span>` : '',
     ...c.pools.map(p => `<span class="chip tk" title="Kategorie">${esc(p.name)}${c.idea_id ? '' : `<button class="x" data-bpoolrem="${esc(c.id)}" data-pool="${p.id}" title="Aus der Kategorie nehmen" aria-label="Aus der Kategorie nehmen">×</button>`}</span>`)].join('');
   const title = c.title || (c.known === false ? '(Ticket nicht lesbar)' : '');
-  const sum = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
-  const mrs = c.items.map(x => `<a class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''}"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch.length > 26 ? x.branch.slice(0, 25) + '…' : x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="' + esc(x.sonar_detail || 'Quality Gate rot') + '">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}</a>${sqLinks(x)}`).join('');
-  const act = isIdea
-    ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>`
-    : `<button data-bmove="${esc(c.id)}" data-dir="-1" ${i <= 0 ? 'disabled' : ''} title="Eine Spalte zurück" aria-label="Eine Spalte zurück">◀</button><button data-bmove="${esc(c.id)}" data-dir="1" ${i >= STAGES.length - 1 ? 'disabled' : ''} title="Eine Spalte weiter" aria-label="Eine Spalte weiter">▶</button>${c.manual_stage || c.local ? `<button class="x" data-brem="${esc(c.id)}" data-local="${c.local ? 1 : 0}" data-t="${esc(title)}" title="${c.local ? 'Aufgabe löschen' : 'Eigene Stufe zurücksetzen'}">×</button>` : ''}`;
-  return `<div class="bcard" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''}>
-    <div class="btop">${key}${chips}</div><div class="bsum">${sum}</div>${mrs ? `<div class="links">${mrs}</div>` : ''}${isIdea ? '' : agentRow(c.id, c.key || '', title, c.url, c.items)}<div class="bact">${act}</div></div>`;
+  const refs = c.items.map(x => `<span class="mrchip" draggable="true" data-rp="${x.project_id}" data-rb="${esc(x.branch)}" title="${esc(x.project)} · ${esc(x.branch)}${x.draft ? ' · Draft' : ''} (ziehen = mit einer anderen Karte verknüpfen)"><span class="pd ${esc(x.pipeline)}"></span>${x.iid ? '!' + esc(x.iid) : esc(short(x.branch, 24))}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="Quality Gate rot">●</span>' : ''}</span>`).join('');
+  const runs = ((state.agents && state.agents.runs) || []).filter(r => r.ticket === c.id && (r.active || r.status === 'zugewiesen')).slice(0, 2)
+    .map(r => `<button class="chip ${AG_ST[r.status] || ''}" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)}</button>`).join('');
+  const nx = n && n.kind !== 'done' && !isIdea ? `<div class="bnext k-${esc(n.kind)}" title="${esc(n.why)}">${OWNER[n.owner] ? ic(OWNER[n.owner]) : (n.kind === 'blocked' ? ic('alert') : ic('chevron2'))}<span>${esc(n.label)}</span></div>` : '';
+  const act = isIdea ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>` : '';
+  return `<div class="bcard ${n ? 'k-' + esc(n.kind) : ''}" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''} title="Klick: Details · Ziehen: andere Station">
+    <div class="btop">${key}${chips}</div><div class="bsum">${esc(title)}</div>${refs || runs ? `<div class="links">${refs}${runs}</div>` : ''}${nx}${act ? `<div class="bact">${act}</div>` : ''}</div>`;
 }
+document.addEventListener('click', ev => {
+  const b = ev.target.closest && ev.target.closest('.bcard[data-bid]');
+  if (b && !ev.target.closest('a, button, select, input, .mrchip')) openFx(b.dataset.bid);
+});
 function renderBoard() {
   const b = state && state.board, el = $('bcols');
   if (!b || !state.configured) { el.innerHTML = '<div class="bempty">Noch nicht verbunden.</div>'; return; }
   if (selPool && !b.pools.some(p => p.id === selPool)) { selPool = 0; LS.set('bPool', 0); }
   renderPoolBar(b);
   const cards = b.cards.filter(c => (showOrph || !c.orphan) && (!selPool || c.pools.some(p => p.id === selPool)));
-  const col = st => cards.filter(c => c.stage === st).sort((a, z) => (a.key || a.title).localeCompare(z.key || z.title, 'de', { numeric: true }));
+  const col = st => cards.filter(c => colStage(c) === st).sort((a, z) => (a.key || a.title).localeCompare(z.key || z.title, 'de', { numeric: true }));
   const wip = state.jira ? ` · ${state.jira.count} von ${state.jira.limit} im Jira-Panel` : '';
   el.innerHTML = `<div class="bgroup">In Arbeit${esc(wip)}</div>` + STAGES.map((st, n) => {
     const cs = col(st), work = ['impl', 'review', 'test'].includes(st);
@@ -1221,8 +1411,15 @@ $('viewBoard').addEventListener('click', async ev => {
     await act(() => post('/api/board/remove', { key: b.dataset.brem }), b.dataset.local === '1' ? 'Gelöscht' : 'Zurückgesetzt');
   }
 });
+// Spalte = Station aus dem Ablauf, solange niemand von Hand verschoben hat (sonst wären Board und Fokus uneins)
+const PHASE_COL = ['planned', 'impl', 'impl', 'impl', 'review', 'test', 'tested', 'done'];
+function colStage(c) {
+  if (c.idea_id || c.manual_stage) return c.stage;
+  const d = state.flow && state.flow.items[c.id];
+  return d ? PHASE_COL[d.phase] : c.stage;
+}
 function moveCard(c, stage) {
-  if (!c || c.stage === stage || c.idea_id) return Promise.resolve();
+  if (!c || colStage(c) === stage || c.idea_id) return Promise.resolve();
   const body = c.key ? { key: c.key, stage } : { ref: c.id, stage };
   return act(() => post('/api/board/stage', body), STAGE_LABEL[stage]);
 }
@@ -1505,12 +1702,13 @@ document.getElementById('refresh').onclick = async () => {
 let S = null;          // Antwort von /api/settings
 let P = [];            // Arbeitskopie der Projekte
 let CN = [], AGC = []; // Arbeitskopien der SSH-Verbindungen und Agenten
-let view = 'overview';
+let view = 'focus';
 
 function setView(v) {
-  if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'overview';
+  if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'focus';
   view = v;
-  document.getElementById('viewOverview').hidden = v === 'settings' || v === 'board';
+  $('viewFocus').hidden = v !== 'focus';
+  document.getElementById('viewOverview').hidden = v === 'settings' || v === 'board' || v === 'focus';
   document.getElementById('viewBoard').hidden = v !== 'board';
   document.getElementById('viewSettings').hidden = v !== 'settings';
   $('viewOverview').classList.toggle('showideas', v === 'ideas');
@@ -1533,6 +1731,8 @@ async function mistralPush() {
 mistralPush(); addEventListener('hashchange', mistralPush);
 if (location.hash === '#settings') setTimeout(() => setView('settings'), 0);
 if (location.hash === '#board') setTimeout(() => setView('board'), 0);
+if (location.hash === '#overview' || location.hash === '#lists') setTimeout(() => setView('overview'), 0);
+if (!location.hash || location.hash === '#focus') setTimeout(() => setView('focus'), 0);
 
 const val = id => ($(id) ? $(id).value : '').trim();
 const split = t => t.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
@@ -1732,6 +1932,11 @@ async function loadSettings() {
   $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
   if ($('gl-del')) $('gl-del').onclick = () => delSecrets(['gitlab_token'], 'GitLab-Token');
   if ($('ji-del')) $('ji-del').onclick = () => delSecrets(['jira_token', 'jira_password'], 'Jira-Zugangsdaten');
+  if (window.IntersectionObserver) {   // Navigation zeigt beim Scrollen, wo man ist
+    const spy = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', 's-' + x.dataset.goto === en.target.id)); }),
+      { rootMargin: '-80px 0px -70% 0px' });
+    box.querySelectorAll('.sset').forEach(sec => spy.observe(sec));
+  }
   box.querySelectorAll('[data-goto]').forEach(btn => btn.onclick = () => {
     box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', x === btn));
     $('s-' + btn.dataset.goto).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
@@ -1840,11 +2045,13 @@ $('viewSettings').addEventListener('click', ev => {
 
 // Projekte
 function renderProjects() {
-  $('pj-list').innerHTML = P.length ? P.map((p, i) => `<span class="pchip"><span class="quiet">#${esc(p.id)}</span>
+  $('pj-list').innerHTML = P.length ? `<div class="ptab" role="table" aria-label="Projekte"><div class="ph" role="row"><span>ID</span><span>Anzeigename</span><span>Sonar-Schlüssel</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Anzeigename)">Agent-Ordner</span><span title="Darf Claude, Codex oder Vibe Prompt und Code dieses Projekts an den Anbieter senden?">Cloud-Agent</span><span></span></div>` +
+    P.map((p, i) => `<div class="pr" role="row"><span class="quiet">#${esc(p.id)}</span>
     <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename">
-    <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="Sonar-Schlüssel" aria-label="Sonar-Projektschlüssel" style="width:150px">
-    <input type="text" class="pa" data-pa="${i}" value="${esc(p.agent_dir || '')}" placeholder="Agent-Ordner" aria-label="Ordner des Repositories unter dem Arbeitsordner des Agenten (leer = Projektname)" title="Ordner unter dem Arbeitsordner des Agenten (leer = Projektname)">
-    <label class="quiet small" title="Erlaubt, dass Claude, Codex oder Vibe Prompt und Code dieses Projekts an ihren Anbieter senden"><input type="checkbox" data-pc="${i}" ${p.allow_cloud_agents ? 'checked' : ''}> Cloud-Agent erlaubt</label><button data-pdel="${i}" title="Entfernen">×</button></span>`).join('')
+    <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="—" aria-label="Sonar-Projektschlüssel">
+    <input type="text" data-pa="${i}" value="${esc(p.agent_dir || '')}" placeholder="${esc(p.name)}" aria-label="Agent-Ordner">
+    <label class="pc" title="Erlaubt, dass Claude, Codex oder Vibe Prompt und Code dieses Projekts an ihren Anbieter senden"><input type="checkbox" data-pc="${i}" ${p.allow_cloud_agents ? 'checked' : ''}> erlaubt</label>
+    <button class="quiet-btn" data-pdel="${i}" title="Projekt entfernen" aria-label="Projekt entfernen">×</button></div>`).join('') + '</div>'
     : '<div class="empty">Noch kein Projekt.</div>';
 }
 $('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; const a = ev.target.dataset.pa; if (a !== undefined) P[+a].agent_dir = ev.target.value; });
@@ -2008,6 +2215,353 @@ async function delSecrets(names, label) {
   try { await api('POST', '/api/settings/save', { ...collect(), secrets: {}, delete_secrets: names }); toast('Gelöscht'); await loadSettings(); await load(); }
   catch (e) { showErrors(e.data && e.data.errors); toast(e.message); }
 }
+
+// ================================================================ Fokus: jede Aufgabe fährt dieselbe Strecke, genau ein nächster Schritt
+const ICONS = {
+  ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  branch: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="7.5" r="2"/><path d="M6 7.5v9M18 9.5c0 4.5-6 3.5-11 7.5"/>',
+  mr: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="18.5" r="2"/><path d="M6 7.5v9M18 16.5V9a3 3 0 0 0-3-3h-4M13 3.5 10.5 6 13 8.5"/>',
+  merge: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7.5v9M6 8c0 3 4 4 10 4"/>',
+  alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4M12 17v.01"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  bot: '<rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 4v4M9 13v.01M15 13v.01M9.5 16h5"/>',
+  users: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5M16 5.8a3 3 0 0 1 0 5.4M17.5 14.7c1.6.6 2.7 2 3 4.3"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  flame: '<path d="M12 21c-4 0-6.5-2.6-6.5-6 0-3.6 3-5.6 3.5-9 2.4 1.4 3.6 3.6 3.6 5.6 1-.6 1.8-1.7 2-3 2 1.6 3.9 3.9 3.9 6.4 0 3.4-2.5 6-6.5 6z"/>',
+  skip: '<path d="M6 6l7 6-7 6zM16 6v12"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  chevron2: '<path d="M5 12h13M13 6.5 18.5 12 13 17.5"/>',
+  ticket: '<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5V10a2 2 0 0 0 0 4v2.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5V14a2 2 0 0 0 0-4z"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  flask: '<path d="M9.5 3.5h5M10.5 3.5v5L5 18.5A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2L13.5 8.5v-5M7.5 14h9"/>',
+};
+const ic = (n, cls) => `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+// Knopf je nächstem Schritt: Text und Symbol sagen, was beim Klick passiert
+const ACT = {
+  start: ['Loslegen', 'play'], branch: ['Befehl kopieren', 'copy'], mr_create: ['MR erstellen', 'mr'], ready: ['MR öffnen', 'ext'],
+  rebase: ['MR öffnen', 'ext'], pipeline: ['Pipeline öffnen', 'ext'], sonar: ['Report kopieren', 'copy'], ci: ['Pipeline', 'ext'],
+  threads: ['MR öffnen', 'ext'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
+  close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
+  agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
+  do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'],
+};
+const OWNER = { me: '', ci: 'gear', others: 'users', agent: 'bot', none: '' };
+const OWNER_T = { me: 'Du bist dran', ci: 'Wartet auf die CI', others: 'Wartet auf andere', agent: 'Ein Agent arbeitet', none: '' };
+const MSTAT = { conflict: ['Konflikt', 'sq-bad'], need_rebase: ['Rebase nötig', 'sq-bad'], not_approved: ['Freigabe fehlt', 'warn'], discussions_not_resolved: ['Diskussionen offen', 'warn'],
+  mergeable: ['mergebar', 'sq-ok'], ci_still_running: ['CI läuft', ''], draft_status: ['Draft', 'draft'] };
+const short = (s, n) => (s = String(s || '')).length > n ? s.slice(0, n - 1) + '…' : s;
+let fSkip = new Set(), fSel = -1, FXID = null;
+try { fSkip = new Set(JSON.parse(sessionStorage.getItem('tinyops.skip') || '[]')); } catch (e) { /* egal */ }
+
+function focusEntries() {
+  const f = state && state.flow;
+  if (!f || !state.board) return [];
+  const cards = state.board.cards.filter(c => f.items[c.id]).map(c => ({ t: 'card', id: c.id, c, d: f.items[c.id], prio: f.items[c.id].prio }));
+  const revs = (f.reviews || []).map(r => ({ t: 'review', id: 'rv:' + r.id, r, prio: 150 + Math.min(r.age_days || 0, 10) * 5,
+    d: { next: r.next, phase: 4, phase_id: 'check', flags: [], checks: { done: 0, total: 0 }, checklist: [] } }));
+  return cards.concat(revs);
+}
+function eKey(e) { return e.t === 'review' ? '!' + e.r.iid : (e.c.key || (e.c.idea_id ? 'Idee' : 'ohne Ticket')); }
+function eTitle(e) { return e.t === 'review' ? e.r.title : (e.c.title || '(ohne Titel)'); }
+function eUrl(e) { return e.t === 'review' ? e.r.url : (e.c.url || ''); }
+function srcTags(e) {
+  const t = [];
+  if (e.t === 'review') t.push(['gl', 'GitLab']);
+  else {
+    const c = e.c;
+    if (c.key && !c.local) t.push(['jira', 'Jira']);
+    if (c.local || c.idea_id) t.push(['tiny', 'tiny']);
+    if (c.items.length) t.push(['gl', 'GitLab']);
+  }
+  return t.map(([k, l]) => `<span class="st st-${k}" title="Quelle: ${l === 'tiny' ? 'eigenes Board' : l}">${l}</span>`).join('');
+}
+function trackHtml(d, big, pick) {
+  const ph = state.flow.phases, ps = state.flow.phase_stage || {};
+  return `<ol class="trk ${big ? 'big' : ''} ${pick ? 'pick' : ''} k-${esc(d.next.kind)}" aria-label="Station ${d.phase + 1} von ${ph.length}: ${esc(ph[d.phase].label)}">` + ph.map((p, i) => {
+    const s = i < d.phase ? 'past' : i === d.phase ? 'now' : 'todo';
+    const st = pick && ps[i] ? ` data-st="${esc(ps[i])}" title="Auf «${esc(p.label)}» setzen"` : ` title="${esc(p.label)}${pick && !ps[i] ? ': ergibt sich aus GitLab' : ''}"`;
+    return `<li class="${s}"${st}><i></i>${big ? `<span>${esc(p.label)}</span>` : ''}</li>`;
+  }).join('') + '</ol>';
+}
+function metaOf(e) {
+  if (e.t === 'review') return `<span class="fm">${ic('mr')}${esc(e.r.project)}</span><span>von ${esc(e.r.author || '?')}</span><span>seit ${e.r.age_days} d</span>`;
+  const c = e.c, d = e.d, p = [];
+  const mrs = c.items.filter(x => x.iid), br = c.items.filter(x => !x.iid);
+  if (mrs.length) p.push(`<span class="fm" title="Merge Requests">${ic('mr')}${mrs.map(x => '!' + esc(x.iid)).join(' ')}</span>`);
+  if (br.length) p.push(`<span class="fm" title="${esc(br.map(x => x.branch).join(', '))}">${ic('branch')}${esc(br.length === 1 ? short(br[0].branch, 36) : br.length + ' Branches')}</span>`);
+  const proj = [...new Set(c.items.map(x => x.project))];
+  if (proj.length) p.push(`<span>${esc(short(proj.join(', '), 40))}</span>`);
+  if (d.checks.total) p.push(`<span class="fm" title="Teilschritte">${ic('check')}${d.checks.done}/${d.checks.total}</span>`);
+  (d.flags || []).forEach(f => p.push(`<span class="fflag">${esc(f)}</span>`));
+  return p.join('');
+}
+function goBtn(e, cls) {
+  const n = e.d.next;
+  if (n.kind === 'done') return '';
+  const [l, i] = ACT[n.id] || ['Öffnen', 'ext'];
+  return `<button class="${cls || 'fgo'} ${n.kind === 'wait' && !cls ? 'ghost' : ''}" data-fgo="${esc(e.id)}" title="${esc(l)}">${ic(i)}<span>${esc(l)}</span></button>`;
+}
+function fRow(e) {
+  const n = e.d.next;
+  return `<div class="frow k-${esc(n.kind)}" data-fid="${esc(e.id)}">
+    ${trackHtml(e.d)}
+    <div class="fmain"><div class="fl1"><span class="fkey">${esc(eKey(e))}</span><span class="ftitle" title="${esc(eTitle(e))}">${esc(eTitle(e))}</span></div><div class="fl2">${srcTags(e)}${metaOf(e)}</div></div>
+    <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
+    ${goBtn(e)}</div>`;
+}
+function heroHtml(e) {
+  if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div></section>`;
+  const n = e.d.next, url = eUrl(e);
+  const lead = n.kind === 'blocked' ? `${ic('alert')} Blockiert: zuerst das` : e.t === 'review' ? `${ic('users')} Jemand wartet auf dich` : 'Jetzt dran';
+  return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
+    <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
+    ${trackHtml(e.d, true)}
+    <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
+      <div class="hbtns">${goBtn(e, 'primary big')}<button class="big" data-fopen="${esc(e.id)}">Details</button>
+        <button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button></div></div>
+  </section>`;
+}
+function focusGroups() {
+  const all = focusEntries();
+  const act = all.filter(e => ['do', 'blocked'].includes(e.d.next.kind)).sort((a, z) => z.prio - a.prio);
+  const cand = act.filter(e => !(e.t === 'card' && (e.c.idea_id || (e.d.phase === 0 && !e.c.jira_in_progress))));
+  const hero = cand.find(e => !fSkip.has(e.id)) || (cand.length && fSkip.size ? (fSkip.clear(), cand[0]) : null);
+  const rest = x => !hero || x.id !== hero.id;
+  return {
+    hero, all,
+    mine: cand.filter(e => e.t === 'card' && rest(e)),
+    reviews: cand.filter(e => e.t === 'review' && rest(e)),
+    wait: all.filter(e => e.d.next.kind === 'wait'),
+    plan: act.filter(e => !cand.includes(e)),
+    done: all.filter(e => e.d.next.kind === 'done').length,
+  };
+}
+function fGroup(title, hint, list, empty, collapsed) {
+  if (!list.length && !empty) return '';
+  const body = list.length ? `<div class="flist">${list.map(fRow).join('')}</div>` : `<div class="flist"><div class="fempty">${esc(empty)}</div></div>`;
+  if (collapsed) return `<div class="fgroup"><details ${LS.get('fopen.' + title, false) ? 'open' : ''} data-fgrp="${esc(title)}"><summary>${esc(title)} <span class="count">${list.length}</span>${hint ? `<small>${hint}</small>` : ''}</summary>${body}</details></div>`;
+  return `<div class="fgroup"><h3>${esc(title)} <span class="count">${list.length}</span>${hint ? `<small>${hint}</small>` : ''}</h3>${body}</div>`;
+}
+function fAlerts() {
+  const out = [];
+  if (!state.configured) out.push(['Noch nicht verbunden. ' + state.problems.join(' '), 'Einstellungen']);
+  (state.errors || []).forEach(m => out.push([m, /sonar/i.test(m) ? 'Sonar prüfen' : 'Einstellungen']));
+  if (state.jira && state.jira.ok === false) out.push(['Jira: ' + (state.jira.error || 'antwortet nicht'), 'Einstellungen']);
+  return out.filter(([m]) => !fSkip.has('al:' + m)).map(([m, b]) => `<div class="falert" role="status">${ic('alert')}<span>${esc(m)}</span><button data-fset="1">${esc(b)}</button><button class="quiet-btn" data-falx="${esc(m)}" title="Bis zum Schliessen des Tabs ausblenden" aria-label="Ausblenden">${ic('x')}</button></div>`).join('');
+}
+function renderFocus() {
+  if (!state) return;
+  const box = $('fList');
+  if (!state.flow) { box.innerHTML = fAlerts() + (state.configured ? '<div class="flist"><div class="fempty">lädt …</div></div>' : ''); $('fHero').innerHTML = ''; renderRail(); return; }
+  const g = focusGroups();
+  $('fAlerts').innerHTML = fAlerts();
+  $('fHero').innerHTML = heroHtml(g.hero);
+  box.innerHTML = fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', g.mine, g.hero ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
+    + fGroup('Andere warten auf dich', 'Reviews und dir zugeteilte MRs', g.reviews, '')
+    + fGroup('Läuft gerade', 'CI, Review, Agent: nichts zu tun, nur im Blick', g.wait, '')
+    + fGroup('Geplant und Ideen', 'noch nicht begonnen', g.plan, '', true)
+    + `<div class="fkeys"><kbd>j</kbd> <kbd>k</kbd> auswählen · <kbd>Enter</kbd> Details · <kbd>a</kbd> nächsten Schritt ausführen · <kbd>n</kbd> neue Aufgabe · <kbd>i</kbd> Idee · <kbd>Esc</kbd> schliessen${g.done ? ` · ${g.done} erledigt im Board` : ''}</div>`;
+  const rows = [...document.querySelectorAll('#viewFocus [data-fid]')];
+  if (fSel >= rows.length) fSel = rows.length - 1;
+  if (fSel >= 0 && rows[fSel]) rows[fSel].classList.add('sel');
+  renderRail();
+  celebrateNew();
+  if (FXID) renderFx();
+}
+// Neue Erfolge seit dem letzten Blick: kurz feiern
+function celebrateNew() {
+  const s = state.flow && state.flow.stats;
+  if (!s) return;
+  const last = LS.get('fxLast', null);
+  LS.set('fxLast', s.last_id);
+  if (last === null || s.last_id <= last) return;
+  const news = s.recent.filter(r => r.id > last).slice(0, 3);
+  news.forEach((r, i) => setTimeout(() => xpToast(r), i * 700));
+  if (news.length) burstAt($('fRing') || document.body);
+}
+function eventText(r) {
+  const ph = state.flow.phases;
+  if (r.kind === 'check') return `Teilschritt erledigt: ${r.text}`;
+  if (r.kind === 'agent') return `${r.key}: ${r.text}`;
+  return `${r.key} ${r.phase === 7 ? 'ist fertig' : 'ist bei ' + ((ph[r.phase] || {}).label || '?')}`;
+}
+function xpToast(r) { const t = document.createElement('div'); t.className = 'toast xpt'; t.textContent = `+${r.xp} XP · ${eventText(r)}`; document.body.appendChild(t); setTimeout(() => t.remove(), 3400); }
+function burstAt(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !el || !el.getBoundingClientRect) return;
+  const r = el.getBoundingClientRect(), b = document.createElement('div');
+  b.className = 'burst'; b.style.left = (r.left + r.width / 2) + 'px'; b.style.top = (r.top + r.height / 2) + 'px';
+  const cols = ['var(--xp)', 'var(--focus)', 'var(--ok)', 'var(--jira)'];
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + Math.random() * .4, d = 34 + Math.random() * 30, p = document.createElement('i');
+    p.style.cssText = `--x:${Math.cos(a) * d}px;--y:${Math.sin(a) * d}px;--r:${Math.random() * 360}deg;--c:${cols[i % cols.length]}`;
+    b.appendChild(p);
+  }
+  document.body.appendChild(b); setTimeout(() => b.remove(), 900);
+}
+function renderRail() {
+  const s = state.flow && state.flow.stats;
+  let h = '';
+  if (s) {
+    const C = 2 * Math.PI * 34, pct = Math.min(1, s.today_steps / Math.max(1, s.goal));
+    const left = Math.max(0, s.goal - s.today_steps);
+    const mx = Math.max(1, ...s.week.map(w => w.n));
+    const today = s.week.length ? s.week[s.week.length - 1].day : '';
+    const wd = d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(d + 'T12:00:00').getDay()];
+    h += `<section class="rcard score ${s.goal_met ? 'met' : ''}">
+      <div class="ring" id="fRing" title="Schritte heute: ${s.today_steps} von ${s.goal}"><svg viewBox="0 0 86 86"><circle class="bg" cx="43" cy="43" r="34"/><circle class="fg" cx="43" cy="43" r="34" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct)).toFixed(1)}"/></svg>
+        <div class="rin"><b>${s.today_steps}</b></div><small>von ${s.goal}</small></div>
+      <div class="sinfo"><b>${s.goal_met ? 'Tagesziel geschafft' : left === s.goal ? 'Erster Schritt wartet' : `Noch ${left} bis zum Tagesziel`}</b>
+        <span class="xp">+${s.today_xp} XP heute</span>
+        <span class="streak ${s.streak ? '' : 'off'}" title="Tage in Folge mit mindestens einem Schritt">${ic('flame')} ${s.streak ? s.streak + (s.streak === 1 ? ' Tag' : ' Tage') + ' in Folge' : 'Noch keine Serie'}</span></div>
+      <div class="lvl"><span>Level ${s.level}</span><div class="lbar"><i style="width:${(100 * s.level_xp / s.level_size).toFixed(0)}%"></i></div><span>${s.level_xp}/${s.level_size}</span></div>
+      <div class="week" aria-label="Schritte der letzten 7 Tage">${s.week.map(w => `<i class="${w.n ? '' : 'zero'} ${w.day === today ? 'today' : ''}" style="--h:${(w.n / mx).toFixed(2)}" title="${esc(w.day)}: ${w.n} Schritt${w.n === 1 ? '' : 'e'}"></i>`).join('')}</div>
+      <div class="wdays">${s.week.map(w => `<span>${wd(w.day)}</span>`).join('')}</div>
+      ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
+    </section>`;
+  }
+  const j = state.jira;
+  if (j && j.ok) {
+    const n = Math.max(j.limit, j.count);
+    h += `<section class="rcard wip"><h3>In Arbeit <small>${j.count} von ${j.limit} Stories</small></h3><div class="wipbar">${Array.from({ length: n }, (_, i) => `<i class="${i < j.count ? (i >= j.limit ? 'over' : 'on') : ''}"></i>`).join('')}</div>
+      ${j.over ? '<div class="small" style="color:var(--bad)">Über dem Limit. Erst etwas abschliessen, dann Neues beginnen.</div>' : j.count < j.limit ? '<div class="small quiet">Platz für eine weitere Story.</div>' : '<div class="small quiet">Voll. Fertig machen geht vor Anfangen.</div>'}</section>`;
+  }
+  const runs = ((state.agents && state.agents.runs) || []).filter(r => r.active || r.status === 'zugewiesen').slice(0, 6);
+  if (state.agents && state.agents.enabled) {
+    h += `<section class="rcard"><h3>Agenten <small>${runs.filter(r => r.active).length} aktiv</small></h3>${runs.length ? runs.map(r => `<div class="ragent" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ic('clock')}<b>${esc(r.agent_name)}</b><span>${esc(r.ticket)} · ${esc(r.status)}</span></div>`).join('') : '<div class="small quiet">Kein Agent beschäftigt. Zuweisen geht im Detail jeder Aufgabe.</div>'}</section>`;
+  }
+  if (F().ideas) h += `<section class="rcard"><h3>Ideen <small>${(state.ideas || []).filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length}/${state.idea_cap || ''} im Pool</small></h3><button data-fidea="1">Idee festhalten <kbd class="small quiet">i</kbd></button></section>`;
+  $('fRailCards').innerHTML = h;
+}
+
+// ---- Detail-Panel (halbe Seite): alles zu einer Aufgabe, Strecke zum Übersteuern
+function renderFx() {
+  const e = focusEntries().find(x => x.id === FXID);
+  if (!e) { closeFx(); return; }
+  const n = e.d.next, url = eUrl(e);
+  const keep = $('fxCkNew') ? { v: $('fxCkNew').value, f: document.activeElement === $('fxCkNew') } : null;
+  const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
+  let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div>${n.kind === 'done' ? '' : goBtn(e, 'primary big')}</div>`;
+  if (e.t === 'review') {
+    body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
+  } else {
+    const c = e.c;
+    if (!c.idea_id) {
+      body += `<div><h3>Teilschritte <small>Kleine Haken, je erledigter +3 XP</small></h3><ul class="ck">${e.d.checklist.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-fck="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(x.text)}"><span>${esc(x.text)}</span><button data-fckdel="${x.id}" title="Entfernen" aria-label="Entfernen">${ic('x')}</button></li>`).join('')}</ul>
+        <div class="ckadd"><input id="fxCkNew" maxlength="200" placeholder="${e.d.checklist.length ? 'Nächster kleiner Schritt …' : 'In kleine Schritte zerlegen, z. B. «Test für Retry schreiben»'}" autocomplete="off"><button data-fckadd="1">Hinzufügen</button></div></div>`;
+    }
+    if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
+    else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
+    if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;
+    const foot = [];
+    if (c.idea_id) foot.push('<button data-fxboard="1">Im Board einplanen</button>');
+    else foot.push('<button data-fxboard="1">Im Board zeigen</button>');
+    if (c.local && !c.idea_id) foot.push(`<button data-fxdel="1">Aufgabe löschen</button>`);
+    body += `<div class="fxfoot">${foot.join('')}${c.pools.length ? `<span class="small quiet">Kategorie: ${c.pools.map(p => esc(p.name)).join(', ')}</span>` : ''}</div>`;
+  }
+  $('fx').innerHTML = `<div class="fxhead">${head}</div><div class="fxbody">${body}</div>`;
+  if (keep) { $('fxCkNew').value = keep.v; if (keep.f) $('fxCkNew').focus(); }
+}
+function fxItem(c, x) {
+  const ms = MSTAT[x.merge_status];
+  const sq = SQ[x.sonar] ? `<a class="chip ${SQ[x.sonar][1]}" href="${esc(x.sonar_url || '#')}" target="_blank" rel="noopener" title="${esc(x.sonar_detail || '')}">${esc(SQ[x.sonar][0])}</a>${trendBadge(x)}` : '';
+  const b = [`<a class="ibtn" href="${esc(x.url)}" target="_blank" rel="noopener" title="In GitLab öffnen">${ic('ext')} ${x.iid ? 'MR' : 'Branch'}</a>`];
+  if (x.pipeline_url) b.push(`<a class="ibtn" href="${esc(x.pipeline_url)}" target="_blank" rel="noopener">${ic('gear')} Pipeline</a>`);
+  if (SQ_HAS[x.sonar]) b.push(`<button class="ibtn" ${sqRepAttrs(x)} title="Findings als Markdown in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">${ic('copy')} Report</button>`);
+  if (!x.iid && x.create_mr_url) b.push(`<a class="ibtn" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener">${ic('mr')} MR erstellen</a>`);
+  if (!c.key && state.jira && state.jira.ok) {
+    b.push(`<button class="ibtn" data-tk="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch)}" data-cu="">${ic('ticket')} Ticket anlegen</button>`);
+  }
+  if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
+  if (F().testenv && x.iid) b.push(`<button class="ibtn" data-fxdeploy="${x.project_id}:${x.iid}">${ic('flask')} Testumgebung</button>`);
+  return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : ic('branch')}
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? '!' + esc(x.iid) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+    <div class="ibtns">${b.join('')}</div></div>`;
+}
+function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); }
+function closeFx() { FXID = null; const p = $('fx'); p.classList.remove('on'); setTimeout(() => { if (!FXID) p.hidden = true; }, 200); }
+function fEntry(id) { return focusEntries().find(x => x.id === id); }
+async function fStage(c, stage) {
+  await post('/api/board/stage', c.key ? { key: c.key, stage } : { ref: c.id, stage });
+}
+async function doNext(e, btn) {
+  const n = e.d.next, a = n.action || {};
+  try {
+    if (a.run) return openRunDlg(a.run);
+    if (n.id === 'plan') { setView('board'); return; }
+    if (a.check) { await fCheck(a.check, true, btn); return; }
+    if (a.report) {
+      const r = await api('GET', `/api/sonar/report?project_id=${encodeURIComponent(a.report.project_id)}&iid=${encodeURIComponent(a.report.iid ?? '')}&branch=${encodeURIComponent(a.report.branch || '')}`);
+      await copyText(r.text, 'Sonar-Report'); toast(`Report kopiert: ${r.issues} Findings. Einem Agenten geben oder selbst abarbeiten.`); return;
+    }
+    if (a.copy) { await copyText(a.copy, 'Befehl'); toast('Befehl kopiert. Im Repository einfügen, dann erscheint der Branch hier.'); }
+    if (a.stage && e.t === 'card') { await fStage(e.c, a.stage); burstAt(btn); await load(); return; }
+    if (a.url) window.open(a.url, '_blank', 'noopener');
+  } catch (err) { toast(err.message); }
+}
+async function fCheck(id, done, el) {
+  try {
+    const r = await post('/api/flow/toggle', { id, done });
+    if (r.done) burstAt(el);
+    await load();
+  } catch (err) { toast(err.message); }
+}
+async function fQuickAdd() {
+  const i = $('fAdd'), v = i.value.trim();
+  if (!v) return;
+  const isKey = /^[A-Za-z][A-Za-z0-9_]{1,19}-\d{1,9}$/.test(v);
+  i.value = '';
+  await act(() => post('/api/board/add', { title: v, stage: isKey ? 'planned' : 'idea', pool_id: null }), isKey ? `${v.toUpperCase()} eingeplant` : 'Im Ideenpool. Mit Kategorie einplanen, wenn es losgeht.');
+}
+$('fAddBtn').onclick = fQuickAdd;
+$('fAdd').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); fQuickAdd(); } });
+document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.fgrp) LS.set('fopen.' + d.dataset.fgrp, d.open); }, true);
+document.addEventListener('click', async ev => {
+  const t = ev.target;
+  const go = t.closest('[data-fgo]');
+  if (go) { ev.stopPropagation(); const e = fEntry(go.dataset.fgo); if (e) await doNext(e, go); return; }
+  const op = t.closest('[data-fopen]'); if (op) { openFx(op.dataset.fopen); return; }
+  const sk = t.closest('[data-fskip]');
+  if (sk) { fSkip.add(sk.dataset.fskip); try { sessionStorage.setItem('tinyops.skip', JSON.stringify([...fSkip])); } catch (e) { /* egal */ } renderFocus(); return; }
+  const ax = t.closest('[data-falx]'); if (ax) { fSkip.add('al:' + ax.dataset.falx); renderFocus(); return; }
+  if (t.closest('[data-fset]')) { setView('settings'); return; }
+  if (t.closest('[data-fidea]')) { openIdeaDrop(); return; }
+  if (t.closest('[data-fxclose]')) { closeFx(); return; }
+  const e = FXID && fEntry(FXID);
+  const st = t.closest('#fx li[data-st]');
+  if (st && e && e.t === 'card') { try { await fStage(e.c, st.dataset.st); burstAt(st); await load(); } catch (err) { toast(err.message); } return; }
+  if (t.closest('[data-fxauto]') && e) { await act(() => post('/api/board/remove', { key: e.c.id }), 'Station wieder aus den Daten'); return; }
+  if (t.closest('[data-fxboard]')) { closeFx(); setView('board'); return; }
+  if (t.closest('[data-fxdel]') && e) { if (confirm(`Aufgabe ${e.c.key} «${e.c.title}» löschen?`)) { closeFx(); await act(() => post('/api/board/remove', { key: e.c.key }), 'Gelöscht'); } return; }
+  const ckd = t.closest('[data-fckdel]'); if (ckd) { await act(() => post('/api/flow/delete', { id: +ckd.dataset.fckdel })); return; }
+  if (t.closest('[data-fckadd]') && e) { const v = $('fxCkNew').value.trim(); if (!v) return; $('fxCkNew').value = ''; await act(() => post('/api/flow/add', { key: e.c.id, text: v })); $('fxCkNew') && $('fxCkNew').focus(); return; }
+  const tk = t.closest('#fx [data-tk]'); if (tk) { openTicket(tk); return; }
+  const dp = t.closest('[data-fxdeploy]');
+  if (dp) { const [p, i] = dp.dataset.fxdeploy.split(':'); await act(() => api('POST', '/api/deploy', { project_id: +p, iid: +i }), 'Deploy gestartet'); return; }
+  const row = t.closest('#viewFocus .frow, #viewFocus .hero');
+  if (row && !t.closest('a, button, select, input')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
+});
+document.addEventListener('change', ev => { const c = ev.target.closest && ev.target.closest('[data-fck]'); if (c) fCheck(+c.dataset.fck, c.checked, c); });
+document.addEventListener('keydown', ev => {
+  if (ev.target.id === 'fxCkNew' && ev.key === 'Enter') { ev.preventDefault(); document.querySelector('[data-fckadd]').click(); return; }
+  if (ev.key === 'Escape' && FXID && !document.querySelector('dialog[open]')) { closeFx(); return; }
+  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || ev.ctrlKey || ev.metaKey || ev.altKey || document.querySelector('dialog[open]')) return;
+  if (view !== 'focus') return;
+  const rows = [...document.querySelectorAll('#viewFocus [data-fid]')];
+  const sel = i => { fSel = Math.max(0, Math.min(rows.length - 1, i)); rows.forEach((r, k) => r.classList.toggle('sel', k === fSel)); rows[fSel] && rows[fSel].scrollIntoView({ block: 'nearest' }); if (FXID && rows[fSel]) openFx(rows[fSel].dataset.fid); };
+  if (ev.key === 'j' || ev.key === 'ArrowDown') { ev.preventDefault(); sel(fSel + 1); }
+  else if (ev.key === 'k' || ev.key === 'ArrowUp') { ev.preventDefault(); sel(fSel - 1); }
+  else if (ev.key === 'Enter' && rows[Math.max(0, fSel)]) { ev.preventDefault(); openFx(rows[Math.max(0, fSel)].dataset.fid); }
+  else if (ev.key === 'a') { const r = rows[Math.max(0, fSel)]; const e = r && fEntry(r.dataset.fid); if (e) { ev.preventDefault(); doNext(e, r.querySelector('[data-fgo]') || r); } }
+  else if (ev.key === 'n') { ev.preventDefault(); $('fAdd').focus(); }
+});
+
+$('fRailUsage').appendChild($('usageBox'));
 
 load();
 setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 300000);   // der Server gleicht ohnehin nur alle cache_seconds ab

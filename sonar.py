@@ -38,6 +38,14 @@ RATING = {"1.0": "A", "2.0": "B", "3.0": "C", "4.0": "D", "5.0": "E", "1": "A", 
 COMPARATOR = {"LT": "mindestens", "GT": "höchstens", "EQ": "genau", "NE": "nicht"}
 
 
+def auth_msg(st):
+    """401 und 403 bedeuten bei Sonar Verschiedenes: Token ungültig gegenüber Token gültig, aber ohne Recht."""
+    if st == 401:
+        return "Sonar: Anmeldung abgelehnt (HTTP 401). Der Token ist ungültig, abgelaufen oder fehlt: in Sonar unter Mein Konto → Sicherheit einen neuen User-Token anlegen."
+    return ("Sonar: keine Berechtigung (HTTP 403). Der Token wird erkannt, darf aber nicht lesen: Es braucht einen User-Token "
+            "(ein Projekt-Analyse-Token reicht nicht) mit «Browse» auf den Projekten.")
+
+
 class SonarError(Exception):
     """Meldung ist für den Anwender gedacht. `auth` heisst: Zugangsdaten falsch, alle weiteren Abfragen sind sinnlos."""
     def __init__(self, msg, auth=False):
@@ -117,7 +125,7 @@ class Client:
                 resp = self._get("/api/issues/search", params, max_body=4 << 20)
             st = resp["status"]
             if st in (401, 403):
-                raise SonarError("Sonar: Anmeldung abgelehnt (HTTP %d)." % st, auth=True)
+                raise SonarError(auth_msg(st), auth=True)
             if st == 404:
                 return [], 0, {}
             if st != 200:
@@ -152,7 +160,7 @@ class Client:
         resp = self._get("/api/measures/search_history", params)
         st = resp["status"]
         if st in (401, 403):
-            raise SonarError("Sonar: Anmeldung abgelehnt (HTTP %d)." % st, auth=True)
+            raise SonarError(auth_msg(st), auth=True)
         if st in (400, 404):
             return []
         if st != 200:
@@ -184,7 +192,7 @@ class Client:
         resp = self._get("/api/qualitygates/project_status", params)
         st = resp["status"]
         if st in (401, 403):
-            raise SonarError("Sonar: Anmeldung abgelehnt (HTTP %d). Token prüfen, er braucht «Browse» auf dem Projekt." % st, auth=True)
+            raise SonarError(auth_msg(st), auth=True)
         if st == 404:
             return {"status": "NONE", "failed": [], "url": self.dashboard_url(key, pr, branch), "issues_url": "", "detail": "keine Analyse für %s" % (("MR !%s" % pr) if pr else branch or "Hauptbranch")}
         if st != 200:

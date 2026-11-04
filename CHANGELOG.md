@@ -5,6 +5,32 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.13.0]
+
+### Neu
+- **Fokus ist die neue Startansicht.** Jedes Vorhaben fährt dieselbe Strecke **Planen → Branch → Code → MR → Prüfen → Testen → Mergen → Fertig**,
+  egal ob es aus Jira, GitLab oder dem eigenen Board kommt. Tickets, Branches und MRs mit demselben Key sind ein Vorhaben; ein Branch ohne Ticket fährt trotzdem mit.
+  Die Station ergibt sich aus den Daten (Branch da? MR? Draft? Pipeline? Sonar? Konflikt? Freigabe?), jede Zeile zeigt **genau einen nächsten Schritt**,
+  wer dran ist (du, CI, andere, Agent) und einen Knopf, der genau das tut (MR erstellen, Pipeline öffnen, Report kopieren, Branch-Befehl kopieren, als getestet markieren ...).
+- **Jetzt dran:** Oben steht gross die eine wichtigste Sache: erst Blocker, dann Reviews, auf die jemand wartet, dann was am weitesten ist («fertig machen vor anfangen»).
+  «Nicht jetzt» zeigt die nächste. Darunter: Du bist dran / Andere warten auf dich / Läuft gerade / Geplant und Ideen (eingeklappt).
+- **Detail-Panel auf der halben Seite** statt eines eingebetteten Browsers: Strecke zum Übersteuern (Klick auf eine Station), alle MRs und Branches mit Pipeline, Sonar,
+  Mergestatus und Links, Ticket anlegen/zuordnen, Testumgebung, Agent zuweisen, Teilschritte.
+- **Teilschritte:** eine Checkliste je Vorhaben. Der nächste offene Haken wird zum nächsten Schritt; jeder Haken zählt.
+- **Spielstand:** Tagesziel (3 Schritte, `flow.daily_goal`), XP, Level, Serie in Tagen, Wochenbalken, letzte Erfolge, kurze Feier bei neuem Fortschritt (aus bei «weniger Bewegung»).
+  Gezählt wird nur eine Station, die ein Vorhaben **noch nie** erreicht hatte, und nur mit vollständigen Daten: Zurückfallen und wieder Vorrücken bringt nichts.
+- **Tastatur:** j/k auswählen, Enter Details, a nächsten Schritt ausführen, n neue Aufgabe, i Idee, Esc schliessen.
+- **Board:** Spalten heissen wie die Stationen und Karten stehen dort, wo der Ablauf sie sieht (solange nicht von Hand verschoben). Karten zeigen nur noch Key, Titel,
+  MR/Branch und den nächsten Schritt; Klick öffnet das Detail-Panel. Pfeile, Agent-Auswahl und Löschen sind ins Panel gewandert.
+- GitLab-Mergestatus (`detailed_merge_status`: Konflikt, Rebase nötig, Freigabe fehlt, Diskussionen offen) fliesst in den nächsten Schritt ein, ohne zusätzliche Anfrage.
+- Die bisherige Übersicht bleibt unter «Listen».
+
+### Korrekturen
+- Die Kopfzeile scrollte auf langen Seiten (Einstellungen) nach einer Bildschirmhöhe mit weg. Sie bleibt jetzt stehen; die Einstellungs-Navigation markiert beim Scrollen den Abschnitt.
+- Projekte in den Einstellungen als ausgerichtete Tabelle (ID, Name, Sonar, Agent-Ordner, Cloud-Agent); vorher stand das Häkchen weit weg von seiner Beschriftung.
+- Sonar unterscheidet jetzt 401 (Token ungültig oder abgelaufen) von 403 (Token gültig, aber ohne «Browse»; oft ein Projekt-Analyse-Token statt User-Token).
+- Mobile Leiste unten: vier Einträge passen nebeneinander.
+
 ## [0.12.0]
 
 ### Neu
