@@ -1,0 +1,27 @@
+# OPTIONAL (nicht in kustomization.yaml): Der Pod darf nur zu GitLab, Jira, dem Sprachmodell und DNS.
+# Erst die Adressen unten anpassen und mit `kubectl apply -n tinyops -f deploy/k8s/networkpolicy.optional.yaml` einspielen.
+# Falsche Adressen sperren den Pod aus: dann `kubectl delete -n tinyops networkpolicy tinyops-egress`.
+# Hinweis: `kubectl port-forward` ist von NetworkPolicies nicht betroffen.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tinyops-egress
+spec:
+  podSelector:
+    matchLabels: {app: tinyops}
+  policyTypes: ["Egress"]
+  egress:
+    - to:                                    # DNS
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:                                    # GitLab und Jira (ANPASSEN: IPs oder Netze)
+        - ipBlock: {cidr: 10.0.0.10/32}
+        - ipBlock: {cidr: 10.0.0.11/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:                                    # lokales Sprachmodell (ANPASSEN oder Block entfernen)
+        - ipBlock: {cidr: 10.0.0.12/32}
+      ports:
+        - {protocol: TCP, port: 8080}

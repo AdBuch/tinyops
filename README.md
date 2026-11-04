@@ -1,4 +1,4 @@
-# tinyops 2.5: Arbeitspanel
+# tinyops 2.6: Arbeitspanel
 
 Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen), keine Pflicht-Abhängigkeiten.
 
@@ -267,6 +267,38 @@ Zweite Seite «Board» mit den Spalten **Ideenpool → Geplant → Umsetzung →
 * Ideen ohne Kategorie sieht man nur unter «Alle», nicht innerhalb einer Kategorie.
 * API: `POST /api/board/assign|unassign` (`key` oder `ref`, `pool_id`), `add` und `plan_idea` nehmen `pool_id`.
 * Layout: höchstens 4 Kacheln nebeneinander; in schmalen Kacheln rutschen die Knöpfe unter den Titel, statt ihn zu überdecken.
+
+## 12. Kubernetes und IntelliJ (neu in 2.6)
+
+Ausführliche Testliste: `MANUAL-TESTS.md`.
+
+**In IntelliJ starten:** Der Ordner `.run/` bringt fertige Run-Konfigurationen mit (Python-Plugin und Interpreter nötig):
+*tinyops - Demo*, *Echt (dev-Config)*, *Preflight*, *Tests*. Config, Datenbank und Logs liegen dabei in `.dev/` im Projekt
+(`TINYOPS_HOME`), getrennt von deiner echten Config.
+
+**Preflight:** `python3 server.py --preflight` prüft Config, beschreibbare Ordner, Secrets, GitLab, Jira, Sprachmodell und macht einen
+echten Probe-Durchlauf (nur lesend). Exit-Code 1 bei Problemen, jeder Fehler mit Hinweis. Im Cluster: `python deploy/k8s.py preflight`.
+
+**Nach Kubernetes:** Einmal `deploy/deploy.example.json` → `deploy/deploy.local.json` (Registry, Namespace, Kontext) und
+`deploy/k8s/config.seed.json` anpassen. Dann:
+
+    python deploy/k8s.py secret      # GitLab-/Jira-Token verdeckt abfragen, Zugriffstoken erzeugen
+    python deploy/k8s.py release     # Tests, Image bauen (docker oder podman), pushen, ausrollen
+    python deploy/k8s.py forward --open
+
+Weitere Befehle: `logs`, `status`, `token`, `preflight`, `deploy`, `build`, `push`, `reseed --yes` (Config auf die Vorlage zurück),
+`undeploy` (Daten bleiben), `purge --yes` (alles weg). `--dry-run` zeigt nur die Befehle.
+
+Aufbau: ein Pod, ein Volume `/data` (Config, SQLite, Logs), Secret für die Zugangsdaten (als Umgebungsvariablen
+`TINYOPS_ACCESS_TOKEN`, `TINYOPS_GITLAB_TOKEN`, `TINYOPS_JIRA_TOKEN`, `TINYOPS_LLM_KEY`), nur ein ClusterIP-Service ohne Ingress. Der Pod läuft
+unprivilegiert (uid 10001, Root-Dateisystem schreibgeschützt, keine Capabilities). `/healthz` ist für die Probes ohne Token
+erreichbar und verrät nur die Version. `TINYOPS_BIND`, `TINYOPS_PORT`, `TINYOPS_ALLOWED_HOSTS` überschreiben die Werte der config.json.
+Ohne Zugriffstoken startet das Panel bei `bind 0.0.0.0` nicht.
+
+Grenzen: Ein Pod, keine Hochverfügbarkeit (SQLite auf einem Volume). Optional liegen `networkpolicy.optional.yaml` (Egress nur zu GitLab,
+Jira, Modell) und `ingress.optional.yaml` bei; beide sind nicht aktiv und müssen vorher angepasst werden. Das Secret liegt im Cluster
+im etcd, schützt es dort wie jedes andere. Docker-Image, Manifeste und die IntelliJ-Konfigurationen sind nicht gegen einen echten
+Cluster oder eine echte IDE getestet; getestet ist die Befehlsfolge mit Ersatzprogrammen, der Preflight und `/healthz`.
 
 ## 5. Offene Branches von dir und deinem Agenten (`branch_filter`)
 

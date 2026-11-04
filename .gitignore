@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 *.tmp
 *.log
+
+.dev/
+deploy/deploy.local.json

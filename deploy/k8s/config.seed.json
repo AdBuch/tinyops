@@ -1,0 +1,13 @@
+{
+  "gitlab_url": "https://gitlab.example.com",
+  "projects": [],
+  "jira": {
+    "url": "https://jira.example.com",
+    "auth": "bearer",
+    "project_keys": ["DLP"],
+    "story_limit": 2,
+    "only_active_sprints": true
+  },
+  "llm": {"enabled": false},
+  "features": {"ideas": true, "testenv": false, "ai": false}
+}

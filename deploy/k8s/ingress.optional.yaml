@@ -1,0 +1,20 @@
+# OPTIONAL (nicht in kustomization.yaml). Nur nötig, wenn das Panel ohne port-forward erreichbar sein soll.
+# Dann zusätzlich: in deployment.yaml TINYOPS_ALLOWED_HOSTS auf den Hostnamen setzen und TLS verwenden.
+# Der Zugriffstoken schützt das Panel, aber es hält GitLab- und Jira-Zugänge: nur im internen Netz veröffentlichen.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tinyops
+spec:
+  # ingressClassName: <deine Klasse>
+  tls:
+    - hosts: [tinyops.example.internal]
+      secretName: tinyops-tls
+  rules:
+    - host: tinyops.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: tinyops, port: {name: http}}

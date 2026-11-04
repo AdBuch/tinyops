@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyops
+  labels: {app: tinyops}
+spec:
+  replicas: 1                 # SQLite auf einem ReadWriteOnce-Volume: nie mehr als eine Instanz
+  strategy: {type: Recreate}  # beim Update erst stoppen, dann starten (das Volume gehört immer nur einem Pod)
+  selector:
+    matchLabels: {app: tinyops}
+  template:
+    metadata:
+      labels: {app: tinyops}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # Beim ersten Start die Config aus der ConfigMap aufs Volume legen. Danach gilt die Config auf dem Volume
+        # (die Einstellungsseite speichert dorthin). Neu säen: deploy/k8s.py reseed
+        - name: seed
+          image: tinyops:latest          # wird von deploy/k8s.py auf das gebaute Image gesetzt
+          command: ["sh", "-c", "[ -f /data/config.json ] || cp /seed/config.json /data/config.json"]
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: seed, mountPath: /seed, readOnly: true}
+          securityContext: &sc
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      containers:
+        - name: app
+          image: tinyops:latest
+          ports:
+            - {name: http, containerPort: 8765}
+          envFrom:
+            - secretRef: {name: tinyops}   # TINYOPS_ACCESS_TOKEN, TINYOPS_GITLAB_TOKEN, optional TINYOPS_JIRA_TOKEN, TINYOPS_LLM_KEY
+          env:
+            # Hostnamen, unter denen das Panel erreichbar ist (localhost gilt immer, also auch per port-forward).
+            # Bei einem Ingress hier den Hostnamen ergänzen, kommagetrennt.
+            - {name: TINYOPS_ALLOWED_HOSTS, value: ""}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          securityContext: *sc
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: tinyops-data}
+        - name: seed
+          configMap: {name: tinyops-seed}
+        - name: tmp
+          emptyDir: {}

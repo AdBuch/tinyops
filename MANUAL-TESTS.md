@@ -1,0 +1,99 @@
+# Manuelle Tests gegen dein echtes Jira, GitLab und Modell
+
+Bisher lief alles gegen Mock-Server. Diese Liste zeigt, was nur du prüfen kannst. Reihenfolge von oben nach unten, jeder
+Block baut auf dem vorigen auf. Bei einem Fehler: Log-Ausschnitt (er ist von Secrets bereinigt) und die Zeile dieser Liste
+zurückmelden, mehr brauche ich nicht.
+
+## 0. Lokal starten (IntelliJ)
+
+1. Projektordner `tinyops` öffnen. Unter *Run* erscheinen die Konfigurationen aus `.run/` automatisch
+   (falls nicht: *Settings → Build, Execution, Deployment → Run/Debug* und Ordner `.run` prüfen).
+   Braucht das Python-Plugin und einen Python-3.10+-Interpreter (*Project Structure → SDK*).
+2. **tinyops - Demo** starten, `http://localhost:8765` öffnen: Kacheln, Board und Sync-Leiste sollten mit Demo-Daten laufen.
+3. **tinyops - Echt (dev-Config)** starten. Config, Datenbank und Logs liegen in `.dev/` im Projekt (nicht in deinem echten
+   `~/.config/tinyops`, nicht im Git). Beim ersten Start führt die Seite «Einstellungen» durch GitLab, Projekte, Jira.
+4. **tinyops - Preflight** laufen lassen. Ziel: `Alles bereit.` Jeder Fehler nennt den Grund und einen Hinweis.
+
+Wenn der Preflight grün ist, ist die Verbindung belegt. Alles Weitere sind Fachtests.
+
+## 1. Jira (Version 9.4.14)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 1.1 | Preflight, Block «Jira» | Anmeldung, Projekte, Vorgangstypen, JQL ok. Sprint-Feld wird gefunden (sonst Hinweis) |
+| 1.2 | Kachel «Stories in Arbeit» | Nur Tickets aus **aktiven** Sprints (JQL `sprint in openSprints()`); Sprintname und «noch n Tage» stimmen mit Jira überein |
+| 1.3 | Ein Ticket aus einem **geschlossenen/künftigen** Sprint, das «In Arbeit» ist | Erscheint nicht (mit Schalter «alle Sprints» in den Einstellungen schon) |
+| 1.4 | Limit | Mehr als 2 Stories in Arbeit: Zähler rot, Hinweis «Limit überschritten» |
+| 1.5 | Branch/MR mit Ticket-Key im Namen | Chip `Jira DLP-123 · Status` auf der Zeile, Story zeigt den MR |
+| 1.6 | Branch **ohne** Key | Chip «ohne Ticket», Knopf «Ticket anlegen» |
+
+**Besonders prüfen:** das Format des Sprint-Felds (Jira liefert es je nach Version als Text oder Objekt). Falls 1.2 den
+Sprintnamen leer zeigt, schick mir aus dem Log (`.dev/logs`, Stufe debug) die Zeile mit «Sprint».
+
+## 2. GitLab (19.2.5-ee)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 2.1 | Preflight, Block «GitLab» | Token-Rechte `read_api`, Projekte gefunden |
+| 2.2 | «Meine MRs» | Genau deine offenen MRs, mit Pipelinestatus und Draft-Markierung |
+| 2.3 | «Braucht dich» | Review-Queue und dir zugeteilte MRs; fehlgeschlagene Pipeline eigener MRs |
+| 2.4 | «Offene Branches» | Branches mit Commits von dir oder deinem Agenten, **ohne** `release/*` |
+| 2.5 | Agent-Branch (Co-Authored-By: Claude) | Chip «Agent» |
+| 2.6 | Projekt mit sehr vielen Branches | Lädt in vernünftiger Zeit; Sync-Leiste zeigt, welches Projekt läuft |
+
+## 3. Sync und Fehlerfälle
+
+1. «Neu laden»: Leiste zeigt Schritte mit Dauer, alte Daten bleiben stehen bis alles neu ist.
+2. Falschen GitLab-Token setzen (Einstellungen), speichern: Banner mit klarer Meldung, kein Absturz; Token zurücksetzen.
+3. VPN trennen und «Neu laden»: Fehlermeldung nennt den Grund (DNS/Timeout), das Panel bleibt bedienbar.
+
+## 4. Board, Kategorien, Ideen
+
+1. Aufgabe ohne Jira anlegen (Spalte Ideenpool): braucht keine Kategorie. In «Geplant» schieben: verlangt eine Kategorie.
+2. Kategorie «Agenten-VM» anlegen, Aufgabe zuordnen, nach «Umsetzung» schieben: erscheint im Jira-Panel (zählt fürs Limit).
+3. Eine Jira-Story mit **zwei** MRs/Branches: eine Karte, beide Chips. Chip auf eine andere Karte ziehen verknüpft neu.
+4. Idee in der Ideenbox erfassen, im Board «Planen» ohne Kategorie: Hinweis; mit Kategorie: Aufgabe in «Geplant».
+5. Panel neu starten: Board, Kategorien, Ideen, Verknüpfungen sind noch da.
+
+## 5. Ticket anlegen und KI-Entwurf (nur mit Absicht einschalten)
+
+Schreibt in Jira. **Nur in einem Testprojekt.**
+
+1. Einstellungen → Jira: «Tickets anlegen erlauben» an, Vorgangstyp prüfen. «Ticket anlegen» bei einem Branch ohne Key.
+2. Ohne KI: Vorlage aus Branch, MR-Beschreibung und Commit-Titeln, bearbeiten, anlegen. Das Ticket erscheint in Jira und der
+   Branch ist danach verknüpft.
+3. KI (Modell 10.0.0.12): Einstellungen → KI-Entwurf → «Verbindung testen». Danach «Entwurf mit KI». Bei Timeout
+   den Wert «Timeout» erhöhen; das Log (`llm`) zeigt Anfrage, erste Antwort und Dauer.
+4. Prüfen, dass nur Titel, Branch, MR-Beschreibung und Commit-Titel gesendet werden (Log, Stufe debug), kein Code, keine Diffs.
+
+## 6. Sicherheit (Stichproben)
+
+- `grep SCHREIBEN .dev/logs/*.log`: leer, solange du kein Ticket angelegt hast. Nach dem Anlegen genau eine Zeile.
+- Kein Secret im Log: `grep -i -E "glpat|token=|bearer " .dev/logs/*.log` bleibt leer.
+- `.dev/config.json` enthält keine Tokens; `ls -l .dev/` zeigt Rechte 600 für Config (und `secrets.json`, falls ohne Schlüsselbund).
+- Mit Zugriffstoken (Kubernetes): Seite ohne `?token=` gibt 401, mit fremdem Host-Header 403.
+
+## 7. Kubernetes
+
+Einmalig: `deploy/deploy.example.json` nach `deploy/deploy.local.json` kopieren und Registry, Namespace, Kontext eintragen.
+`deploy/k8s/config.seed.json` anpassen (GitLab- und Jira-Adresse, Projekt-Keys). Dann in dieser Reihenfolge die Run-Konfigurationen
+**k8s - 1 Secret anlegen**, **k8s - 2 Release**, **k8s - 3 Panel öffnen** (oder auf der Befehlszeile `python deploy/k8s.py secret|release|forward --open`).
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 7.1 | Secret anlegen | Fragt GitLab-Token (und optional Jira-Token) verdeckt ab, erzeugt den Zugriffstoken |
+| 7.2 | Release | Tests grün, Image gebaut und hochgeladen, `rollout status` meldet fertig |
+| 7.3 | Panel öffnen | Browser zeigt das Panel (nach dem Tausch von `?token=` gegen ein Cookie) |
+| 7.4 | **k8s - Preflight im Pod** | Dieselben Prüfungen wie lokal, aber aus dem Cluster: zeigt, ob der Pod GitLab/Jira/Modell erreicht |
+| 7.5 | Pod löschen (`kubectl delete pod -l app=tinyops`) | Neuer Pod startet, Ideen, Board und Einstellungen sind noch da (Volume) |
+| 7.6 | Zweites Release nach einer Codeänderung | Neuer Tag, Pod wird ersetzt (kurze Pause, da `Recreate`), Daten bleiben |
+| 7.7 | Secret ändern (Run-Konfiguration 1) und `kubectl rollout restart deployment/tinyops` | Neuer Wert gilt, alte Werte bleiben, wenn du sie nicht neu eingibst |
+
+Typische Fehler: `ImagePullBackOff` (Cluster hat keinen Zugang zur Registry: `imagePullSecrets` am Deployment ergänzen),
+`Pending` (keine StorageClass fürs Volume: `storageClassName` in `deploy/k8s/pvc.yaml`), Preflight im Pod meldet
+Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optional.yaml` nur nach Anpassung einspielen).
+
+## Rückmeldung
+
+Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die
+Log-Zeilen. Kein Token, keine Kundendaten mitschicken (die Logs enthalten Ticket- und Branchnamen, prüf sie vorher).

@@ -1,0 +1,14 @@
+.git
+.venv
+.dev
+.run
+tests
+deploy
+__pycache__
+*.pyc
+*.log
+config.json
+config.json.bak
+data
+logs
+README.md

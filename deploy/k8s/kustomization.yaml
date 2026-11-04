@@ -1,0 +1,11 @@
+# Ohne Namespace-Angabe: deploy/k8s.py setzt ihn mit -n (Standard: tinyops).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: tinyops-seed
+    files:
+      - config.json=config.seed.json

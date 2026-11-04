@@ -1,0 +1,6 @@
+{
+  "registry": "registry.example.com/team",
+  "namespace": "tinyops",
+  "context": "",
+  "docker": "docker"
+}

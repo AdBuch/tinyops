@@ -39,7 +39,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "1.5"
+VERSION = "2.5"
 BASE = Path(__file__).resolve().parent
 
 
@@ -190,7 +190,25 @@ def load_config(path):
         with open(path, encoding="utf-8") as f:
             cfg.update(json.load(f))
     reject_plain_secrets(cfg)
+    apply_env(cfg)
     return cfg
+
+
+def apply_env(cfg, env=None):
+    """Für Container: Adresse, Port und erlaubte Hosts per Umgebungsvariable, ohne die config.json anzufassen."""
+    env = os.environ if env is None else env
+    if (env.get("TINYOPS_BIND") or "").strip():
+        cfg["bind"] = env["TINYOPS_BIND"].strip()
+    if (env.get("TINYOPS_PORT") or "").strip():
+        try:
+            port = int(env["TINYOPS_PORT"])
+            if not 1 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            raise SystemExit("TINYOPS_PORT muss eine Zahl zwischen 1 und 65535 sein.")
+        cfg["port"] = port
+    if (env.get("TINYOPS_ALLOWED_HOSTS") or "").strip():
+        cfg["allowed_hosts"] = [h.strip() for h in env["TINYOPS_ALLOWED_HOSTS"].split(",") if h.strip()]
 
 
 def jira_cfg(cfg):
@@ -1883,6 +1901,8 @@ def make_handler(app):
         def _route(self, method):
             self._t0 = time.time()
             parsed = urllib.parse.urlparse(self.path)
+            if method == "GET" and parsed.path == "/healthz":   # für Kubernetes: ohne Token und Host-Prüfung, verrät nur die Version
+                return self._send(200, {"ok": True, "version": VERSION})
             extra = self._gate(parsed)
             if extra is None:
                 return
@@ -2078,6 +2098,93 @@ def resolve_secrets(cfg, demo, show=False):
     return out
 
 
+def run_preflight(cfg, config_path, demo):
+    """Prüft alles, was für einen echten Lauf nötig ist, und sagt bei Fehlern, was zu tun ist. Gibt 0 (alles gut) oder 1 zurück."""
+    import types
+    problems = [0]
+    marks = {"ok": "  OK  ", "warn": " WARN ", "fail": " FAIL ", "skip": " skip ", "info": "      "}
+
+    def line(status, title, detail=""):
+        if status == "fail":
+            problems[0] += 1
+        print("%s%s%s" % (marks.get(status, "      "), title, (": " + str(detail)) if detail else ""))
+
+    def steps(title, res):
+        print("\n%s" % title)
+        for st in res["steps"]:
+            line(st["status"], st["title"], st["detail"])
+            if st["status"] in ("fail", "warn") and st.get("hint"):
+                print("        → %s" % st["hint"])
+
+    print("tinyops %s Preflight (%s)" % (VERSION, "Demo" if demo else "Echtbetrieb"))
+    print("\nBasis")
+    line("ok" if Path(config_path).exists() else ("info" if demo else "warn"), "Config", str(config_path) if Path(config_path).exists() else "keine Datei: %s" % config_path)
+    for what, d in (("Datenordner", data_dir(cfg)), ("Logordner", (tlog.log_file(cfg) or Path(".")).parent)):
+        try:
+            Path(d).mkdir(parents=True, exist_ok=True)
+            probe = Path(d) / (".preflight-%d" % os.getpid())
+            probe.write_text("x")
+            probe.unlink()
+            line("ok", what, "%s (beschreibbar)" % d)
+        except OSError as e:
+            line("fail", what, "%s nicht beschreibbar: %s" % (d, e.strerror or e))
+    secrets = resolve_secrets(cfg, demo)
+    if not demo:
+        line("ok" if secrets.get("gitlab_token") else "fail", "GitLab-Token", "gefunden" if secrets.get("gitlab_token") else "fehlt (TINYOPS_GITLAB_TOKEN, --set-secret oder Einstellungen)")
+    jc = jira_cfg(cfg)
+    if jc["url"] and not demo:
+        n = "jira_token" if jc["auth"] == "bearer" else "jira_password"
+        line("ok" if secrets.get(n) else "fail", "Jira-Zugang (%s)" % n, "gefunden" if secrets.get(n) else "fehlt")
+    local = cfg["bind"] in LOOPBACK
+    line("ok" if local or secrets.get("access_token") else "fail", "Zugriffsschutz",
+         "nur lokal (%s)" % cfg["bind"] if local else ("bind %s mit Zugriffstoken, erlaubte Hosts: %s" % (cfg["bind"], ", ".join(cfg["allowed_hosts"]) or "nur localhost")
+                                                       if secrets.get("access_token") else "bind %s ohne access_token: das Panel startet so nicht" % cfg["bind"]))
+    if demo:
+        line("info", "Demo", "GitLab/Jira-Prüfungen entfallen")
+    else:
+        stored = _stored(types.SimpleNamespace(cfg=cfg))
+        if not cfg.get("gitlab_url"):
+            line("fail", "GitLab", "keine Adresse in der Config (gitlab_url)")
+        else:
+            steps("GitLab", settings.test_gitlab({"url": cfg["gitlab_url"], "ca_bundle": cfg.get("ca_bundle", ""),
+                                                  "projects": [p["id"] for p in cfg["projects"]]}, stored))
+        if jc["url"]:
+            steps("Jira", settings.test_jira({"url": jc["url"], "auth": jc["auth"], "username": jc.get("username", ""), "ca_bundle": cfg.get("ca_bundle", ""),
+                                              "project_keys": jc.get("project_keys") or [], "issue_types": jc.get("wip_issue_types") or [],
+                                              "jql": jc.get("jql_in_progress") or "", "story_limit": jc.get("story_limit", 2),
+                                              "only_active_sprints": bool(jc.get("only_active_sprints", True))}, stored))
+        else:
+            print("\nJira\n%snicht eingerichtet" % marks["info"])
+        lc = llm_cfg(cfg)
+        if lc.get("enabled"):
+            steps("Lokales Sprachmodell", settings.test_llm({"provider": lc["provider"], "url": lc["url"], "model": lc.get("model", ""),
+                                                             "allow_remote": lc.get("allow_remote"), "timeout": lc.get("timeout", 120)}, stored))
+    print("\nSynchronisation (ein echter Durchlauf, nur lesend)")
+    if problems[0] and not demo:
+        line("skip", "Durchlauf", "übersprungen, solange oben etwas fehlschlägt")
+    else:
+        app = App(cfg, demo, secrets, config_path)
+        if not app.configured and not demo:
+            line("fail", "Durchlauf", "; ".join(app.problems) or "nicht eingerichtet")
+        else:
+            t0 = time.time()
+
+            def step(sid, title, status, detail=""):
+                if status in ("ok", "err"):
+                    line("ok" if status == "ok" else "fail", title, detail)
+            try:
+                data = app._refresh({"mine": [], "review": [], "assigned": [], "errors": [], "me": ""}, step)
+            except Exception as e:   # auch ein Absturz ist ein Befund
+                line("fail", "Durchlauf", "%s: %s" % (type(e).__name__, e))
+            else:
+                j = data.get("jira") or {}
+                line("info", "Ergebnis", "%d eigene Einträge, %d Review, %d zugeteilt, %s in %.1f s" % (
+                    len(data["mine"]), len(data["review"]), len(data["assigned"]),
+                    "%d Stories in Arbeit" % len(j.get("stories", [])) if j.get("ok") else "Jira nicht verbunden", time.time() - t0))
+    print("\n%s" % ("Alles bereit." if not problems[0] else "%d Problem(e). Details und Hinweise stehen oben." % problems[0]))
+    return 1 if problems[0] else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="tinyops Arbeitspanel")
     ap.add_argument("--config", default=str(default_config_path()), help="Standard: ~/.config/tinyops/config.json (oder $TINYOPS_HOME)")
@@ -2085,6 +2192,7 @@ def main():
     ap.add_argument("--set-secret", metavar="NAME", help="Secret sicher speichern (%s)" % ", ".join(store.NAMES))
     ap.add_argument("--delete-secret", metavar="NAME", help="Secret löschen")
     ap.add_argument("--list-secrets", action="store_true", help="zeigt, woher welches Secret kommt (nie den Wert)")
+    ap.add_argument("--preflight", action="store_true", help="prüft Config, Secrets, GitLab, Jira und Sprachmodell und macht einen Probe-Durchlauf (Exit-Code 1 bei Problemen)")
     ap.add_argument("-v", "--verbose", action="store_true", help="Log auf DEBUG: jede Anfrage, jede Branch-Entscheidung")
     ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
     ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
@@ -2124,6 +2232,9 @@ def main():
 
     cfg = load_config(path)
     config_path = Path(path) if path else Path(args.config)
+    if args.preflight:
+        tlog.setup(cfg, level, console=False)
+        raise SystemExit(run_preflight(cfg, config_path, args.demo))
     logfile = tlog.setup(cfg, level)
     for n in migrated:
         log.info(n)
