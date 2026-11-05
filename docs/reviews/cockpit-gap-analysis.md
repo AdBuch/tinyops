@@ -120,7 +120,7 @@ Phase A der Referenz ist im Kern erreicht, Phase B teilweise, Phase C funktional
 | G15 | Branch-/WIP-Statistik | PARTIAL | Alter, «liegt schon lange», WIP-Limit |
 | G16 | Scheduled Report | MISSING | kann als geplanter Lauf ausserhalb des Panels entstehen |
 | G17 | Security-Hardening | PARTIAL | siehe Abschnitt 5 |
-| G18 | Ops-Deployment | PARTIAL | Dockerfile und `deploy/k8s.py` mit Manifesten ohne Ingress (Zugriff per Port-Forward; Prüfung des Build- und Deploy-Aufrufs in `test_k8s_cli`, kein eigener Ingress-Test); Image nie gebaut |
+| G18 | Ops-Deployment | PARTIAL | Dockerfile und `deploy/k8s.py` mit Manifesten; Ingress und NetworkPolicy nur als optionale Dateien (`deploy/k8s/*.optional.yaml`), Standard ist Port-Forward ( Prüfung des Build- und Deploy-Aufrufs in `test_k8s_cli`, kein eigener Ingress-Test); Image nie gebaut |
 | G19 | Tests | PARTIAL | 232 Unit- und Integrationstests gegen Mock-Server, Policy-Tests (nur GET bei GitHub und Sonar, Jira-Write standardmässig aus, Deploy nur mit Secret); E2E nur per Headless-Screenshot, nicht automatisiert |
 | G20 | Kostenkontrolle | PARTIAL | KI-Kontingent sichtbar (Claude, Codex, Mistral); kein Budget oder Zeitlimit je Lauf |
 
