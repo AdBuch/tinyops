@@ -34,7 +34,8 @@ EXTRA_RE = re.compile(r"^[A-Za-z0-9_@%+=:,./ \-]{0,200}$")      # keine Anführu
 DIR_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,198}$")
 PROMPT = "\0PROMPT\0"
 STATUS_ACTIVE = ("läuft",)
-STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen", "verloren")
+STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen", "verloren", "abgelaufen")
+DEFAULT_MAX_MINUTES = 60
 MAX_PROMPT = 20000
 KINDS = {
     "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic"},
@@ -124,7 +125,14 @@ def clean_agents(raw, conn_ids, existing, errors):
         extra = str(a.get("extra_args") or "").strip()
         if not EXTRA_RE.fullmatch(extra):
             errors[k + "extra_args"] = "Nur Buchstaben, Ziffern und - _ . / : , = @ + %. Keine Anführungszeichen, kein ; | & $ ` < >."
-        entry = {"id": aid, "name": str(a.get("name") or aid).strip()[:40] or aid, "kind": kind, "connection": conn, "workspace_root": root,
+        try:
+            mx = int(a.get("max_minutes") if a.get("max_minutes") not in (None, "") else DEFAULT_MAX_MINUTES)
+            if not 0 <= mx <= 1440:
+                raise ValueError
+        except (TypeError, ValueError):
+            mx = DEFAULT_MAX_MINUTES
+            errors[k + "max_minutes"] = "Zeitlimit in Minuten zwischen 0 (aus) und 1440."
+        entry = {"id": aid, "name": str(a.get("name") or aid).strip()[:40] or aid, "kind": kind, "connection": conn, "workspace_root": root, "max_minutes": mx,
                  "extra_args": extra, "cloud": True if kind != "custom" else bool(a.get("cloud", True))}
         cmd = (old.get(aid) or {}).get("command")
         if kind == "custom" and cmd:
@@ -210,6 +218,13 @@ command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }
 tmux new-session -d -s tinyops-{rid} -c {wd} "sh '$R/runner.sh' {rid}"
 echo started
 """.format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, wd=wd)
+
+
+def remote_kill_script(rid):
+    """Beendet die Sitzung samt Prozessen: erst TERM an die Prozessgruppe jedes Fensters, dann die Sitzung selbst."""
+    return ('S=tinyops-%d; for p in $(tmux list-panes -s -t "$S" -F "#{pane_pid}" 2>/dev/null); do '
+            'g=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d " "); [ -n "$g" ] && kill -TERM -- "-$g" 2>/dev/null; pkill -TERM -P "$p" 2>/dev/null; done; '
+            'sleep 1; tmux kill-session -t "$S" 2>/dev/null; true') % int(rid)
 
 
 def remote_status_script(ids):
@@ -520,6 +535,9 @@ class Service:
             active = self.store.agent_runs(status="läuft")
             if not active:
                 return
+            active = [r for r in active if not self._expire(r)]
+            if not active:
+                return
             by_conn = {}
             for r in active:
                 try:
@@ -560,6 +578,29 @@ class Service:
                         if r["note"]:
                             self.store.agent_run_update(r["id"], note="")
 
+    def _expire(self, r):
+        """Zeitlimit des Agenten überschritten? Dann beenden und als «abgelaufen» markieren. Gibt True zurück, wenn beendet."""
+        try:
+            a = self.agent(r["agent"])
+        except AgentError:
+            return False
+        mx = int(a.get("max_minutes", DEFAULT_MAX_MINUTES) or 0)
+        if not mx or not r["started"] or time.time() - r["started"] < mx * 60:
+            return False
+        try:
+            conn = self.conn_of(a)
+            if conn is None:
+                self._local_kill(r)
+            else:
+                run_remote(conn, remote_kill_script(r["id"]), timeout=20)
+        except AgentError as e:
+            log.warning("Lauf %d: Zeitlimit erreicht, Beenden fehlgeschlagen: %s", r["id"], e)
+            self.store.agent_run_update(r["id"], note="Zeitlimit erreicht, Beenden fehlgeschlagen: %s" % str(e)[:200])
+            return False
+        self.store.agent_run_update(r["id"], status="abgelaufen", finished=time.time(), note="Zeitlimit von %d min erreicht und beendet." % mx)
+        log.warning("Lauf %d (%s, Ticket %s) nach %d min beendet (Zeitlimit)", r["id"], a["id"], r["ticket"], mx)
+        return True
+
     def stop(self, run_id):
         with self.lock:
             r = self.store.agent_run(run_id)
@@ -570,7 +611,7 @@ class Service:
             if conn is None:
                 self._local_kill(r)
             else:
-                run_remote(conn, 'tmux kill-session -t tinyops-%d 2>/dev/null; true' % int(run_id), timeout=20)
+                run_remote(conn, remote_kill_script(run_id), timeout=20)
             self.store.agent_run_update(run_id, status="abgebrochen", finished=time.time(), note="Von dir gestoppt.")
 
     def _local_kill(self, r):

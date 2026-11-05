@@ -370,6 +370,14 @@ Verlangen die Approval-Regeln in GitLab noch Freigaben, zählt ein Daumen nicht.
 
 **Schritt erledigt** (✓): schliesst die aktuelle Station ab, wenn tinyops sie nicht selbst erkennen kann (zum Beispiel nach dem manuellen Test).
 
+## 4s. Abnahme am Commit, Zeitlimit, angehefteter Fokus (neu in 0.15.0)
+
+- **Abnahme:** «Getestet» gilt für genau den Commit, auf dem du getestet hast. Ein neuer Commit im MR macht sie ungültig, das Vorhaben steht wieder auf «Erneut testen».
+  Notiz und Umgebung trägst du im Detail-Panel ein; sie stehen neben der Abnahme.
+- **Unbekannt:** Was tinyops nicht lesen kann (Freigaben, ein ausgefallenes Projekt), zeigt es als unbekannt oder veraltet, nie als in Ordnung.
+- **Zeitlimit:** Jeder Agent hat ein Zeitlimit (Standard 60 min). Danach wird der Lauf beendet und steht auf «abgelaufen».
+- **Fokus anheften:** Im Panel «Als Fokus anheften». Der Fokus bleibt, bis du ihn löst; Blocker anderswo siehst du als Hinweis.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.

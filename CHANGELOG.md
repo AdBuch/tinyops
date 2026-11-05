@@ -5,6 +5,29 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.15.0]
+
+### Neu
+- **Abnahme am Commit:** «Getestet» speichert je MR/PR den Head-Commit, die Zeit und optional Notiz und Umgebung (Felder im Detail-Panel).
+  - Kommen danach neue Commits, fällt das Vorhaben zurück auf «Testen» mit «Erneut testen» und zeigt «getestet a1b2c3d4, jetzt e5f6a7b8».
+  - Auch «Fertig» mit noch offenem MR braucht eine gültige Abnahme; Punkte gibt es erst danach.
+  - Vor 0.15 gesetztes «Getestet» hat keinen Commit-Bezug und wird einmal zur Bestätigung vorgelegt.
+  - Das Panel zeigt je MR, auf welchem Stand abgenommen wurde.
+- **Unbekannt statt grün:**
+  - Sind Freigaben eines MR/PR nicht lesbar, steht «Freigabe prüfen» da, statt dass die Review-Prüfung entfällt; nach eigener Prüfung geht es mit ✓ weiter.
+  - Im Fokus-Kopf steht je Quelle (GitLab, GitHub, Jira, Sonar) der Stand oder der Fehler mit dem Alter des letzten guten Stands.
+  - Fällt GitLab oder GitHub ganz oder für ein Projekt/Repo aus, bleiben die letzten Einträge stehen, markiert als «veraltet», statt zu verschwinden.
+- **Zeitlimit für Agenten:** `max_minutes` je Agent (Standard 60, 0 = aus), einstellbar unter Einstellungen → Coding-Agenten.
+  - Danach beendet tinyops den Lauf samt Prozessen (remote die Prozessgruppen der tmux-Sitzung, lokal den Prozessbaum) und setzt «abgelaufen», ein Blocker in Fokus.
+  - Ein Wächter prüft alle 30 s, auch wenn das Panel nicht offen ist.
+- **Fokus anheften:** «Als Fokus anheften» im Detail-Panel; es gibt höchstens einen.
+  - «Jetzt dran» zeigt dann immer dieses Vorhaben, auch wenn es wartet. Blocker anderswo erscheinen als kleiner Hinweis («3 Blocker anderswo»), statt den Fokus zu wechseln.
+  - «Fokus lösen» gibt die automatische Auswahl zurück.
+- **Selbsttest der Review-Felder:** Der GitLab-Verbindungstest (und damit auch `--preflight`) prüft an einem offenen MR, ob `detailed_merge_status`, `reviewers`, `upvotes` und `/approvals` geliefert werden.
+
+### Korrekturen
+- Mehrere Meldungen gleichzeitig liegen übereinander statt aufeinander.
+
 ## [0.14.0]
 
 ### Neu

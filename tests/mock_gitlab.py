@@ -20,6 +20,7 @@ MR_B = mr(8, "Draft B", "feature-b", "1234567890abcdef", True, OLD, "me")
 MR_R = mr(9, "DLP-110 Kollege C", "feature-c", "fedcba0987654321", False, NOW, "kollege")
 MR_REL = mr(12, "Release-Merge", "release/1.5", "99887766aabbccdd", False, NOW, "me")
 MR_Z = mr(11, "Zugeteilt D", "feature/DLP-102-d", "0011223344556677", False, NOW, "kollege")
+MR_A.update(detailed_merge_status="mergeable", reviewers=[{"username": "kollege"}], upvotes=1)   # wie GitLab ab 15.6
 
 ROUTES = {
     "/api/v4/user": {"username": "me", "email": "me@x.ch"},
@@ -38,6 +39,7 @@ ROUTES = {
     "/api/v4/projects/1/merge_requests/7": MR_A,
     "/api/v4/projects/1/merge_requests/8": MR_B,
     "/api/v4/projects/1/merge_requests/9": MR_R,
+    "/api/v4/projects/1/merge_requests/7/approvals": {"approved_by": [{"user": {"username": "kollege"}}], "approvals_left": 0, "approved": True},
     "/api/v4/projects/1/pipelines": [{"status": "success", "web_url": "https://g/x/-/pipelines/1"}],
     "/api/v4/projects/1/repository/branches": [
         {"name": "main", "merged": False, "protected": True, "commit": {"author_email": "me@x.ch"}},

@@ -16,9 +16,13 @@ import server  # noqa: E402
 
 def mr(**kw):
     d = {"kind": "mr", "iid": 7, "url": "https://gl/mr/7", "pipeline": "success", "draft": False, "merge_status": "mergeable", "sonar": "OK",
-         "project_id": 1, "branch": "feature/X-1", "pipeline_url": "https://gl/p/1"}
+         "project_id": 1, "branch": "feature/X-1", "pipeline_url": "https://gl/p/1", "sha": "a" * 40}
     d.update(kw)
+    d.setdefault("ref", "%s:%s" % (d["project_id"], d["branch"]))
     return d
+
+
+OK = {"1:feature/X-1": {"sha": "a" * 40, "ts": time.time(), "note": "", "env": ""}}   # Abnahme auf dem aktuellen Commit
 
 
 def card(items=(), **kw):
@@ -28,6 +32,8 @@ def card(items=(), **kw):
 
 
 def nxt(c, **kw):
+    if c.get("manual_stage") and c.get("stage") in ("tested", "done") and "acceptance" not in kw:
+        kw["acceptance"] = OK
     d = flow.derive(c, **kw)
     return d["phase_id"], d["next"]["kind"], d["next"]["id"]
 
@@ -66,6 +72,28 @@ class Derive(unittest.TestCase):
         d = flow.derive(card([mr()], stage="tested", manual_stage=True))
         self.assertTrue(d["override"])
 
+    def test_acceptance_bound_to_commit(self):
+        c = card([mr()], stage="tested", manual_stage=True)
+        self.assertEqual(nxt(c, acceptance=OK), ("merge", "do", "merge"))
+        d = flow.derive(c, acceptance={"1:feature/X-1": {"sha": "b" * 40, "ts": time.time(), "note": "", "env": ""}})
+        self.assertEqual((d["phase_id"], d["next"]["id"]), ("test", "retest"))
+        self.assertIn("bbbbbbbb → aaaaaaaa", d["next"]["why"])
+        self.assertIn("Abnahme veraltet", d["flags"])
+        self.assertEqual(d["complete_to"], "tested")
+        d = flow.derive(c, acceptance=None)              # vor 0.15 gesetzt: ohne Commit
+        self.assertEqual(d["next"]["id"], "retest")
+        self.assertIn("Abnahme ohne Commit", d["flags"])
+        # auch «Fertig» mit offenem MR braucht eine gültige Abnahme
+        self.assertEqual(nxt(card([mr()], stage="done", manual_stage=True), acceptance={}), ("test", "do", "retest"))
+        # Blocker bleiben vorne
+        self.assertEqual(nxt(card([mr(pipeline="failed")], stage="tested", manual_stage=True), acceptance={}), ("test", "blocked", "pipeline"))
+        # gemergt (kein offener MR): keine Abnahme nötig
+        self.assertEqual(nxt(card([], stage="done", manual_stage=True), acceptance={}), ("done", "done", "done"))
+        # Ansicht für das Panel
+        v = flow.derive(c, acceptance=OK)["acceptance"]
+        self.assertEqual((v[0]["state"], v[0]["sha"]), ("ok", "aaaaaaaa"))
+        self.assertTrue(flow.derive(card([mr()]))["next"]["action"]["accept"])
+
     def test_merged_mr_disappears(self):
         self.assertEqual(nxt(card(jira_in_progress=True), seen_max=5), ("merge", "do", "close"))
         self.assertEqual(flow.derive(card(jira_in_progress=True), seen_max=5)["next"]["action"]["stage"], "done")
@@ -97,6 +125,13 @@ class Derive(unittest.TestCase):
         self.assertEqual(nxt(card([mr(reviewers=["anna"], approved=False)], stage="tested", manual_stage=True)), ("merge", "wait", "review"))
         self.assertIn("@anna", flow.derive(card([mr(reviewers=["anna"], approved=False)]))["next"]["why"])
         self.assertEqual(nxt(card([mr()])), ("test", "do", "test"))      # Quelle liefert nichts dazu: nicht blockieren
+
+    def test_unknown_is_not_green(self):
+        self.assertEqual(nxt(card([mr(reviewers=["anna"], approval_unknown=True)])), ("check", "do", "check_approval"))
+        d = flow.derive(card([mr(approval_unknown=True)]))
+        self.assertIn("nicht lesbar", d["next"]["why"])
+        self.assertEqual(d["complete_to"], "test")          # du kannst es nach eigener Prüfung weiterschieben
+        self.assertIn("veraltet", flow.derive(card([mr(outdated=True)]))["flags"])
 
     def test_github_labels(self):
         d = flow.derive(card([mr(host="github", pipeline="failed", iid=12)]))
@@ -233,6 +268,48 @@ class AppFlow(unittest.TestCase):
         r2 = self.app.flow_action("tiny", {"project_id": 1, "branch": "idea/ui-prototype", "title": "UI", "project": "dlp-core"})
         self.assertEqual(len([p for p in self.app.store.pools() if p["name"] == "dlp-core"]), 1)
         self.assertNotEqual(r["key"], r2["key"])
+
+    def test_accept_binds_current_sha_and_new_commit_makes_stale(self):
+        ov = self.app.overview()
+        r = self.app.flow_action("accept", {"id": "DLP-102", "note": "Login und Export geprüft", "env": "test-dlp-38"})
+        self.assertEqual(r["stage"], "tested")
+        self.assertEqual(r["commits"][0]["sha"], "a1b2c3d4")
+        acc = self.app.store.acceptances()["DLP-102"]
+        rec = next(iter(acc.values()))
+        self.assertEqual((rec["note"], rec["env"]), ("Login und Export geprüft", "test-dlp-38"))
+        ov = self.app.overview()
+        self.assertEqual(ov["flow"]["items"]["DLP-102"]["phase_id"], "merge")
+        # neuer Commit im MR
+        for it in self.app.cache["mine"]:
+            if it.get("iid") == 38:
+                it["sha"] = "ffffeeee00001111"
+        ov = self.app.overview()
+        d = ov["flow"]["items"]["DLP-102"]
+        self.assertEqual((d["phase_id"], d["next"]["id"]), ("test", "retest"))
+        with self.assertRaises(server.UserError):
+            self.app.flow_action("accept", {"id": "1:feature/proxo-mapping"})
+
+    def test_sources_and_last_good_data_on_outage(self):
+        ov = self.app.overview()
+        self.assertEqual({s["id"]: s["ok"] for s in ov["sources"]}, {"gitlab": True, "jira": True, "sonar": True})
+        prev_mine = [dict(i) for i in self.app.cache["mine"]]
+        data = {"mine": [i for i in prev_mine if i["project_id"] != 1], "review": [], "assigned": [], "errors": ["dlp-core: HTTP 503"], "gl_failed_pids": [1]}
+        self.app._keep_last_good(data)
+        kept = [i for i in data["mine"] if i.get("outdated")]
+        self.assertEqual(len(kept), len([i for i in prev_mine if i["project_id"] == 1]))
+        self.assertTrue(all(i["outdated_since"] for i in kept))
+        data = {"mine": [], "review": [], "assigned": [], "errors": ["GitLab nicht erreichbar"], "gl_failed_all": True}
+        self.app._keep_last_good(data)
+        self.assertTrue(data["review"] and all(i["outdated"] for i in data["review"]))
+
+    def test_pin(self):
+        self.app.overview()
+        self.app.flow_action("pin", {"id": "DLP-104"})
+        self.assertEqual(self.app.overview()["flow"]["pinned"], "DLP-104")
+        self.app.flow_action("pin", {"id": None})
+        self.assertIsNone(self.app.overview()["flow"]["pinned"])
+        with self.assertRaises(server.UserError):
+            self.app.flow_action("pin", {"id": "NOPE-1"})
 
     def test_stage_change_gives_points(self):
         self.app.overview()

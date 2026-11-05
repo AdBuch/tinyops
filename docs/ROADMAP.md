@@ -13,7 +13,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | Agenten-Weg | **SSH/tmux härten** | Worktree je Lauf, Zeitlimit, Datenklasse, optional eigener Agent-Benutzer; kein CI-Gateway |
 | Lokale Agenten | **Goose + Ollama, opencode, eigener Befehl, evtl. LangGraph** | Vorlagen für Goose und opencode; LangGraph und Ähnliches über «eigener Befehl» |
 | Projectron | **eigener MCP-Server (TypeScript, mit Frontend)** | tinyops liefert Zeitentwürfe und schreibt nach Bestätigung an die Wrapper-API des MCP (0.19); Vertrag mit dem MCP noch abzustimmen |
-| Betrieb | **lokal bis 0.20**, danach Cluster/anderes Netz mit VPN fürs Handy | nichts Cluster-Spezifisches vor 0.20; Abschnitt «Nach 0.20» |
+| Betrieb | **eigener Rechner** (Entscheid 2026-11-05, ersetzt «Cluster»); möglicherweise später zentrale Datenbank und/oder mehrere Instanzen als Agenten-Cluster | nichts Cluster-Spezifisches vor 0.20; Abschnitt «Nach 0.20» |
 | Confluence | **keine Priorität** | nicht im Plan |
 
 ## Überblick
@@ -156,7 +156,17 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 - Umbau auf andere Technik
 - Team-Betrieb
 
-## Nach 0.20: Betrieb im Cluster oder anderem Netz, Handy über VPN
+## Nach 0.20: eigener Rechner, zentrale Datenbank, Agenten-Cluster
+
+**Entscheid 2026-11-05:** tinyops bleibt auf deinem Rechner. Denkbar sind später eine zentrale Datenbank und mehrere Instanzen, die als Agenten-Cluster arbeiten.
+Was das bedeutet, und was bis 0.20 schon darauf vorbereitet:
+- **Zentrale Datenbank:** Heute liegt alles in einer SQLite-Datei (`tinyops.db`), Zugriffe laufen über `links.Store`. Eine zweite Implementierung des Stores (PostgreSQL) wäre der Weg; die Tabellen sind schlicht (keine Joins über Systeme).
+  Vorbereitung bis 0.20: neue Tabellen nur über den Store, keine SQLite-Besonderheiten in neuem Code; Audit (0.17) mit Instanz-ID je Eintrag.
+- **Mehrere Instanzen als Agenten-Cluster:** Heute startet eine Instanz Agenten per SSH. Mehrere Instanzen bräuchten eine gemeinsame Warteschlange (in der zentralen DB) und ein «Claim» je Lauf, damit kein Lauf doppelt startet (Lease aus F-24).
+  Vorbereitung bis 0.20: Lauf-IDs und Run-Dateien schon eindeutig je Instanz (`<instanz>-<nr>`), Zustände nur in der DB, nicht im Speicher.
+- **Handy über VPN:** Mit Server auf deinem Rechner geht das über den bestehenden Zugriffstoken und eine Freigabe der Adresse im VPN; der Rechner muss dann laufen.
+
+### Frühere Überlegung: Betrieb im Cluster oder anderem Netz, Handy über VPN
 
 Wichtig zur Architektur: **tinyops spricht mit allen Systemen vom Server aus, nicht aus dem Browser.** Der Browser redet nur mit tinyops; einzige Ausnahme ist das Mistral-Lesezeichen.
 Wer tinyops verschiebt, verschiebt also auch alle Zugriffe:

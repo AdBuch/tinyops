@@ -156,6 +156,19 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 11.8 | ✓ «Schritt erledigt» an einem Ticket in «Testen» | Station «Mergen», XP-Meldung; im Panel «Automatisch» setzt es zurück |
 | 11.9 | Log auf DEBUG während eines Abgleichs | Nur GET-Anfragen an GitHub und an `…/approvals` in GitLab |
 
+## 12. Abnahme, Unbekannt, Zeitlimit, Fokus (ab 0.15.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 12.1 | MR grün und freigegeben, im Panel Notiz eintragen, «Getestet» | Station Mergen; Panel zeigt «MR !N auf <sha>», Zeit, Notiz |
+| 12.2 | Danach einen Commit auf den Branch pushen, «Neu laden» | «Erneut testen», «getestet <alt>, jetzt <neu>», Flag «Abnahme veraltet» |
+| 12.3 | Vorhaben, das vor 0.15 auf «Getestet» stand | einmal «Erneut testen» mit «ohne Bezug auf einen Commit» |
+| 12.4 | Einstellungen → GitLab → Verbindung testen | Schritt «Review-Felder» grün; sonst Warnung mit fehlenden Feldern |
+| 12.5 | Projekt, dessen Freigaben dein Token nicht lesen darf | «Freigabe prüfen» statt «Manuell testen» |
+| 12.6 | VPN trennen, «Neu laden» | Fokus-Kopf: «GitLab: Fehler, Stand vor X min»; Einträge bleiben, markiert «veraltet» |
+| 12.7 | Agent mit Zeitlimit 1 min und einer langen Aufgabe starten, Panel schliessen | Nach gut einer Minute (Wächter alle 30 s) «abgelaufen», auf dem Zielhost keine Prozesse und keine tmux-Sitzung mehr |
+| 12.8 | «Als Fokus anheften», dann eine rote Pipeline an einem anderen MR | «Jetzt dran» bleibt beim Fokus; Hinweis «1 Blocker anderswo» öffnet den Blocker |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

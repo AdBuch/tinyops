@@ -93,6 +93,13 @@ class GitLabTests(unittest.TestCase):
         self.assertIn("19.2.5", step(r, "version")["detail"])
         self.assertEqual(step(r, "project-1")["status"], "ok")
 
+    def test_review_fields_checked(self):
+        r = settings.test_gitlab({"url": self.url, "token": "secret", "projects": [1]}, nostored)
+        st = next(x for x in r["steps"] if x["id"] == "mrfields")
+        self.assertEqual(st["status"], "ok", st)
+        self.assertIn("detailed_merge_status, reviewers, upvotes", st["detail"])
+        self.assertIn("Freigaben lesbar", st["detail"])
+
     def test_wrong_token(self):
         r = settings.test_gitlab({"url": self.url, "token": "falsch"}, nostored)
         self.assertFalse(r["ok"])

@@ -38,6 +38,8 @@ def mr_label(m):
 
 def _approval(m):
     """(Freigabe da?, Reviewer zugewiesen?) oder None, wenn die Quelle es nicht liefert."""
+    if m.get("approval_unknown"):
+        return "unknown"
     if m.get("reviewers") is None and m.get("approved") is None:
         return None
     ok = bool(m.get("approved") or m.get("approved_by") or (m.get("upvotes") or 0) > 0)
@@ -65,7 +67,7 @@ def _mr_rank(m):
     if (m.get("merge_status") or "") in ("discussions_not_resolved", "not_approved", "approvals_syncing"):
         return 3
     ap = _approval(m)
-    if ap is not None and not ap[0]:
+    if ap == "unknown" or (ap is not None and not ap[0]):
         return 3
     return 4
 
@@ -74,7 +76,26 @@ def _step(kind, sid, label, why, owner="me", **action):
     return {"kind": kind, "id": sid, "label": label, "why": why, "owner": owner, "action": action}
 
 
-def derive(card, runs=(), checklist=(), seen_max=None, now=None):
+def _when(ts):
+    return time.strftime("%d.%m. %H:%M", time.localtime(ts)) if ts else "?"
+
+
+def acceptance_view(mrs, acc):
+    """Je offenem MR/PR: getestet auf welchem Commit, und ob das noch der aktuelle Stand ist."""
+    out = []
+    for m in mrs:
+        rec = (acc or {}).get(m.get("ref") or "")
+        cur = m.get("sha") or ""
+        if not rec:
+            out.append({"ref": m.get("ref", ""), "label": mr_label(m), "state": "missing", "sha": "", "cur": cur[:8], "ts": 0, "note": "", "env": ""})
+            continue
+        stale = bool(rec["sha"] and cur and rec["sha"] != cur) or not rec["sha"]
+        out.append({"ref": m.get("ref", ""), "label": mr_label(m), "state": "stale" if stale else "ok", "sha": (rec["sha"] or "")[:8], "cur": cur[:8],
+                    "ts": rec["ts"], "note": rec.get("note", ""), "env": rec.get("env", "")})
+    return out
+
+
+def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None):
     """Station und nächster Schritt einer Karte. Gibt {phase, phase_id, override, next, flags} zurück."""
     now = now or time.time()
     items = [x for x in card.get("items") or [] if x.get("kind") in ("mr", "branch", "assigned")]
@@ -85,6 +106,8 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
     flags = []
     if not key and not card.get("idea_id"):
         flags.append("ohne Ticket")
+    if any(x.get("outdated") for x in items):
+        flags.append("veraltet")
 
     # -- aus den Daten
     if card.get("idea_id"):
@@ -115,6 +138,10 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
         elif ms == "discussions_not_resolved":
             data = 4
             nxt = _step("do", "threads", "Kommentare klären", "Im %s sind Diskussionen offen." % label, url=url)
+        elif ap == "unknown":
+            data = 4
+            nxt = _step("do", "check_approval", "Freigabe prüfen", "Freigaben von %s sind nicht lesbar (Recht fehlt?). Im %s nachsehen, dann «Schritt erledigt»." % (label, what),
+                        url=url)
         elif ap is not None and not ap[1] and not ap[0]:
             data = 4
             nxt = _step("do", "reviewer", "Reviewer zuweisen", "%s hat noch keinen Reviewer. Ohne Review kein Merge." % label, url=url)
@@ -169,13 +196,29 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
         elif manual == 0 and data <= 2 and not mrs:
             phase = 0
 
+    # -- Abnahme gilt nur für den Commit, auf dem getestet wurde
+    acc_view = acceptance_view(mrs, acceptance) if (manual is not None and manual >= 6 and mrs) else []
+    bad = [a for a in acc_view if a["state"] != "ok"]
+    if bad:
+        a = bad[0]
+        phase = 5
+        if a["state"] == "missing":
+            why = "%s ist als getestet markiert, aber ohne Bezug auf einen Commit. Bestätige den getesteten Stand (aktuell %s)." % (a["label"], a["cur"] or "?")
+        else:
+            why = "Neue Commits in %s seit deinem Test am %s (%s → %s). Erneut testen, dann bestätigen." % (a["label"], _when(a["ts"]), a["sha"] or "?", a["cur"] or "?")
+        flags.append("Abnahme veraltet" if a["state"] == "stale" else "Abnahme ohne Commit")
+        if nxt["kind"] != "blocked":
+            nxt = _step("do", "retest", "Erneut testen", why, accept=True, url=next((m.get("url", "") for m in mrs if m.get("ref") == a["ref"]), ""))
+    elif phase == 5 and nxt["id"] == "test":
+        nxt["action"]["accept"] = True
+
     # -- Agenten
     latest = runs[0] if runs else None
     if latest and phase < 7:
         if latest["status"] == "läuft":
             nxt = _step("wait", "agent", "Agent arbeitet", "%s seit %s." % (latest.get("agent_name", "Agent"), _dur(now - (latest.get("started") or now))),
                         owner="agent", run=latest["id"])
-        elif latest["status"] in ("fehlgeschlagen", "verloren") and nxt["kind"] != "blocked":
+        elif latest["status"] in ("fehlgeschlagen", "verloren", "abgelaufen") and nxt["kind"] != "blocked":
             nxt = _step("blocked", "agent_failed", "Agent-Lauf prüfen", "%s: %s." % (latest.get("agent_name", "Agent"), latest["status"]), run=latest["id"])
         elif latest["status"] == "fertig" and phase <= 2:
             nxt = _step("do", "agent_result", "Ergebnis des Agenten prüfen", "%s ist fertig. Log ansehen, dann MR erstellen." % latest.get("agent_name", "Agent"),
@@ -191,7 +234,8 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None):
 
     can = next_stage(phase) if phase < 7 and not card.get("idea_id") and not (items and not key) else None
     return {"phase": phase, "phase_id": PHASES[phase][0], "override": manual is not None and manual != data, "data_phase": data, "complete_to": can,
-            "next": nxt, "flags": flags, "checks": {"done": len(checklist) - len(open_checks), "total": len(checklist)}}
+            "next": nxt, "flags": flags, "checks": {"done": len(checklist) - len(open_checks), "total": len(checklist)},
+            "acceptance": acc_view or (acceptance_view(mrs, acceptance) if acceptance else [])}
 
 
 def _dur(s):
@@ -237,10 +281,11 @@ def build(cards, store, runs_by_ticket, complete, goal=3, now=None):
     now = now or time.time()
     seen = store.flow_states()
     checks = store.checklists()
+    accs = store.acceptances()
     out = []
     for c in cards:
         cid = c["id"]
-        d = derive(c, runs_by_ticket.get(cid, []), checks.get(cid, []), (seen.get(cid) or {}).get("max_phase"), now)
+        d = derive(c, runs_by_ticket.get(cid, []), checks.get(cid, []), (seen.get(cid) or {}).get("max_phase"), now, accs.get(cid))
         d["prio"] = priority(c, d)
         d["checklist"] = [{"id": x["id"], "text": x["text"], "done": bool(x["done"])} for x in checks.get(cid, [])]
         out.append((c, d))

@@ -405,7 +405,47 @@ class _FlowMixin:
             c.execute("delete from checklist where id=?", (cid,))
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin):
+class _AcceptMixin:
+    """Manuelle Abnahme je Vorhaben und MR/PR, gebunden an den Head-Commit zum Zeitpunkt der Abnahme."""
+    def accept_set(self, key, refs, note="", env="", now=None):
+        """refs: [(ref, sha)]. Überschreibt frühere Abnahmen derselben MRs."""
+        now = now or time.time()
+        note = " ".join(str(note or "").split())[:500]
+        env = " ".join(str(env or "").split())[:120]
+        with self._conn(True) as c:
+            for ref, sha in refs:
+                c.execute("insert into acceptance(key, ref, sha, ts, note, env) values(?,?,?,?,?,?) on conflict(key, ref) do update set "
+                          "sha=excluded.sha, ts=excluded.ts, note=excluded.note, env=excluded.env", (key, ref, sha or "", now, note, env))
+        return len(refs)
+
+    def acceptances(self):
+        with self._conn() as c:
+            if c is None:
+                return {}
+            out = {}
+            for r in c.execute("select * from acceptance"):
+                out.setdefault(r["key"], {})[r["ref"]] = dict(r)
+            return out
+
+
+class _PinMixin:
+    """Höchstens ein angehefteter Fokus."""
+    def pin_get(self):
+        with self._conn() as c:
+            if c is None:
+                return None
+            r = c.execute("select key from pin where id=1").fetchone()
+            return r["key"] if r else None
+
+    def pin_set(self, key):
+        with self._conn(True) as c:
+            if key:
+                c.execute("insert into pin(id, key, ts) values(1,?,?) on conflict(id) do update set key=excluded.key, ts=excluded.ts", (str(key)[:300], time.time()))
+            else:
+                c.execute("delete from pin where id=1")
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -438,6 +478,9 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin):
                 conn.execute("create table if not exists flow_events(id integer primary key autoincrement, ref text not null default '', key text not null,"
                              " title text not null default '', kind text not null, phase integer not null, xp integer not null, text text not null default '', ts real not null)")
                 conn.execute("create index if not exists flow_events_ref on flow_events(ref)")
+                conn.execute("create table if not exists acceptance(key text not null, ref text not null, sha text not null, ts real not null,"
+                             " note text not null default '', env text not null default '', primary key(key, ref))")
+                conn.execute("create table if not exists pin(id integer primary key check (id = 1), key text not null, ts real not null)")
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
                              " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
                 yield conn

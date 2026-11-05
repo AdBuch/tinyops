@@ -523,6 +523,9 @@
   .frow.k-do .fgo:hover, .frow.k-blocked .fgo:hover { background: var(--kc); color: var(--surface); }
   .fgo.ghost { border-color: transparent; background: transparent; color: var(--quiet); }
   .fempty { padding: 14px 16px; color: var(--quiet); }
+  .fsrc { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--quiet); } .fsrc .ok::before { content: '● '; color: var(--ok); } .fsrc .bad { color: var(--bad); } .fsrc .bad::before { content: '● '; }
+  .hero button.fblk { justify-self: start; color: var(--bad); padding: 0; font-weight: 600; }
+  .fxacc { display: flex; gap: 8px; width: 100%; } .fxacc input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
   .fkeys { color: var(--quiet); font-size: 12px; } .fkeys kbd { font: 11.5px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface); }
 
   /* Spielstand und Seitenleiste */
@@ -741,9 +744,13 @@ async function api(method, path, body) {
   return data;
 }
 
+function stackToast(t) {   // mehrere Meldungen übereinander statt aufeinander
+  const n = document.querySelectorAll('.toast').length;
+  t.style.bottom = (70 + n * 52) + 'px';
+}
 function toast(msg) {
   const t = document.createElement('div');
-  t.className = 'toast'; t.textContent = msg;
+  t.className = 'toast'; t.textContent = msg; stackToast(t);
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3200);
 }
@@ -1435,7 +1442,7 @@ const post = (path, body) => api('POST', path, body);
 
 // ---- Agenten auf Karten
 const AG = () => (state && state.agents) || { enabled: false, agents: [], runs: [], projects: [] };
-const AG_ST = { 'zugewiesen': 'tk', 'läuft': 'agent', 'fertig': 'sq-ok', 'fehlgeschlagen': 'sq-bad', 'abgebrochen': 'sq-none', 'verloren': 'warn' };
+const AG_ST = { 'zugewiesen': 'tk', 'läuft': 'agent', 'fertig': 'sq-ok', 'fehlgeschlagen': 'sq-bad', 'abgebrochen': 'sq-none', 'verloren': 'warn', 'abgelaufen': 'warn' };
 const agCtx = {};
 function agentRow(ticket, key, title, url, items) {
   const ag = AG();
@@ -2193,11 +2200,12 @@ function renderAgentCfg() {
       <label class="sm">Verbindung<select data-ag="${i}" data-f="connection">${conOpts(a.connection || 'local')}</select></label>
       <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/adrian/work"></label>
       <label class="sm">Zusätzliche Argumente<input type="text" data-ag="${i}" data-f="extra_args" value="${esc(a.extra_args || '')}" placeholder="--model opus"></label>
+      <label class="sm" title="Danach wird der Lauf beendet (Prozesse und tmux-Sitzung). 0 = kein Limit">Zeitlimit in Minuten<input type="number" min="0" max="1440" data-ag="${i}" data-f="max_minutes" value="${esc(a.max_minutes ?? 60)}"></label>
     </div>
     ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud === false ? '' : 'checked'}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
     <div class="row"><button data-agtest="${i}">Testen</button><button data-agdel="${i}">Entfernen</button><span class="quiet small">Prüft Verbindung, tmux, Arbeitsordner und Programm. Gespeichert wird erst mit «Speichern».</span></div>
     <div id="ag-res-${i}"></div>
-    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div></div>`).join('')
+    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div></div>`).join('')
     : '<div class="quiet small" style="margin-bottom:8px">Noch kein Agent.</div>';
 }
 $('viewSettings').addEventListener('input', ev => {
@@ -2312,6 +2320,7 @@ const ACT = {
   threads: ['MR öffnen', 'ext'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
   agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
+  retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'],
   do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };
 const OWNER = { me: '', ci: 'gear', others: 'users', agent: 'bot', none: '' };
@@ -2388,29 +2397,33 @@ function fRow(e) {
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
     <div class="fbtns">${doneBtn(e)}${goBtn(e)}</div></div>`;
 }
-function heroHtml(e) {
+function heroHtml(e, g) {
   if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div></section>`;
   const n = e.d.next, url = eUrl(e);
-  const lead = n.kind === 'blocked' ? `${ic('alert')} Blockiert: zuerst das` : e.t === 'review' ? `${ic('users')} Jemand wartet auf dich` : 'Jetzt dran';
+  const pin = g && g.pinned;
+  const lead = pin ? `Dein Fokus${n.kind === 'blocked' ? ' · blockiert' : n.kind === 'wait' ? ' · wartet' : ''}` : n.kind === 'blocked' ? `${ic('alert')} Blockiert: zuerst das` : e.t === 'review' ? `${ic('users')} Jemand wartet auf dich` : 'Jetzt dran';
+  const bl = pin && g.blockers.length ? `<button class="quiet-btn fblk" data-fopen="${esc(g.blockers[0].id)}" title="${esc(g.blockers.map(b => eKey(b) + ': ' + b.d.next.label).join('\n'))}">${ic('alert')} ${g.blockers.length} Blocker anderswo</button>` : '';
   return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
     ${trackHtml(e.d, true)}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
       <div class="hbtns">${goBtn(e, 'primary big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
-        <button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button></div></div>
+        ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
   </section>`;
 }
 function focusGroups() {
   const all = focusEntries();
   const act = all.filter(e => ['do', 'blocked'].includes(e.d.next.kind)).sort((a, z) => z.prio - a.prio);
   const cand = act.filter(e => !(e.t === 'card' && (e.c.idea_id || (e.d.phase === 0 && !e.c.jira_in_progress))));
-  const hero = cand.find(e => !fSkip.has(e.id)) || (cand.length && fSkip.size ? (fSkip.clear(), cand[0]) : null);
+  const pinned = state.flow.pinned && all.find(e => e.id === state.flow.pinned);
+  const hero = pinned || cand.find(e => !fSkip.has(e.id)) || (cand.length && fSkip.size ? (fSkip.clear(), cand[0]) : null);
   const rest = x => !hero || x.id !== hero.id;
   return {
     hero, all,
     mine: cand.filter(e => e.t === 'card' && rest(e)),
     reviews: cand.filter(e => e.t === 'review' && rest(e)),
-    wait: all.filter(e => e.d.next.kind === 'wait'),
+    wait: all.filter(e => e.d.next.kind === 'wait' && rest(e)), pinned: !!pinned,
+    blockers: pinned ? act.filter(e => e.d.next.kind === 'blocked' && rest(e)) : [],
     plan: act.filter(e => !cand.includes(e)),
     done: all.filter(e => e.d.next.kind === 'done').length,
   };
@@ -2428,13 +2441,20 @@ function fAlerts() {
   if (state.jira && state.jira.ok === false) out.push(['Jira: ' + (state.jira.error || 'antwortet nicht'), 'Einstellungen']);
   return out.filter(([m]) => !fSkip.has('al:' + m)).map(([m, b]) => `<div class="falert" role="status">${ic('alert')}<span>${esc(m)}</span><button data-fset="1">${esc(b)}</button><button class="quiet-btn" data-falx="${esc(m)}" title="Bis zum Schliessen des Tabs ausblenden" aria-label="Ausblenden">${ic('x')}</button></div>`).join('');
 }
+function fSources() {
+  const src = state.sources || [];
+  if (!src.length) return '';
+  const ago = ts => { const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60)); return m < 1 ? 'gerade' : m < 120 ? `vor ${m} min` : `vor ${Math.round(m / 60)} h`; };
+  return `<div class="fsrc" aria-label="Stand je Quelle">${src.map(x => x.ok ? `<span class="ok" title="${esc(x.name)}: letzter Abgleich erfolgreich">${esc(x.name)} ${ago(x.ts)}</span>`
+    : `<span class="bad" title="${esc(x.name)}: letzter Abgleich fehlgeschlagen. Angezeigt wird der Stand vom letzten Erfolg, als «veraltet» markiert.">${esc(x.name)}: Fehler${x.last_ok ? ', Stand ' + ago(x.last_ok) : ''}</span>`).join('')}</div>`;
+}
 function renderFocus() {
   if (!state) return;
   const box = $('fList');
   if (!state.flow) { box.innerHTML = fAlerts() + (state.configured ? '<div class="flist"><div class="fempty">lädt …</div></div>' : ''); $('fHero').innerHTML = ''; renderRail(); return; }
   const g = focusGroups();
-  $('fAlerts').innerHTML = fAlerts();
-  $('fHero').innerHTML = heroHtml(g.hero);
+  $('fAlerts').innerHTML = fAlerts() + fSources();
+  $('fHero').innerHTML = heroHtml(g.hero, g);
   box.innerHTML = fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', g.mine, g.hero ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
     + fGroup('Andere warten auf dich', 'Reviews und dir zugeteilte MRs', g.reviews, '')
     + fGroup('Läuft gerade', 'CI, Review, Agent: nichts zu tun, nur im Blick', g.wait, '')
@@ -2464,7 +2484,7 @@ function eventText(r) {
   if (r.kind === 'agent') return `${r.key}: ${r.text}`;
   return `${r.key} ${r.phase === 7 ? 'ist fertig' : 'ist bei ' + ((ph[r.phase] || {}).label || '?')}`;
 }
-function xpToast(r) { const t = document.createElement('div'); t.className = 'toast xpt'; t.textContent = `+${r.xp} XP · ${eventText(r)}`; document.body.appendChild(t); setTimeout(() => t.remove(), 3400); }
+function xpToast(r) { const t = document.createElement('div'); t.className = 'toast xpt'; t.textContent = `+${r.xp} XP · ${eventText(r)}`; stackToast(t); document.body.appendChild(t); setTimeout(() => t.remove(), 3400); }
 function burstAt(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches || !el || !el.getBoundingClientRect) return;
   const r = el.getBoundingClientRect(), b = document.createElement('div');
@@ -2517,10 +2537,12 @@ function renderFx() {
   const e = focusEntries().find(x => x.id === FXID);
   if (!e) { closeFx(); return; }
   const n = e.d.next, url = eUrl(e);
-  const keep = $('fxCkNew') ? { v: $('fxCkNew').value, f: document.activeElement === $('fxCkNew') } : null;
+  const keep = ['fxCkNew', 'fxNote', 'fxEnv'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
   const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
-    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${doneBtn(e, true)}</div></div>`;
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${doneBtn(e, true)}</div>
+      ${(n.action || {}).accept ? `<div class="fxacc"><input id="fxNote" maxlength="500" placeholder="Was hast du getestet? (optional)" autocomplete="off"><input id="fxEnv" maxlength="120" placeholder="Umgebung (optional)" autocomplete="off"></div>` : ''}</div>
+    ${accHtml(e.d.acceptance || [])}`;
   if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
@@ -2533,13 +2555,14 @@ function renderFx() {
     else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
     if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;
     const foot = [];
+    if (!c.idea_id) foot.push(state.flow.pinned === c.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(c.id)}">${ic('chevron2')} Als Fokus anheften</button>`);
     if (c.idea_id) foot.push('<button data-fxboard="1">Im Board einplanen</button>');
     else foot.push('<button data-fxboard="1">Im Board zeigen</button>');
     if (c.local && !c.idea_id) foot.push(`<button data-fxdel="1">Aufgabe löschen</button>`);
     body += `<div class="fxfoot">${foot.join('')}${c.pools.length ? `<span class="small quiet">Kategorie: ${c.pools.map(p => esc(p.name)).join(', ')}</span>` : ''}</div>`;
   }
   $('fx').innerHTML = `<div class="fxhead">${head}</div><div class="fxbody">${body}</div>`;
-  if (keep) { $('fxCkNew').value = keep.v; if (keep.f) $('fxCkNew').focus(); }
+  keep.forEach(k => { const el = $(k.id); if (el) { el.value = k.v; if (k.f) el.focus(); } });
 }
 function reviewChips(x) {
   if (!x.iid || (x.reviewers == null && x.approved == null)) return '';
@@ -2551,6 +2574,14 @@ function reviewChips(x) {
   else if (!by.length) out.push('<span class="chip warn">kein Reviewer</span>');
   if (x.approvals_left) out.push(`<span class="chip warn" title="Regeln im Projekt">noch ${x.approvals_left} Freigabe${x.approvals_left === 1 ? '' : 'n'}</span>`);
   return out.join('');
+}
+function accHtml(list) {
+  if (!list.length) return '';
+  const when = ts => ts ? new Date(ts * 1000).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div><h3>Abnahme <small>gilt nur für den Commit, auf dem getestet wurde</small></h3>${list.map(a => a.state === 'ok'
+    ? `<div class="small"><span class="chip sq-ok">${ic('check')} ${esc(a.label)} auf ${esc(a.sha)}</span> ${esc(when(a.ts))}${a.env ? ' · ' + esc(a.env) : ''}${a.note ? ' · ' + esc(a.note) : ''}</div>`
+    : a.state === 'stale' ? `<div class="small"><span class="chip warn">${esc(a.label)}: getestet ${esc(a.sha)}, jetzt ${esc(a.cur)}</span> Test vom ${esc(when(a.ts))} gilt nicht mehr</div>`
+    : `<div class="small"><span class="chip warn">${esc(a.label)}: noch nicht abgenommen</span> aktueller Stand ${esc(a.cur || '?')}</div>`).join('')}</div>`;
 }
 function fxItem(c, x) {
   const ms = MSTAT[x.merge_status];
@@ -2581,6 +2612,12 @@ async function doNext(e, btn) {
     if (a.tiny) { const r = await post('/api/flow/tiny', a.tiny); toast(`${r.key} angelegt (Kategorie ${r.pool}). Der Branch hängt jetzt daran.`); burstAt(btn); closeFx(); await load(); return; }
     if (n.id === 'plan') { setView('board'); return; }
     if (a.check) { await fCheck(a.check, true, btn); return; }
+    if (a.accept && e.t === 'card') {
+      const note = FXID === e.id && $('fxNote') ? $('fxNote').value : '', envv = FXID === e.id && $('fxEnv') ? $('fxEnv').value : '';
+      const r = await post('/api/flow/accept', { id: e.c.id, note, env: envv });
+      toast(`Abgenommen auf ${r.commits.map(c => c.sha).join(', ') || 'dem aktuellen Stand'}. Neue Commits machen das ungültig.`);
+      burstAt(btn); await load(); return;
+    }
     if (a.report) {
       const r = await api('GET', `/api/sonar/report?project_id=${encodeURIComponent(a.report.project_id)}&iid=${encodeURIComponent(a.report.iid ?? '')}&branch=${encodeURIComponent(a.report.branch || '')}`);
       await copyText(r.text, 'Sonar-Report'); toast(`Report kopiert: ${r.issues} Findings. Einem Agenten geben oder selbst abarbeiten.`); return;
@@ -2612,6 +2649,8 @@ document.addEventListener('click', async ev => {
   const go = t.closest('[data-fgo]');
   if (go) { ev.stopPropagation(); const e = fEntry(go.dataset.fgo); if (e) await doNext(e, go); return; }
   const op = t.closest('[data-fopen]'); if (op) { openFx(op.dataset.fopen); return; }
+  const pn = t.closest('[data-fpin]');
+  if (pn) { ev.stopPropagation(); try { await post('/api/flow/pin', { id: pn.dataset.fpin || null }); toast(pn.dataset.fpin ? 'Als Fokus angeheftet' : 'Fokus gelöst'); await load(); } catch (err) { toast(err.message); } return; }
   const dn = t.closest('[data-fdone]');
   if (dn) { ev.stopPropagation(); const e = fEntry(dn.dataset.fdone); if (!e) return;
     try { const r = await post('/api/flow/complete', { id: e.c.id, phase: e.d.phase }); burstAt(dn); toast(`Weiter zu «${STAGE_LABEL[r.stage] || r.stage}»`); await load(); } catch (err) { toast(err.message); } return; }

@@ -186,6 +186,7 @@ class Client:
                 item["reviewers"] = sorted(set(item["reviewers"]) | set(ok) | set(changes))
             except GitHubError as e:
                 log.debug("Reviews %s#%s: %s", full, number, e)
+                item["approval_unknown"] = True
             item["upvotes"] = self.thumbs(full, number)
         return item
 
@@ -273,6 +274,7 @@ class Client:
         except GitHubError as e:
             step("gh-user", "Bei GitHub anmelden", "err", str(e))
             errors.append(str(e))
+            sink["gh_failed_all"] = True
             return
         step("gh-user", "Bei GitHub anmelden", "ok", me)
         ident = dict(ident, names=set(ident["names"]) | {me.lower()})
@@ -287,6 +289,7 @@ class Client:
             except GitHubError as e:
                 step(sid, "GitHub " + full, "err", str(e))
                 errors.append("GitHub %s: %s" % (full, e))
+                sink.setdefault("gh_failed_repos", []).append(full)
         for full in repos:
             step("gh-" + full, "GitHub " + full, "wait")
         with ThreadPoolExecutor(max_workers=3) as pool:

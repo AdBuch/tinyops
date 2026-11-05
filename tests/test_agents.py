@@ -243,6 +243,22 @@ class Remote(unittest.TestCase):
         self.assertEqual(svc.store.agent_run(r1)["status"], "abgebrochen")
         self.assertNotEqual(subprocess.run(["tmux", "has-session", "-t", "tinyops-%d" % r1], capture_output=True).returncode, 0)
 
+    def test_time_limit_kills_remote_run(self):
+        env = Env(self)
+        c = cfg(env, command="sleep 300 & sleep 300; wait")
+        c["agents"][0]["max_minutes"] = 1
+        svc = service(env, c)
+        rid = svc.assign("a1", "T-1", 7, "", "t")
+        svc.start(rid, "x")
+        svc.store.agent_run_update(rid, started=time.time() - 120)      # vor zwei Minuten gestartet
+        svc.poll(force=True)
+        r = svc.store.agent_run(rid)
+        self.assertEqual(r["status"], "abgelaufen")
+        self.assertIn("Zeitlimit von 1 min", r["note"])
+        self.assertNotEqual(subprocess.run(["tmux", "has-session", "-t", "tinyops-%d" % rid], capture_output=True).returncode, 0)
+        out = subprocess.run(["pgrep", "-f", "sleep 300"], capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, [], "Prozesse des Agenten laufen nach dem Zeitlimit weiter")
+
     def test_missing_workspace_and_ssh_failure(self):
         env = Env(self)
         c = cfg(env, command="true")
@@ -329,6 +345,31 @@ class Local(unittest.TestCase):
         pid = int((env.d / "runs" / ("%d.pid" % r2)).read_text())
         gone = wait_for(lambda: not Path("/proc/%d" % pid).exists() or "Z" in Path("/proc/%d/stat" % pid).read_text().split(")")[-1][:3])
         self.assertTrue(gone, "Kindprozess läuft nach «Stoppen» weiter")
+
+    def test_local_time_limit(self):
+        env = Env(self)
+        ws = env.d / "lws"
+        (ws / "repo").mkdir(parents=True)
+        c = cfg(env, command="sleep 300", conn="local")
+        c["agents"][0].update(workspace_root=str(ws), max_minutes=1)
+        svc = service(env, c)
+        rid = svc.assign("a1", "T-1", 7, "", "t")
+        svc.start(rid, "x")
+        wait_for(lambda: (env.d / "runs" / ("%d.pid" % rid)).exists())
+        pid = int((env.d / "runs" / ("%d.pid" % rid)).read_text())
+        svc.store.agent_run_update(rid, started=time.time() - 61)
+        svc.poll(force=True)
+        self.assertEqual(svc.store.agent_run(rid)["status"], "abgelaufen")
+        gone = wait_for(lambda: not Path("/proc/%d" % pid).exists() or "Z" in Path("/proc/%d/stat" % pid).read_text().split(")")[-1][:3])
+        self.assertTrue(gone)
+
+    def test_max_minutes_validation(self):
+        e = {}
+        out = agents.clean_agents([{"name": "a", "kind": "claude", "connection": "local", "workspace_root": "/w"},
+                                   {"name": "b", "kind": "claude", "connection": "local", "workspace_root": "/w", "max_minutes": "0"},
+                                   {"name": "c", "kind": "claude", "connection": "local", "workspace_root": "/w", "max_minutes": "5000"}], set(), [], e)
+        self.assertEqual([a["max_minutes"] for a in out], [60, 0, 60])
+        self.assertIn("agents.2.max_minutes", e)
 
     def test_local_missing_dir_and_binary(self):
         env = Env(self)

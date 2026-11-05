@@ -44,7 +44,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.14.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.15.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -590,6 +590,7 @@ class GitLabClient:
             a = self.http.get("/projects/%s/merge_requests/%s/approvals" % (item["project_id"], item["iid"]))
         except UserError as e:
             glog.debug("Freigaben von !%s nicht lesbar: %s", item["iid"], e)
+            item["approval_unknown"] = True
             return
         item["approved_by"] = [((x.get("user") or {}).get("username") or "") for x in (a.get("approved_by") or [])]
         left = a.get("approvals_left")
@@ -722,6 +723,7 @@ class GitLabClient:
             except UserError as e:
                 glog.error("%s: %s", name, e)
                 errors.append("%s: %s" % (name, e))
+                sink.setdefault("gl_failed_pids", []).append(pid)
                 return "err", str(e)
 
         def run_one(p):
@@ -1163,6 +1165,18 @@ class App:
         self.ideas = None
         self.jobs = None
         self.apply(cfg, secrets)
+        if not os.environ.get("TINYOPS_NO_WATCHDOG"):
+            threading.Thread(target=self._watchdog, name="agent-watchdog", daemon=True).start()
+
+    def _watchdog(self):
+        """Prüft alle 30 s laufende Agenten, auch wenn niemand das Panel offen hat (Zeitlimit, Ende, verloren)."""
+        while True:
+            time.sleep(30)
+            try:
+                if self.store.agent_runs(status="läuft", limit=1):
+                    self.agents.poll(force=True)
+            except Exception as e:   # der Wächter darf nie sterben
+                log.warning("Agenten-Wächter: %s", scrub(e))
 
     def apply(self, cfg, secrets):
         """Baut Clients und Zwischenspeicher aus Config und Secrets neu. Läuft beim Start und nach dem Speichern der Einstellungen.
@@ -1182,6 +1196,8 @@ class App:
             for i, (k, ph, xp, d) in enumerate((("DLP-098", 7, 60, 3), ("DLP-099", 4, 20, 2), ("DLP-101", 4, 10, 1), ("DLP-102", 4, 20, 1), ("DLP-103", 3, 10, 0))):
                 self.store.flow_event_once("demo:%d" % i, k, "", "phase", ph, xp, "", t - d * 86400 - 600)
         self._agent_poll_busy = False
+        self._cards = {}
+        self._src_ok = {}
         self._types_cache = {}
         self._by_key = {}
         self.problems = []
@@ -1527,7 +1543,8 @@ class App:
                  "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
                  "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
                  "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
-                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab")}
+                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab"), "sha": it.get("sha", ""),
+                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated"))}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1616,7 +1633,8 @@ class App:
                  "create_mr_url": it.get("create_mr_url", ""), "merge_status": it.get("merge_status", ""), "pipeline_url": it.get("pipeline_url", ""),
                  "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
                  "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
-                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab")}
+                 "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab"), "sha": it.get("sha", ""),
+                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated"))}
 
     def board_action(self, action, body):
         st = self.store
@@ -1629,7 +1647,10 @@ class App:
                 self._check_ticket_exists(key)
                 if not links.is_local_key(key):
                     self._learn(key)
-            return {"key": self._local(st.stage_set, key, body.get("stage"))}
+            key = self._local(st.stage_set, key, body.get("stage"))
+            if body.get("stage") in ("tested", "done"):
+                self._accept(key, body.get("note"), body.get("env"))
+            return {"key": key}
         if action == "add":
             title = str(body.get("title") or "").strip()
             stage = body.get("stage") or "planned"
@@ -1745,8 +1766,13 @@ class App:
             for k in ("mine", "review", "assigned"):
                 data.setdefault(k, [])
             data.setdefault("errors", []).append(str(e))
+            data["gl_failed_all"] = True
+        gl_err = bool(data.get("gl_failed_all") or data.get("gl_failed_pids")) or any(not str(x).startswith("GitHub") for x in data.get("errors", []))
+        n_err = len(data.get("errors", []))
         if self.github:
             self._github_fetch(data, step)
+        gh_err = bool(data.get("gh_failed_all") or data.get("gh_failed_repos")) or len(data.get("errors", [])) > n_err
+        self._keep_last_good(data)
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["ref"] = links.ref_of(it["project_id"], it["branch"])
         if not self.jira:
@@ -1761,10 +1787,50 @@ class App:
         else:
             data["jira"] = None
         data["sonar"] = self._sonar(data, step)
+        now = time.time()
+        src = []
+        if self.client is not None:
+            src.append(("gitlab", "GitLab", not gl_err))
+        if self.github is not None:
+            src.append(("github", "GitHub", not gh_err))
+        if self.jira:
+            src.append(("jira", "Jira", bool((data.get("jira") or {}).get("ok"))))
+        if self.sonar:
+            src.append(("sonar", "Sonar", bool((data.get("sonar") or {}).get("ok", True))))
+        data["sources"] = []
+        for sid, name, ok in src:
+            if ok:
+                self._src_ok[sid] = now
+            data["sources"].append({"id": sid, "name": name, "ok": ok, "ts": now, "last_ok": self._src_ok.get(sid, 0)})
         rlog.info("Auffrischen #%d fertig in %.1f s: %d eigene Einträge, %d Review, %d zugeteilt, %d Fehler",
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
         return data
+
+    def _keep_last_good(self, data):
+        """Fällt eine Quelle (ganz oder je Projekt/Repo) aus, bleiben ihre letzten Einträge stehen, als «veraltet» markiert (outdated),
+        statt aus Board und Fokus zu verschwinden."""
+        prev = self.cache
+        if not prev:
+            return
+        gl_all, gl_pids = data.get("gl_failed_all"), set(data.get("gl_failed_pids") or [])
+        gh_all, gh_repos = data.get("gh_failed_all"), set(data.get("gh_failed_repos") or [])
+        if not (gl_all or gl_pids or gh_all or gh_repos):
+            return
+        kept = 0
+        for lst in ("mine", "review", "assigned"):
+            have = {links.ref_of(i["project_id"], i["branch"]) for i in data.get(lst, [])}
+            for it in prev.get(lst, []):
+                gh = it.get("host") == "github"
+                hit = (gh and (gh_all or it.get("project") in gh_repos)) or (not gh and (gl_all or (lst == "mine" and it.get("project_id") in gl_pids)))
+                ref = links.ref_of(it["project_id"], it["branch"])
+                if hit and ref not in have:
+                    x = dict(it, outdated=True, outdated_since=it.get("outdated_since") or self.cache_t or time.time())
+                    data.setdefault(lst, []).append(x)
+                    have.add(ref)
+                    kept += 1
+        if kept:
+            rlog.warning("%d Einträge aus dem letzten erfolgreichen Abgleich behalten (als veraltet markiert)", kept)
 
     def _github_fetch(self, data, step):
         bf = branch_cfg(self.cfg)
@@ -2076,6 +2142,7 @@ class App:
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["stale"] = it["age_days"] >= stale
         data["board"] = self._board(data)
+        self._cards = {c["id"]: c for c in data["board"]["cards"]}
         agents_v = self.agents_view()
         by_ticket = {}
         for r in agents_v["runs"]:
@@ -2084,6 +2151,8 @@ class App:
             data["flow"] = flow.build(data["board"]["cards"], self.store, by_ticket, complete=not data["loading"] and not data.get("errors"),
                                       goal=int((self.cfg.get("flow") or {}).get("daily_goal", 3)))
             data["flow"]["reviews"] = flow.review_view(data)
+            pin = self.store.pin_get()
+            data["flow"]["pinned"] = pin if (pin in data["flow"]["items"] or (pin or "").startswith("rv:")) else None
         except Exception as e:   # der Ablauf ist eine Ansicht; er darf die Übersicht nie verhindern
             log.warning("Ablauf: %s", scrub(e))
             data["flow"] = None
@@ -2119,11 +2188,37 @@ class App:
                 return self._flow_complete(b)
             if action == "tiny":
                 return self._flow_tiny(b)
+            if action == "accept":
+                return self._flow_accept(b)
+            if action == "pin":
+                cid = b.get("id") or None
+                if cid and cid not in self._cards and not str(cid).startswith("rv:"):
+                    raise UserError("Dieses Vorhaben gibt es (gerade) nicht.")
+                self.store.pin_set(cid)
+                return {"pinned": cid}
         except (TypeError, ValueError):
             raise UserError("Teilschritt-Nummer fehlt.")
         except links.LinkError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    def _accept(self, cid, note="", env=""):
+        """Abnahme an die aktuellen Head-Commits aller offenen MRs/PRs der Karte binden."""
+        card = self._cards.get(cid) or {}
+        refs = [(x.get("ref") or links.ref_of(x["project_id"], x["branch"]), x.get("sha") or "") for x in card.get("items") or []
+                if x.get("kind") in ("mr", "assigned") and x.get("iid")]
+        if refs:
+            self.store.accept_set(cid, refs, note, env)
+            log.info("Abnahme %s: %s", cid, ", ".join("%s@%s" % (r, (sh or "?")[:8]) for r, sh in refs))
+        return refs
+
+    def _flow_accept(self, b):
+        cid = str(b.get("id") or "")
+        if not cid or cid.startswith("idea:") or links.is_ref_key(cid):
+            raise UserError("Abnehmen geht nur für Vorhaben mit Ticket.")
+        self.board_action("stage", {"key": cid, "stage": "tested", "note": b.get("note"), "env": b.get("env")})   # bindet die Abnahme
+        card = self._cards.get(cid) or {}
+        return {"stage": "tested", "commits": [{"ref": x.get("ref", ""), "sha": (x.get("sha") or "")[:8]} for x in card.get("items") or [] if x.get("iid")]}
 
     def _flow_complete(self, b):
         """«Schritt erledigt»: setzt die nächste Station von Hand. Branches und MRs ohne Ticket dürfen das nicht."""

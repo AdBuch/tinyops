@@ -319,7 +319,40 @@ def test_gitlab(form, stored):
                 r.add("project-%s" % pid, "Projekt %s" % pid, "fail", "HTTP %d: %s" % (resp["status"], _msg(resp)))
         except net.NetError as e:
             r.add("project-%s" % pid, "Projekt %s" % pid, "fail", e.detail)
+    _check_mr_fields(r, base, hdr, ctx, ids[:20])
     return r.result(user={"username": me.get("username"), "name": me.get("name"), "email": me.get("email")} if me else None)
+
+
+def _check_mr_fields(r, base, hdr, ctx, ids):
+    """Liefert diese GitLab-Instanz, was der Ablauf für Review und Merge braucht? Prüft an einem offenen MR (nur lesend)."""
+    for pid in ids:
+        try:
+            resp = _get(base, "/api/v4/projects/%s/merge_requests" % urllib.parse.quote(pid, safe=""), hdr, ctx, {"state": "opened", "per_page": 1})
+        except net.NetError:
+            continue
+        mrs = net.parse_json(resp) if resp["status"] == 200 else None
+        if not mrs or not isinstance(mrs, list):
+            continue
+        mr = mrs[0]
+        fields = ("detailed_merge_status", "reviewers", "upvotes")
+        have = [f for f in fields if f in mr]
+        miss = [f for f in fields if f not in mr]
+        try:
+            ap = _get(base, "/api/v4/projects/%s/merge_requests/%s/approvals" % (urllib.parse.quote(pid, safe=""), mr.get("iid")), hdr, ctx)
+            ap_ok = ap["status"] == 200
+            ap_txt = "Freigaben lesbar" if ap_ok else "Freigaben nicht lesbar (HTTP %d)" % ap["status"]
+        except net.NetError as e:
+            ap_ok, ap_txt = False, "Freigaben nicht lesbar (%s)" % e.detail
+        det = "geprüft an !%s in Projekt %s: %s%s; %s" % (mr.get("iid"), pid, ", ".join(have) or "keines der Felder",
+                                                         (" · fehlt: " + ", ".join(miss)) if miss else "", ap_txt)
+        if not miss and ap_ok:
+            r.add("mrfields", "Review-Felder", "ok", det)
+        else:
+            r.add("mrfields", "Review-Felder", "warn", det,
+                  "Ohne diese Angaben zeigt tinyops «Freigabe prüfen» statt einer automatischen Prüfung. detailed_merge_status gibt es ab GitLab 15.6, "
+                  "/approvals braucht mindestens Reporter-Rechte im Projekt.")
+        return
+    r.add("mrfields", "Review-Felder", "skip", "kein offener MR in den gewählten Projekten, an dem sich das prüfen liesse")
 
 
 def search_projects(form, stored):
