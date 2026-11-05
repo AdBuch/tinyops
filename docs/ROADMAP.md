@@ -20,8 +20,8 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 
 | Version | Thema | Gaps | Grösse |
 |---|---|---|---|
-| **0.15.0** | Ehrlich und an den Commit gebunden | T-1, T-4, T-6, Zeitlimit aus T-2 | M |
-| **0.16.0** | Agenten isoliert, Datenklassen | T-2, SEC-1, SEC-2, F-10, F-14 | L |
+| **0.15.0** ✓ | Ehrlich und an den Commit gebunden (geliefert 2026-11-05) | T-1, T-4, T-6, Zeitlimit aus T-2 | M |
+| **0.16.0** ✓ | Agenten isoliert, Datenklassen (geliefert 2026-11-05; Export statt Sparse-Checkout, siehe unten) | T-2, SEC-1, SEC-2, F-10, F-14 | L |
 | **0.17.0** | Audit und Verlauf | T-3, SEC-6, F-15 | M |
 | **0.18.0** | Rückfragen und Ergebnisse von Agenten | T-5, F-09 | M |
 | **0.19.0** | Fokus-Zeit und Zeitentwürfe für Projectron | F-20 | M |
@@ -62,7 +62,7 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 2. **Worktree je Lauf.** `git worktree add <root>/.tinyops-wt/<nr> -b agent/<key>-<nr>` vom Ticket-Branch oder Hauptbranch.
    - Der Hauptcheckout bleibt unberührt; mehrere Läufe im selben Repo blockieren sich nicht mehr.
    - Aufräumen bei «Entfernen»; ungespeicherte Änderungen bleiben als Branch erhalten.
-3. **Freigegebene Pfade für Cloud-Agenten** (nur `internal`): optionaler Sparse-Checkout im Worktree. Der Agent sieht dann technisch nur diese Pfade, zum Beispiel `src/main/java/ch/…/util/` plus die zugehörigen Tests.
+3. **Freigegebene Pfade für Cloud-Agenten** (nur `internal`): ~~optionaler Sparse-Checkout im Worktree~~. **Umgesetzt als Export** (eigenes Git nur mit diesen Pfaden), weil ein Sparse-Checkout über die Git-Objekte alles lesbar lässt. Der Agent sieht dann technisch nur diese Pfade, zum Beispiel `src/main/java/ch/…/util/` plus die zugehörigen Tests.
    - Das ist die Antwort auf «Unit-Tests für ganze Klassen an Codex/Claude», sofern dein DLP-Verantwortlicher das für diese Pfade freigibt (siehe unten).
 4. **Vorlagen für lokale Agenten:** Goose (`goose run`), opencode, «eigener Befehl» mit Beispiel für LangGraph. Ollama-Modell je Agent einstellbar.
    - Kennzeichnung «Aufruf nicht gegen die echte CLI getestet», bis du ihn bestätigst.

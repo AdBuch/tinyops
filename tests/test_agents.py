@@ -28,6 +28,21 @@ exec sh -c "$1"
 """
 
 HAVE_TMUX = shutil.which("tmux") is not None
+GIT = ["git", "-c", "user.name=T", "-c", "user.email=t@x", "-c", "init.defaultBranch=main"]
+
+
+def git_repo(path, files=None):
+    """Ein kleines Repository mit einem Commit (Agenten arbeiten ab 0.16 in einem Worktree davon)."""
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    for name, text in (files or {"README.md": "hallo\n"}).items():
+        f = path / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text)
+    subprocess.run(GIT + ["init", "-q"], cwd=path, check=True)
+    subprocess.run(GIT + ["add", "-A"], cwd=path, check=True)
+    subprocess.run(GIT + ["commit", "-qm", "init"], cwd=path, check=True)
+    return path
 
 
 def wait_for(fn, secs=15):
@@ -46,7 +61,7 @@ class Env:
         self.d = Path(tempfile.mkdtemp())
         tc.addCleanup(shutil.rmtree, self.d, True)
         self.remote = self.d / "remote"
-        (self.remote / "ws" / "repo").mkdir(parents=True)
+        git_repo(self.remote / "ws" / "repo")
         (self.remote / "bin").mkdir()
         (self.remote / ".profile").write_text('export PATH="$HOME/bin:$PATH"\n')
         self.stub = self.d / "ssh"
@@ -155,10 +170,12 @@ class Gate(unittest.TestCase):
     def test_cloud_agent_needs_project_opt_in(self):
         env = Env(self)
         svc = service(env, cfg(env, kind="claude", allow=False))
-        rid = svc.assign("a1", "T-1", 7, "b", "t")
-        with self.assertRaises(agents.AgentError) as cm:
+        with self.assertRaises(agents.AgentError) as cm:          # ab 0.16 schon beim Zuweisen gesperrt
+            svc.assign("a1", "T-1", 7, "b", "t")
+        self.assertIn("restricted", str(cm.exception))
+        rid = svc.store.agent_run_add("a1", "T-1", 7, "b", "t")     # z. B. vor 0.16 zugewiesen
+        with self.assertRaises(agents.AgentError):
             svc.start(rid, "mach was")
-        self.assertIn("nicht für Cloud-Agenten freigegeben", str(cm.exception))
         self.assertEqual(svc.store.agent_run(rid)["status"], "zugewiesen")
         self.assertFalse(env.log.exists(), "ohne Freigabe darf nicht einmal SSH aufgerufen werden")
         info = svc.prompt_info("a1", "T-1", 7, "b", "t", "T-1")
@@ -200,7 +217,7 @@ class Remote(unittest.TestCase):
         self.assertIn("ARGS:4", out)            # -p, <prompt>, --model, opus
         self.assertIn("FIRST:-p", out)
         self.assertIn("touch %s/pwned" % env.d, out)     # Prompt kam unverändert an
-        self.assertIn(str(env.remote / "ws" / "repo"), out)   # im Projektordner gestartet
+        self.assertIn(str(env.remote / "ws" / ".tinyops-wt" / str(rid)), out)   # im eigenen Worktree gestartet
         self.assertNotIn("glpat-abcdefghijklmnopqrstuvwx", out, "Secret im Log nicht geschwärzt")
         self.assertIn("ssh -t -p 22 dev@devbox tmux attach -t tinyops-%d" % rid, svc.run_view(svc.store.agent_run(rid))["attach"])
         svc.remove(rid)
@@ -227,7 +244,9 @@ class Remote(unittest.TestCase):
 
     def test_stop_and_one_run_per_workdir(self):
         env = Env(self)
-        svc = service(env, cfg(env, command="sleep 60"))
+        c = cfg(env, command="sleep 60")
+        c["agents"][0]["isolation"] = "shared"          # nur der alte gemeinsame Ordner sperrt sich selbst
+        svc = service(env, c)
         r1 = svc.assign("a1", "T-1", 7, "", "t")
         svc.start(r1, "x")
         self.assertEqual(svc.store.agent_run(r1)["status"], "läuft")
@@ -267,7 +286,7 @@ class Remote(unittest.TestCase):
         rid = svc.assign("a1", "T-1", 7, "", "t")
         with self.assertRaises(agents.AgentError) as cm:
             svc.start(rid, "x")
-        self.assertIn("gibt es auf dem Zielhost nicht", str(cm.exception))
+        self.assertIn("gibt es nicht", str(cm.exception))
         self.assertEqual(svc.store.agent_run(rid)["status"], "fehlgeschlagen")
         svc2 = service(env, cfg(env, command="true"))
         os.environ["STUB_FAIL"] = "Host key verification failed."
@@ -307,7 +326,9 @@ class Remote(unittest.TestCase):
         c = cfg(env, kind="claude")
         res = settings.test_agent({"connection": c["connections"][0], "agent": {"kind": "claude", "workspace_root": c["agents"][0]["workspace_root"]}}, {})
         self.assertTrue(res["ok"], res)
-        self.assertEqual([s["status"] for s in res["steps"]], ["ok"] * 4)
+        st = {s["id"]: s["status"] for s in res["steps"]}
+        self.assertEqual([st[k] for k in ("conn", "tmux", "ws", "bin", "git")], ["ok"] * 5)
+        self.assertIn(st["rights"], ("ok", "warn"))          # im Test-Container läuft alles als root: Warnung
         res = settings.test_agent({"connection": c["connections"][0], "agent": {"kind": "codex", "workspace_root": str(env.remote / "zzz")}}, {})
         st = {s["id"]: s["status"] for s in res["steps"]}
         self.assertEqual((st["ws"], st["bin"]), ("fail", "fail"))
@@ -322,7 +343,7 @@ class Local(unittest.TestCase):
     def test_local_run_and_stop(self):
         env = Env(self)
         ws = env.d / "lws"
-        (ws / "repo").mkdir(parents=True)
+        git_repo(ws / "repo")
         c = cfg(env, command="echo hi from $(basename $(pwd)); cat {prompt_file}", conn="local")
         c["agents"][0]["workspace_root"] = str(ws)
         svc = service(env, c)
@@ -331,7 +352,7 @@ class Local(unittest.TestCase):
         self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
         self.assertEqual(svc.store.agent_run(rid)["status"], "fertig")
         out = svc.tail(rid)
-        self.assertIn("hi from repo", out)
+        self.assertIn("hi from %d" % rid, out)          # im Worktree .tinyops-wt/<nr>
         self.assertIn("lokaler prompt", out)
         svc.remove(rid)
         self.assertEqual(list((env.d / "runs").glob("%d.*" % rid)), [])
@@ -349,7 +370,7 @@ class Local(unittest.TestCase):
     def test_local_time_limit(self):
         env = Env(self)
         ws = env.d / "lws"
-        (ws / "repo").mkdir(parents=True)
+        git_repo(ws / "repo")
         c = cfg(env, command="sleep 300", conn="local")
         c["agents"][0].update(workspace_root=str(ws), max_minutes=1)
         svc = service(env, c)
@@ -374,12 +395,12 @@ class Local(unittest.TestCase):
     def test_local_missing_dir_and_binary(self):
         env = Env(self)
         c = cfg(env, kind="claude", conn="local")
-        c["agents"][0]["workspace_root"] = str(env.d / "none")
+        c["agents"][0].update(workspace_root=str(env.d / "none"), isolation="shared")
         svc = service(env, c)
         rid = svc.assign("a1", "T-1", 7, "", "t")
         with self.assertRaises(agents.AgentError):
             svc.start(rid, "x")
-        (env.d / "none" / "repo").mkdir(parents=True)
+        git_repo(env.d / "none" / "repo")
         old = os.environ["PATH"]
         os.environ["PATH"] = "/nonexistent"
         try:
@@ -391,6 +412,134 @@ class Local(unittest.TestCase):
             os.environ["PATH"] = old
 
 
+def git_out(path, *args):
+    return subprocess.run(GIT + list(args), cwd=path, capture_output=True, text=True).stdout
+
+
+@unittest.skipUnless(HAVE_TMUX, "tmux nicht installiert")
+class Isolation(unittest.TestCase):
+    def test_worktree_runs_in_parallel_and_keep_main_checkout_clean(self):
+        env = Env(self)
+        repo = env.remote / "ws" / "repo"
+        svc = service(env, cfg(env, command='echo neu > datei.txt; git add datei.txt; git -c user.name=A -c user.email=a@x commit -qm agent; echo dirty > offen.txt'))
+        r1 = svc.assign("a1", "DLP-7", 7, "", "t")
+        r2 = svc.assign("a1", "DLP-8", 7, "", "t")
+        svc.start(r1, "x")
+        svc.start(r2, "y")                                         # kein «läuft schon» mehr
+        for rid in (r1, r2):
+            self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
+            self.assertEqual(svc.store.agent_run(rid)["status"], "fertig")
+        r = svc.store.agent_run(r1)
+        self.assertEqual((r["mode"], r["out_branch"]), ("worktree", "agent/dlp-7-%d" % r1))
+        self.assertTrue(r["wt"].endswith("/.tinyops-wt/%d" % r1))
+        self.assertEqual(git_out(repo, "status", "--porcelain"), "")       # Hauptcheckout unberührt
+        self.assertFalse((repo / "datei.txt").exists())
+        self.assertIn("agent", git_out(repo, "log", "--oneline", "agent/dlp-7-%d" % r1))
+        svc.remove(r1)                                                     # offene Datei wird gesichert, Worktree verschwindet
+        self.assertFalse(Path(r["wt"]).exists())
+        self.assertIn("gesichert", git_out(repo, "log", "--oneline", "agent/dlp-7-%d" % r1))
+        self.assertIn("offen.txt", git_out(repo, "show", "--stat", "agent/dlp-7-%d" % r1))
+        self.assertNotIn(r["wt"], git_out(repo, "worktree", "list"))
+
+    def test_worktree_starts_from_ticket_branch(self):
+        env = Env(self)
+        repo = env.remote / "ws" / "repo"
+        subprocess.run(GIT + ["switch", "-qc", "feature/DLP-9"], cwd=repo, check=True)
+        (repo / "f.txt").write_text("feature\n")
+        subprocess.run(GIT + ["add", "-A"], cwd=repo, check=True)
+        subprocess.run(GIT + ["commit", "-qm", "feature"], cwd=repo, check=True)
+        subprocess.run(GIT + ["switch", "-q", "main"], cwd=repo, check=True)
+        svc = service(env, cfg(env, command="cat f.txt"))
+        rid = svc.assign("a1", "DLP-9", 7, "feature/DLP-9", "t")
+        svc.start(rid, "x")
+        self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
+        self.assertIn("feature", svc.tail(rid))
+
+    def test_restricted_blocks_cloud_but_allows_local(self):
+        env = Env(self)
+        c = cfg(env, kind="claude", allow=False)
+        c["projects"][0]["data_class"] = "restricted"
+        c["agents"].append({"id": "goose", "name": "goose", "kind": "goose", "connection": "box", "workspace_root": c["agents"][0]["workspace_root"],
+                            "extra_args": "", "cloud": False, "model": "qwen2.5-coder:7b", "isolation": "worktree", "max_minutes": 60})
+        svc = service(env, c)
+        with self.assertRaises(agents.AgentError):
+            svc.assign("a1", "T-1", 7, "", "t")
+        self.assertTrue(svc.assign("goose", "T-1", 7, "", "t"))
+        self.assertEqual(svc.prompt_info("goose", "T-1", 7, "", "t", "T-1")["data_class"], "restricted")
+
+    def test_export_only_contains_allowed_paths_and_takeover(self):
+        env = Env(self)
+        repo = env.remote / "ws" / "repo"
+        shutil.rmtree(repo)
+        git_repo(repo, {"src/util/Strings.java": "class Strings {}\n", "src/core/Secret.java": "class Secret {}\n", "README.md": "x\n"})
+        secret_blob = git_out(repo, "rev-parse", "HEAD:src/core/Secret.java").strip()
+        c = cfg(env, command='ls -R; git log --oneline | wc -l; git cat-file -e %s && echo LEAK || echo NOLEAK; '
+                             'echo "class StringsTest {}" > src/util/StringsTest.java' % secret_blob)
+        c["projects"][0].update(data_class="internal", cloud_paths=["src/util"])
+        svc = service(env, c)
+        rid = svc.assign("a1", "DLP-11", 7, "", "t")
+        info = svc.prompt_info("a1", "DLP-11", 7, "", "t", "DLP-11")
+        self.assertEqual((info["mode"], info["cloud_paths"]), ("export", ["src/util"]))
+        svc.start(rid, "Tests schreiben")
+        self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
+        out = svc.tail(rid)
+        self.assertIn("Strings.java", out)
+        self.assertNotIn("Secret.java", out)
+        self.assertNotIn("README.md", out)
+        self.assertIn("NOLEAK", out)                       # die Objekte des echten Repos sind nicht erreichbar
+        with self.assertRaises(agents.AgentError):         # nicht übernommene Änderungen schützen
+            svc.remove(rid)
+        res = svc.takeover(rid)
+        self.assertEqual(res["files"], ["src/util/StringsTest.java"])
+        b = res["branch"]
+        self.assertEqual(b, "agent/dlp-11-%d" % rid)
+        self.assertIn("StringsTest.java", git_out(repo, "show", "--stat", b))
+        self.assertEqual(git_out(repo, "status", "--porcelain"), "")
+        with self.assertRaises(agents.AgentError):
+            svc.takeover(rid)
+        svc.remove(rid)
+        self.assertFalse(Path(svc.store.agent_run(rid) or {}).exists() if False else (env.remote / "ws" / ".tinyops-wt" / str(rid)).exists())
+
+    def test_takeover_refuses_changes_outside_allowed_paths(self):
+        env = Env(self)
+        repo = env.remote / "ws" / "repo"
+        shutil.rmtree(repo)
+        git_repo(repo, {"src/util/A.java": "a\n", "pom.xml": "<p/>\n"})
+        c = cfg(env, command='mkdir -p src/core; echo x > src/core/Evil.java; echo y >> src/util/A.java')
+        c["projects"][0].update(data_class="internal", cloud_paths=["src/util"])
+        svc = service(env, c)
+        rid = svc.assign("a1", "DLP-12", 7, "", "t")
+        svc.start(rid, "x")
+        self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
+        with self.assertRaises(agents.AgentError) as cm:
+            svc.takeover(rid)
+        self.assertIn("src/core/Evil.java", str(cm.exception))
+        self.assertNotIn("agent/dlp-12", git_out(repo, "branch"))
+        svc.remove(rid, force=True)
+
+    def test_paths_and_class_helpers(self):
+        self.assertEqual(agents.clean_paths("src/util, src/main/java/ch/x/ "), (["src/util", "src/main/java/ch/x"], ""))
+        self.assertTrue(agents.clean_paths("../etc")[1])
+        self.assertTrue(agents.clean_paths("-rf")[1])
+        self.assertTrue(agents.path_allowed("src/util/A.java", ["src/util"]))
+        self.assertFalse(agents.path_allowed("src/utility/A.java", ["src/util"]))
+        self.assertEqual(agents.data_class({}), "restricted")
+        self.assertEqual(agents.data_class({"allow_cloud_agents": True}), "internal")
+        self.assertEqual(agents.data_class({"data_class": "public", "allow_cloud_agents": False}), "public")
+
+    def test_local_kinds_cmdline(self):
+        g = agents.remote_cmdline({"kind": "goose", "model": "qwen2.5-coder:32b", "extra_args": ""})
+        self.assertEqual(g, 'GOOSE_PROVIDER=ollama GOOSE_MODEL=qwen2.5-coder:32b goose run -i "$R/$ID.prompt"')
+        o = agents.remote_cmdline({"kind": "opencode", "model": "qwen2.5-coder:32b", "extra_args": ""})
+        self.assertEqual(o, 'opencode run --model ollama/qwen2.5-coder:32b "$(cat "$R/$ID.prompt")"')
+        e = {}
+        out = agents.clean_agents([{"name": "g", "kind": "goose", "connection": "local", "workspace_root": "/w", "model": "qwen2.5-coder:32b", "cloud": True},
+                                   {"name": "o", "kind": "opencode", "connection": "local", "workspace_root": "/w"},
+                                   {"name": "c", "kind": "claude", "connection": "local", "workspace_root": "/w", "cloud": False}], set(), [], e)
+        self.assertEqual([a["cloud"] for a in out], [True, False, True])        # Claude bleibt immer Cloud
+        self.assertIn("agents.1.model", e)
+
+
 @unittest.skipUnless(HAVE_TMUX, "tmux nicht installiert")
 class AppApi(unittest.TestCase):
     def test_actions_through_app_and_overview(self):
@@ -399,11 +548,11 @@ class AppApi(unittest.TestCase):
         c["data_dir"] = str(env.d / "data")
         c.update(cfg(env, command="echo hallo; sleep 1"))
         c["projects"] = [{"id": 1, "name": "dlp-core", "allow_cloud_agents": True}]
-        (env.remote / "ws" / "dlp-core").mkdir()
+        git_repo(env.remote / "ws" / "dlp-core")
         app = server.App(c, True, {}, Path("/nonexistent/c.json"))
         ov = app.overview()
         self.assertTrue(ov["agents"]["enabled"])
-        self.assertEqual(ov["agents"]["projects"], [{"id": 1, "name": "dlp-core"}])
+        self.assertEqual(ov["agents"]["projects"], [{"id": 1, "name": "dlp-core", "data_class": "internal"}])
         info = app.agent_action("prompt", {"agent": "a1", "ticket": "DLP-1", "project_id": 1, "branch": "b", "title": "Titel", "key": "DLP-1"})
         self.assertTrue(info["allowed"])
         self.assertIn("DLP-1", info["prompt"])
@@ -421,10 +570,9 @@ class AppApi(unittest.TestCase):
         # Sperre ohne Freigabe
         app.cfg["projects"][0].pop("allow_cloud_agents")
         app.cfg["agents"][0]["cloud"] = True
-        r2 = app.agent_action("assign", {"agent": "a1", "ticket": "DLP-2", "project_id": 1, "branch": "", "title": "t"})["id"]
         with self.assertRaises(server.UserError) as cm:
-            app.agent_action("start", {"run": r2, "prompt": "p", "project_id": 1})
-        self.assertIn("Cloud-Agenten", str(cm.exception))
+            app.agent_action("assign", {"agent": "a1", "ticket": "DLP-2", "project_id": 1, "branch": "", "title": "t"})
+        self.assertIn("restricted", str(cm.exception))
 
     def test_agents_route_not_gated_by_testenv(self):
         src = (ROOT / "server.py").read_text()
@@ -442,12 +590,20 @@ class Config(unittest.TestCase):
         new, errors = settings.build_config(cur, body)
         self.assertEqual(errors, {})
         self.assertEqual(new["projects"][0]["agent_dir"], "grp/repo")
-        self.assertTrue(new["projects"][0]["allow_cloud_agents"])
+        self.assertEqual(new["projects"][0]["data_class"], "internal")      # alte Freigabe → internal
+        self.assertNotIn("allow_cloud_agents", new["projects"][0])
         self.assertEqual(new["agents"][0]["command"], "run {prompt_file}")
-        body["projects"][0]["allow_cloud_agents"] = False
-        body["projects"][0]["agent_dir"] = ""
+        body["projects"][0] = {"id": 7, "name": "repo", "agent_dir": "", "data_class": "restricted", "cloud_paths": ["src/util"]}
         new2, _ = settings.build_config(new, body)
-        self.assertNotIn("allow_cloud_agents", new2["projects"][0])
+        self.assertEqual(new2["projects"][0]["data_class"], "restricted")
+        self.assertNotIn("cloud_paths", new2["projects"][0])          # Pfade gelten nur bei internal
+        body["projects"][0].update(data_class="internal", cloud_paths="src/util, src/main/java/ch/x")
+        new3, errors = settings.build_config(new, body)
+        self.assertEqual(new3["projects"][0]["cloud_paths"], ["src/util", "src/main/java/ch/x"])
+        body["projects"][0].update(cloud_paths="../etc")
+        _, errors = settings.build_config(new, body)
+        self.assertIn("projects", errors)
+        self.assertEqual(settings.view(new3, "/x")["projects"][0]["data_class"], "internal")
         self.assertNotIn("agent_dir", new2["projects"][0])
         bad = dict(body, projects=[{"id": 7, "name": "repo", "agent_dir": "../etc"}])
         _, errors = settings.build_config(cur, bad)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hülle für lokal gestartete Agenten (läuft losgelöst von tinyops, auch unter Windows ohne tmux).
 
-Aufruf: agentwrap.py RUNDIR ID    (liest RUNDIR/ID.spec.json: {"argv": [...]} oder {"shell": "...", "cwd": "..."})
+Aufruf: agentwrap.py RUNDIR ID    (liest RUNDIR/ID.spec.json: {"argv": [...]} oder {"shell": "..."}, dazu "cwd" und optional "env")
 Schreibt RUNDIR/ID.log (Ausgabe), ID.hb (Lebenszeichen alle 5 s), ID.pid (Prozess des Agenten) und zuletzt ID.exit (Exit-Code).
 So kann tinyops den Stand ablesen, auch wenn es zwischendurch neu gestartet wurde.
 """
@@ -31,6 +31,8 @@ def main():
     rc = 127
     try:
         kw = {"cwd": spec.get("cwd") or None, "stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL}
+        if spec.get("env"):
+            kw["env"] = dict(os.environ, **{str(k): str(v) for k, v in spec["env"].items()})
         if os.name == "nt":
             kw["creationflags"] = 0x00000200   # CREATE_NEW_PROCESS_GROUP
         else:

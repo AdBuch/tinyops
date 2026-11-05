@@ -588,6 +588,21 @@ def test_agent(form, stored):
     else:
         r.add("bin", "Agent-Programm", "fail", "«%s» ist im PATH nicht zu finden" % agents.KINDS[kind]["bin"],
               "Anmelden und Programm installieren; getestet wird mit der Login-Shell des Benutzers (wie beim Start).")
+    if facts["git"] and facts["sh"]:
+        r.add("git", "Isolation", "ok", "git vorhanden: jeder Lauf bekommt einen eigenen Worktree (oder Export)")
+    else:
+        r.add("git", "Isolation", "fail", "git fehlt" if not facts["git"] else "sh fehlt",
+              "Für Worktree und Export braucht der Agent git (und lokal unter Windows sh aus Git for Windows im PATH); sonst beim Agenten «gemeinsamer Ordner».")
+    if conn is None:
+        r.add("rights", "Rechte", "warn", "lokal läuft der Agent mit deinen Rechten und deinen Git-Zugangsdaten",
+              "Für restricted-Repos lieber eine SSH-Verbindung zu einem eigenen Agent-Benutzer (ohne sudo, ohne Push auf geschützte Branches).")
+    else:
+        bad = [x for x, on in (("läuft als root", facts["root"]), ("sudo ohne Passwort", facts["sudo"]), ("Zugriff auf den Docker-Socket (= root)", facts["docker"])) if on]
+        if bad:
+            r.add("rights", "Rechte", "warn", "Benutzer %s: %s" % (facts["user"], ", ".join(bad)),
+                  "Einen eigenen Agent-Benutzer ohne sudo und ohne Docker-Gruppe anlegen. Push auf geschützte Branches verhindert GitLab (Protected Branches), nicht tinyops.")
+        else:
+            r.add("rights", "Rechte", "ok", "Benutzer %s: kein root, kein sudo ohne Passwort, kein Docker-Socket" % facts["user"])
     return r.result(cloud=bool(agents.KINDS[kind]["provider"] and kind != "custom"))
 
 
@@ -950,12 +965,15 @@ def view(cfg, config_path, features_default=None):
     return {
         "gitlab": {"url": cfg.get("gitlab_url", ""), "ca_bundle": cfg.get("ca_bundle", "")},
         "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", ""),
-                      "agent_dir": p.get("agent_dir", ""), "allow_cloud_agents": bool(p.get("allow_cloud_agents", False))} for p in cfg.get("projects", [])],
+                      "agent_dir": p.get("agent_dir", ""), "data_class": agents.data_class(p), "cloud_paths": list(p.get("cloud_paths") or [])}
+                     for p in cfg.get("projects", [])],
         "connections": [dict(c) for c in cfg.get("connections") or []],
         "github": {"enabled": bool((cfg.get("github") or {}).get("enabled", False)), "api_url": (cfg.get("github") or {}).get("api_url") or github.API_DEFAULT,
-                   "repos": [dict(r) for r in (cfg.get("github") or {}).get("repos") or []]},
+                   "repos": [dict(r, data_class=agents.data_class(r), cloud_paths=list(r.get("cloud_paths") or []))
+                             for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
-        "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"]} for k, v in agents.KINDS.items()],
+        "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
+        "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
         "branch_filter": {
             "emails": sorted(set(bf.get("emails", [])) | set(cfg.get("my_emails", []))), "names": bf.get("names", []),
             "agent_emails": bf.get("agent_emails", []), "agent_names": bf.get("agent_names", []),
@@ -987,6 +1005,27 @@ def view(cfg, config_path, features_default=None):
         "server": {"config": str(config_path), "log": str(tlog.log_file(cfg)), "bind": cfg.get("bind"), "port": cfg.get("port")},
         "jql_default": JQL_DEFAULT,
     }
+
+
+def _clean_class(item, entry, errors, errkey):
+    """Datenklasse und freigegebene Pfade übernehmen; die alte Freigabe «Cloud-Agent erlaubt» (bis 0.15) wird dabei ersetzt."""
+    if "data_class" not in item and "allow_cloud_agents" not in item:
+        return
+    cls = item.get("data_class")
+    if cls is None:
+        cls = "internal" if item.get("allow_cloud_agents") else "restricted"
+    if cls not in agents.CLASSES:
+        errors[errkey] = "Unbekannte Datenklasse «%s»." % str(cls)[:20]
+        cls = "restricted"
+    entry.pop("allow_cloud_agents", None)
+    entry["data_class"] = cls
+    paths, err = agents.clean_paths(item.get("cloud_paths") or [])
+    if err:
+        errors[errkey] = err
+    if cls == "internal" and paths:
+        entry["cloud_paths"] = paths
+    else:
+        entry.pop("cloud_paths", None)
 
 
 def build_config(current, p):
@@ -1029,11 +1068,7 @@ def build_config(current, p):
                 entry["agent_dir"] = ad
             else:
                 entry.pop("agent_dir", None)
-        if "allow_cloud_agents" in item:
-            if item.get("allow_cloud_agents"):
-                entry["allow_cloud_agents"] = True
-            else:
-                entry.pop("allow_cloud_agents", None)
+        _clean_class(item, entry, errors, "projects")
         if pid not in [x["id"] for x in projects]:
             projects.append(entry)
     cfg["projects"] = projects
@@ -1160,8 +1195,7 @@ def build_config(current, p):
                 errors["github.repos"] = "Der Agent-Ordner «%s» ist ungültig." % ad[:40]
             elif ad:
                 e["agent_dir"] = ad
-            if x.get("allow_cloud_agents"):
-                e["allow_cloud_agents"] = True
+            _clean_class(x, e, errors, "github.repos")
             repos.append(e)
         if len(repos) > 30:
             errors["github.repos"] = "Höchstens 30 Repos."

@@ -5,6 +5,37 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.16.0]
+
+### Neu
+- **Datenklasse je Projekt und GitHub-Repo:** `restricted` (Standard), `internal`, `public`. Sie ersetzt «Cloud-Agent erlaubt»: Wo das gesetzt war, wird `internal`, sonst `restricted`.
+  - `restricted`: nur Agenten ohne Cloud. Die Sperre greift schon beim Zuweisen, serverseitig; in der Auswahl sind solche Agenten ausgegraut.
+  - `internal`: Cloud-Agenten erlaubt, optional nur für **Cloud-Pfade** (siehe Export).
+  - `public`: ohne Einschränkung.
+- **Worktree je Lauf** (Standard): Jeder Lauf arbeitet in `<Arbeitsordner>/.tinyops-wt/<Nr>` auf einem eigenen Branch `agent/<key>-<nr>`.
+  - Abgezweigt wird vom Branch des Tickets (lokal oder `origin/…`), sonst vom aktuellen Stand.
+  - Dein Checkout bleibt unberührt, mehrere Läufe im selben Repo laufen parallel.
+  - «Entfernen» sichert offene Änderungen als Commit auf dem Agenten-Branch und entfernt den Worktree; der Branch bleibt.
+  - «Gemeinsamer Ordner» (wie bis 0.15) bleibt als Option je Agent.
+- **Export für Cloud-Agenten bei `internal` mit Cloud-Pfaden:**
+  - Der Agent bekommt einen Ordner nur mit diesen Pfaden und einem eigenen, frischen Git. Weder die übrigen Dateien noch die Git-Objekte des echten Repos sind erreichbar. Getestet: `git cat-file` auf eine fremde Datei schlägt fehl.
+  - «Übernehmen» prüft, dass nur Dateien innerhalb der Pfade geändert wurden, und legt sie als Commit auf `agent/<key>-<nr>` im echten Repo an. Pushen und MR erstellen machst du.
+  - Nicht übernommene Änderungen schützt «Entfernen» mit einer Rückfrage.
+- **Lokale Agenten:** neue Arten **Goose** (`goose run -i <Prompt-Datei>` mit `GOOSE_PROVIDER=ollama`, `GOOSE_MODEL=<Modell>`) und **opencode** (`opencode run --model ollama/<Modell>`), mit Modellfeld. Beide gelten als lokal, solange «sendet Daten an einen Cloud-Anbieter» aus ist. Die Aufrufe sind aus der Doku abgeleitet und nicht gegen die echten CLIs getestet. LangGraph und Ähnliches laufen über «Eigener Befehl».
+- **Rechte-Check im Agenten-Test:**
+  - Remote warnt der Test bei root, bei sudo ohne Passwort und bei Zugriff auf den Docker-Socket.
+  - Lokal weist er darauf hin, dass der Agent mit deinen Rechten läuft.
+  - Neuer Schritt «Isolation» prüft, ob git vorhanden ist.
+- Der Agenten-Prompt (`prompts/agent-task.md`) beschreibt jetzt den Arbeitsplatz: Worktree mit Agenten-Branch, Export-Ausschnitt oder gemeinsamer Ordner.
+
+### Geändert gegenüber der Roadmap
+- Statt eines Sparse-Checkouts gibt es den **Export**: Ein Sparse-Checkout verbirgt nur Dateien. Über die gemeinsamen Git-Objekte (`git show main:pfad`) bleibt alles lesbar, also wäre es keine echte Grenze.
+
+### Grenzen
+- Netz und Dateisystem ausserhalb des Arbeitsordners sichert tinyops nicht; das ist Sache des Hosts (eigener Agent-Benutzer, Firewall).
+- Pushen auf geschützte Branches verhindert GitLab (Protected Branches), nicht tinyops.
+- Lokal unter Windows braucht die Isolation `sh` aus Git for Windows im PATH; der Export ist dort ungetestet.
+
 ## [0.15.0]
 
 ### Neu

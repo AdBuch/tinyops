@@ -47,7 +47,7 @@ class Flow(unittest.TestCase):
         end = time.time() + 20
         while True:
             code, ov = self.call("GET", "/api/overview")
-            if code != 200 or not ov.get("sync", {}).get("running") or time.time() > end:
+            if code != 200 or (not ov.get("sync", {}).get("running") and not ov.get("loading")) or time.time() > end:
                 return code, ov
             time.sleep(0.1)
 

@@ -169,6 +169,20 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 12.7 | Agent mit Zeitlimit 1 min und einer langen Aufgabe starten, Panel schliessen | Nach gut einer Minute (Wächter alle 30 s) «abgelaufen», auf dem Zielhost keine Prozesse und keine tmux-Sitzung mehr |
 | 12.8 | «Als Fokus anheften», dann eine rote Pipeline an einem anderen MR | «Jetzt dran» bleibt beim Fokus; Hinweis «1 Blocker anderswo» öffnet den Blocker |
 
+## 13. Datenklassen, Worktree, Export (ab 0.16.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 13.1 | Projekt auf restricted, Claude-Agent zuweisen | In der Auswahl ausgegraut; per API 400 «restricted: nur lokale Agenten» |
+| 13.2 | Goose mit Ollama-Modell auf dem Agent-Host, Agenten-Test | Schritte grün, «Rechte» ohne Warnung beim eigenen Agent-Benutzer |
+| 13.3 | Goose-Lauf auf einem restricted-Projekt | läuft in `.tinyops-wt/<Nr>` auf `agent/<key>-<nr>`, dein Checkout unverändert (`git status` leer) |
+| 13.4 | Der echte Goose-Aufruf (`goose run -i`, `GOOSE_PROVIDER/GOOSE_MODEL`) | Goose liest den Prompt und arbeitet; sonst Fehlermeldung zurückmelden |
+| 13.5 | opencode (`opencode run --model ollama/<modell>`) | wie 13.4 |
+| 13.6 | Zwei Läufe im selben Repo gleichzeitig | beide laufen, getrennte Worktrees |
+| 13.7 | «Entfernen» nach einem Lauf mit offenen Änderungen | Commit «offener Stand gesichert» auf dem Agenten-Branch, Worktree weg |
+| 13.8 | internal mit Cloud-Pfad `src/…/util`, Claude-Lauf «Unit-Tests schreiben» | Export enthält nur diese Pfade; `git log` dort hat einen Commit; «Übernehmen» legt `agent/<key>-<nr>` an |
+| 13.9 | Agent ändert eine Datei ausserhalb der Pfade | «Übernehmen» lehnt ab und nennt die Datei; nichts im Repo |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

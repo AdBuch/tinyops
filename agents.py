@@ -33,6 +33,13 @@ USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
 EXTRA_RE = re.compile(r"^[A-Za-z0-9_@%+=:,./ \-]{0,200}$")      # keine Anführungszeichen, kein ; | & $ ` < > und kein Zeilenumbruch
 DIR_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,198}$")
 PROMPT = "\0PROMPT\0"
+PROMPT_FILE = "\0PROMPT_FILE\0"
+MODEL = "\0MODEL\0"
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$")
+CLASSES = ("restricted", "internal", "public")
+CLASS_LABEL = {"restricted": "restricted (nur lokale Agenten)", "internal": "internal (Cloud mit Freigabe)", "public": "public"}
+PATH_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,199}$")
+ISOLATION = ("worktree", "shared")
 STATUS_ACTIVE = ("läuft",)
 STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen", "verloren", "abgelaufen")
 DEFAULT_MAX_MINUTES = 60
@@ -41,7 +48,12 @@ KINDS = {
     "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic"},
     "codex": {"label": "Codex", "bin": "codex", "argv": ["codex", "exec", PROMPT], "provider": "OpenAI"},
     "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral"},
-    "custom": {"label": "Eigener Befehl", "bin": "", "argv": None, "provider": "dem Anbieter des Befehls"},
+    # Lokale Agenten: Aufrufe aus der Dokumentation der CLIs abgeleitet, nicht gegen die echten Programme getestet.
+    "goose": {"label": "Goose", "bin": "goose", "argv": ["goose", "run", "-i", PROMPT_FILE], "provider": "dem in Goose eingestellten Anbieter",
+              "env": {"GOOSE_PROVIDER": "ollama", "GOOSE_MODEL": MODEL}, "local": True},
+    "opencode": {"label": "opencode", "bin": "opencode", "argv": ["opencode", "run", "--model", "ollama/" + MODEL, PROMPT],
+                 "provider": "dem in opencode eingestellten Anbieter", "local": True},
+    "custom": {"label": "Eigener Befehl", "bin": "", "argv": None, "provider": "dem Anbieter des Befehls", "local": True},
 }
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -132,13 +144,54 @@ def clean_agents(raw, conn_ids, existing, errors):
         except (TypeError, ValueError):
             mx = DEFAULT_MAX_MINUTES
             errors[k + "max_minutes"] = "Zeitlimit in Minuten zwischen 0 (aus) und 1440."
+        model = str(a.get("model") or "").strip()
+        if KINDS[kind].get("local") and kind != "custom":
+            if not MODEL_RE.fullmatch(model or "x"):
+                errors[k + "model"] = "Modellname: Buchstaben, Ziffern und . _ : / -"
+            elif not model:
+                errors[k + "model"] = "Welches lokale Modell (z. B. qwen2.5-coder:32b)?"
+        iso = a.get("isolation") if a.get("isolation") in ISOLATION else "worktree"
+        # Cloud: Claude, Codex, Vibe immer; lokale Arten nur, wenn du es so einstellst (Standard: lokal)
+        cloud = True if not KINDS[kind].get("local") else bool(a.get("cloud", False))
         entry = {"id": aid, "name": str(a.get("name") or aid).strip()[:40] or aid, "kind": kind, "connection": conn, "workspace_root": root, "max_minutes": mx,
-                 "extra_args": extra, "cloud": True if kind != "custom" else bool(a.get("cloud", True))}
+                 "extra_args": extra, "cloud": cloud, "isolation": iso}
+        if model and KINDS[kind].get("local") and kind != "custom":
+            entry["model"] = model
         cmd = (old.get(aid) or {}).get("command")
         if kind == "custom" and cmd:
             entry["command"] = str(cmd)
         out.append(entry)
     return out
+
+
+def data_class(p):
+    """Datenklasse eines Projekts/Repos. Ohne Angabe: aus der alten Freigabe «Cloud-Agent erlaubt» (0.12–0.15), sonst restricted."""
+    c = (p or {}).get("data_class")
+    if c in CLASSES:
+        return c
+    return "internal" if (p or {}).get("allow_cloud_agents") else "restricted"
+
+
+def clean_paths(raw):
+    """Freigegebene Pfade für Cloud-Agenten: relativ, ohne «..». Gibt (Liste, Fehler) zurück."""
+    items = raw if isinstance(raw, list) else re.split(r"[\s,]+", str(raw or ""))
+    out = []
+    for x in items:
+        x = str(x or "").strip().strip("/")
+        if not x:
+            continue
+        if not PATH_RE.fullmatch(x) or ".." in x.split("/"):
+            return out, "Pfad «%s» ist ungültig (relativ, ohne «..», nur Buchstaben, Ziffern und . _ - /)." % x[:60]
+        if x not in out:
+            out.append(x)
+    if len(out) > 30:
+        return out[:30], "Höchstens 30 freigegebene Pfade."
+    return out, ""
+
+
+def path_allowed(f, paths):
+    f = f.strip("/")
+    return any(f == p or f.startswith(p + "/") for p in paths)
 
 
 def valid_agent_dir(d):
@@ -159,6 +212,10 @@ def _extra(agent):
     return shlex.split(agent.get("extra_args") or "")
 
 
+def _sub_model(a, model):
+    return a.replace(MODEL, model or "")
+
+
 def remote_cmdline(agent):
     """Zeile für `<Nr>.cmd` auf dem Zielhost. Der Prompt wird dort aus der Datei gelesen, nicht eingebettet."""
     if agent["kind"] == "custom":
@@ -166,9 +223,10 @@ def remote_cmdline(agent):
         if not cmd:
             raise AgentError("Für diesen eigenen Agenten steht kein «command» in der config.json (die Oberfläche kann ihn nicht setzen).")
         return cmd.replace("{prompt_file}", '"$R/$ID.prompt"')
-    parts = []
-    for a in KINDS[agent["kind"]]["argv"] + _extra(agent):
-        parts.append('"$(cat "$R/$ID.prompt")"' if a == PROMPT else shlex.quote(a))
+    spec, model = KINDS[agent["kind"]], agent.get("model", "")
+    parts = ["%s=%s" % (k, shlex.quote(_sub_model(v, model))) for k, v in (spec.get("env") or {}).items()]
+    for a in spec["argv"] + _extra(agent):
+        parts.append('"$(cat "$R/$ID.prompt")"' if a == PROMPT else '"$R/$ID.prompt"' if a == PROMPT_FILE else shlex.quote(_sub_model(a, model)))
     return " ".join(parts)
 
 
@@ -183,8 +241,12 @@ def local_spec(agent, prompt, prompt_file, workdir):
     exe = shutil.which(spec["bin"])
     if not exe:
         raise AgentError("«%s» wurde im PATH dieses Rechners nicht gefunden." % spec["bin"])
-    argv = [exe] + [prompt if a == PROMPT else a for a in spec["argv"][1:] + _extra(agent)]
-    return {"argv": argv, "cwd": workdir}
+    model = agent.get("model", "")
+    argv = [exe] + [prompt if a == PROMPT else str(prompt_file) if a == PROMPT_FILE else _sub_model(a, model) for a in spec["argv"][1:] + _extra(agent)]
+    out = {"argv": argv, "cwd": workdir}
+    if spec.get("env"):
+        out["env"] = {k: _sub_model(v, model) for k, v in spec["env"].items()}
+    return out
 
 
 def _delim(*texts):
@@ -196,11 +258,78 @@ def _delim(*texts):
         n += 1
 
 
-def remote_start_script(agent, rid, workdir, prompt):
+# ------------------------------------------------------------------ Isolation (Worktree oder Export) als Shell, lokal und remote gleich
+def _resolve_base(base):
+    b = shlex.quote(base or "")
+    return ('BASE=%s; '
+            'if [ -n "$BASE" ] && git -C "$REPO" rev-parse -q --verify "$BASE^{commit}" >/dev/null 2>&1; then :; '
+            'elif [ -n "$BASE" ] && git -C "$REPO" rev-parse -q --verify "origin/$BASE^{commit}" >/dev/null 2>&1; then BASE="origin/$BASE"; '
+            'else BASE=HEAD; fi\n') % b
+
+
+def prepare_script(mode, repo_sh, root_sh, rid, branch, base, paths=()):
+    """Setzt WD (Arbeitsordner des Agenten). Exit 41 Ordner fehlt, 43 kein Git, 44 Worktree, 45 Export. Erwartet R und ID."""
+    rid = int(rid)
+    s = "REPO=%s\n[ -d \"$REPO\" ] || { echo \"Arbeitsverzeichnis fehlt\" >&2; exit 41; }\n" % repo_sh
+    if mode == "shared":
+        return s + 'WD="$REPO"\n'
+    s += 'command -v git >/dev/null 2>&1 || { echo "git fehlt" >&2; exit 43; }\n'
+    s += 'git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || { echo "kein Git-Repository" >&2; exit 43; }\n'
+    s += "WD=%s/.tinyops-wt/%d\n" % (root_sh, rid)
+    s += _resolve_base(base)
+    s += 'mkdir -p "$(dirname "$WD")"\nrm -rf "$WD"\n'
+    if mode == "worktree":
+        s += ('git -C "$REPO" worktree add -q -b %s "$WD" "$BASE" >&2 || { echo "Worktree konnte nicht angelegt werden" >&2; exit 44; }\n'
+              'git -C "$WD" rev-parse HEAD > "$R/$ID.base"\n') % shlex.quote(branch)
+        return s
+    q = " ".join(shlex.quote(p) for p in paths)
+    s += ('mkdir -p "$WD"\n'
+          'git -C "$REPO" archive --format=tar "$BASE" -- %s | tar -x -C "$WD" || { echo "Export der freigegebenen Pfade fehlgeschlagen (gibt es sie im Branch?)" >&2; exit 45; }\n'
+          'git -C "$REPO" rev-parse "$BASE^{commit}" > "$R/$ID.base"\n'
+          '( cd "$WD" && git init -q && git add -A && git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: freigegebene Pfade" '
+          '&& git rev-parse HEAD > "$R/$ID.init" ) >&2 || { echo "Export-Repository konnte nicht angelegt werden" >&2; exit 45; }\n') % q
+    return s
+
+
+def cleanup_script(mode, repo_sh, wt, rid):
+    """Worktree: offene Änderungen als Commit auf dem Agenten-Branch sichern, dann Worktree entfernen (Branch bleibt). Export: Ordner löschen."""
+    w = shlex.quote(wt)
+    if mode == "worktree":
+        return ('REPO=%s; WD=%s; if [ -d "$WD" ]; then cd "$WD" && git add -A && '
+                '(git diff --cached --quiet || git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: offener Stand von Lauf %d gesichert" --no-verify); '
+                'cd / && git -C "$REPO" worktree remove --force "$WD"; fi; git -C "$REPO" worktree prune; true') % (repo_sh, w, int(rid))
+    if mode == "export":
+        return 'rm -rf %s; true' % w
+    return "true"
+
+
+def changes_script(wt):
+    """Export: offene Änderungen committen und alle geänderten Dateien seit dem Export auflisten."""
+    return ('cd %s && git add -A && (git diff --cached --quiet || git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: Stand des Agenten" --no-verify) >/dev/null '
+            '&& INIT=$(cat "$R/$ID.init") && git diff --name-only "$INIT" HEAD && git diff --binary "$INIT" HEAD > "$R/$ID.patch"') % shlex.quote(wt)
+
+
+def apply_script(repo_sh, root_sh, rid, branch, message):
+    """Export: Patch auf einem neuen Branch im echten Repo anwenden (eigener, kurzlebiger Worktree), dann den Worktree entfernen."""
+    return ('REPO=%s; AW=%s/.tinyops-wt/%d-apply; BASE=$(cat "$R/$ID.base"); rm -rf "$AW"; '
+            'git -C "$REPO" worktree add -q -b %s "$AW" "$BASE" >&2 || exit 44; '
+            'if git -C "$AW" apply --index "$R/$ID.patch" >&2 && git -C "$AW" -c user.name=tinyops -c user.email=tinyops@localhost commit -qm %s --no-verify >&2; '
+            'then git -C "$REPO" worktree remove --force "$AW"; echo applied; else git -C "$REPO" worktree remove --force "$AW"; git -C "$REPO" branch -D %s >/dev/null 2>&1; exit 46; fi'
+            ) % (repo_sh, root_sh, int(rid), shlex.quote(branch), shlex.quote(message), shlex.quote(branch))
+
+
+ISO_ERR = {41: "Das Arbeitsverzeichnis %s gibt es nicht. Repository dort klonen oder den Ordner beim Projekt/Agenten anpassen.",
+           43: "%s ist kein Git-Repository (oder git fehlt). Für die Isolation braucht der Agent ein geklontes Repository.",
+           44: "Der Worktree unter %s konnte nicht angelegt werden (Branch schon vorhanden? Repository gesperrt?).",
+           45: "Der Export der freigegebenen Pfade aus %s ist fehlgeschlagen. Gibt es die Pfade im Ausgangs-Branch?",
+           46: "Die Änderungen liessen sich nicht auf den Ausgangsstand von %s anwenden."}
+
+
+def remote_start_script(agent, rid, workdir, prompt, prep=None):
     cmdline = remote_cmdline(agent)
     d1, d2 = _delim(prompt), _delim(cmdline)
     wd = _sh_path(workdir)
-    return """set -e
+    return """set +e
 R="$HOME/.tinyops/runs"
 mkdir -p "$R"
 chmod 700 "$R" 2>/dev/null || true
@@ -214,10 +343,11 @@ cat > "$R/{rid}.cmd" <<'{d2}'
 cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
 {runner}TINYOPS_RUNNER_EOF
 command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-[ -d {wd} ] || {{ echo "Arbeitsverzeichnis fehlt" >&2; exit 41; }}
-tmux new-session -d -s tinyops-{rid} -c {wd} "sh '$R/runner.sh' {rid}"
-echo started
-""".format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, wd=wd)
+ID={rid}
+{prep}echo "$WD" > "$R/{rid}.wd"
+tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
+echo "started $WD"
+""".format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, prep=prep if prep is not None else 'REPO=%s\n[ -d "$REPO" ] || {{ echo "Arbeitsverzeichnis fehlt" >&2; exit 41; }}\nWD="$REPO"\n'.replace("{{", "{").replace("}}", "}") % wd)
 
 
 def remote_kill_script(rid):
@@ -300,7 +430,8 @@ def probe(agent, conn, workdir_hint=""):
             writable = os.access(d, os.W_OK)
         except OSError:
             writable = False
-        return {"os": os.name, "tmux": None, "workspace": os.path.isdir(root), "bin": (shutil.which(spec["bin"]) or "") if spec["bin"] else None, "writable": writable}
+        return {"os": os.name, "tmux": None, "workspace": os.path.isdir(root), "bin": (shutil.which(spec["bin"]) or "") if spec["bin"] else None, "writable": writable,
+                "git": bool(shutil.which("git")), "sh": bool(shutil.which("sh")), "user": None, "root": None, "sudo": None, "docker": None}
     wd = _sh_path(agent["workspace_root"])
     binpart = ""
     if KINDS[agent["kind"]]["bin"]:
@@ -309,7 +440,11 @@ def probe(agent, conn, workdir_hint=""):
     script = ('echo "TINYOPS_OK"; echo "os:$(uname -s)"; '
               '(command -v tmux >/dev/null 2>&1 && echo "tmux:yes") || echo "tmux:no"; '
               '([ -d %s ] && echo "ws:yes") || echo "ws:no"; '
-              '(mkdir -p "$HOME/.tinyops/runs" 2>/dev/null && [ -w "$HOME/.tinyops/runs" ] && echo "runs:yes") || echo "runs:no"; ' % wd) + binpart
+              '(mkdir -p "$HOME/.tinyops/runs" 2>/dev/null && [ -w "$HOME/.tinyops/runs" ] && echo "runs:yes") || echo "runs:no"; '
+              '(command -v git >/dev/null 2>&1 && echo "git:yes") || echo "git:no"; '
+              'echo "user:$(id -un 2>/dev/null)"; echo "uid:$(id -u 2>/dev/null)"; '
+              '(command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1 && echo "sudo:yes") || echo "sudo:no"; '
+              '([ -w /var/run/docker.sock ] && echo "docker:yes") || echo "docker:no"; ' % wd) + binpart
     rc, out, err = run_remote(conn, script, timeout=25)
     facts = {}
     for line in out.splitlines():
@@ -319,7 +454,9 @@ def probe(agent, conn, workdir_hint=""):
     if "os" not in facts and "tmux" not in facts:
         raise AgentError("Unerwartete Antwort vom Zielhost (Login-Banner oder Shell, die nichts ausgibt?).")
     return {"os": facts.get("os", "?"), "tmux": facts.get("tmux") == "yes", "workspace": facts.get("ws") == "yes",
-            "bin": facts.get("bin", "") if KINDS[agent["kind"]]["bin"] else None, "writable": facts.get("runs") == "yes"}
+            "bin": facts.get("bin", "") if KINDS[agent["kind"]]["bin"] else None, "writable": facts.get("runs") == "yes",
+            "git": facts.get("git") == "yes", "sh": True, "user": facts.get("user", "?"), "root": facts.get("uid") == "0",
+            "sudo": facts.get("sudo") == "yes", "docker": facts.get("docker") == "yes"}
 
 
 # ------------------------------------------------------------------ Dienst: Läufe an Tickets
@@ -357,7 +494,7 @@ class Service:
         for r in (self.cfg.get("github") or {}).get("repos") or []:
             if r.get("id") and r.get("full"):
                 out.append({"id": 10 ** 12 + int(r["id"]), "name": r["full"].split("/")[-1], "agent_dir": r.get("agent_dir", ""),
-                            "allow_cloud_agents": bool(r.get("allow_cloud_agents"))})
+                            "allow_cloud_agents": bool(r.get("allow_cloud_agents")), "data_class": r.get("data_class"), "cloud_paths": r.get("cloud_paths") or []})
         return out
 
     def project(self, pid):
@@ -375,17 +512,59 @@ class Service:
         return (root + "/" + sub) if agent["connection"] != "local" else os.path.join(os.path.expanduser(root), *sub.split("/"))
 
     def allowed(self, agent, pid):
-        """(erlaubt, Grund). Cloud-Agenten nur für Projekte mit ausdrücklicher Freigabe."""
+        """(erlaubt, Grund). Datenklasse restricted: nur Agenten ohne Cloud. internal und public: auch Cloud-Agenten."""
         p = self.project(pid)
         if p is None:
             return False, "Projekt fehlt."
-        if agent.get("cloud", True) and not p.get("allow_cloud_agents"):
+        cls = data_class(p)
+        if agent.get("cloud", True) and cls == "restricted":
             prov = KINDS[agent["kind"]]["provider"]
-            return False, ("Projekt «%s» ist nicht für Cloud-Agenten freigegeben. %s sendet Prompt und Code an %s. "
-                           "Freigabe: Einstellungen → GitLab → beim Projekt «Cloud-Agent erlaubt»." % (p.get("name"), KINDS[agent["kind"]]["label"], prov))
+            return False, ("Projekt «%s» ist restricted: nur lokale Agenten. %s sendet Prompt und Code an %s. "
+                           "Ändern unter Einstellungen → Projekte → Datenklasse (internal oder public)." % (p.get("name"), KINDS[agent["kind"]]["label"], prov))
         return True, ""
 
-    def default_prompt(self, title, key, project, branch, url=""):
+    def mode(self, agent, pid):
+        """Wie der Agent arbeitet: export (nur freigegebene Pfade, eigenes Git), worktree (eigener Branch) oder shared (alter gemeinsamer Ordner)."""
+        p = self.project(pid) or {}
+        if agent.get("cloud", True) and data_class(p) == "internal" and p.get("cloud_paths"):
+            return "export"
+        return "shared" if agent.get("isolation") == "shared" else "worktree"
+
+    def out_branch(self, ticket, rid):
+        return "agent/%s-%d" % (slug(ticket).replace("_", "-") or "lauf", int(rid))
+
+    def _paths(self, agent, pid):
+        """(Repo, Wurzel) als Shell-Ausdruck bzw. Pfad, je nach Ziel."""
+        wd = self.workdir(agent, pid)
+        if agent["connection"] == "local":
+            return wd, os.path.expanduser(agent["workspace_root"])
+        return wd, agent["workspace_root"].rstrip("/") or "/"
+
+    def _sh(self, agent, conn, script, rid, timeout=60):
+        """Ein Shell-Skript mit R und ID im Run-Ordner ausführen: remote per SSH, lokal mit sh (unter Windows aus Git for Windows)."""
+        if conn is not None:
+            return run_remote(conn, 'R="$HOME/.tinyops/runs"; ID=%d; mkdir -p "$R"; ' % int(rid) + script, timeout=timeout)
+        shx = shutil.which("sh")
+        if not shx:
+            raise AgentError("Für die Isolation braucht tinyops «sh» (Windows: den Ordner Git\\bin von Git for Windows in den PATH) oder beim Agenten «gemeinsamer Ordner».")
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            r = subprocess.run([shx, "-c", script], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL,
+                               env=dict(os.environ, R=str(self.run_dir), ID=str(int(rid))))
+        except subprocess.TimeoutExpired:
+            raise AgentError("Zeitüberschreitung bei der Vorbereitung.")
+        return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+
+    def _q(self, agent, path):
+        return shlex.quote(path) if agent["connection"] == "local" else _sh_path(path)
+
+    WORKSPACE_LINES = {
+        "worktree": "Du arbeitest in einem eigenen Worktree auf dem Branch agent/<key>-<nr> (abgezweigt von {branch}). Committe dort; den Branch pusht der Mensch.",
+        "export": "Du siehst nur einen Ausschnitt des Repositorys: {paths}. Ändere nur Dateien darin. tinyops übernimmt die Änderungen nach Prüfung als Branch.",
+        "shared": "Arbeite im aktuellen Repository. Lege den Branch an, falls er fehlt (vom Hauptbranch aus), und arbeite nur dort.",
+    }
+
+    def default_prompt(self, title, key, project, branch, url="", mode="shared", paths=()):
         f = self.base / "prompts" / "agent-task.md"
         try:
             tpl = f.read_text(encoding="utf-8")
@@ -395,8 +574,9 @@ class Service:
         class D(dict):
             def __missing__(self, k):
                 return ""
+        ws = self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
         return tpl.format_map(D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
-                                url_line=("Link: %s\n" % url) if url else "")).strip() + "\n"
+                                url_line=("Link: %s\n" % url) if url else "", workspace_line=ws)).strip() + "\n"
 
     def prompt_info(self, aid, ticket, pid, branch, title, key, url=""):
         a = self.agent(aid)
@@ -407,10 +587,12 @@ class Service:
         except AgentError as e:
             wd, ok, why = "", False, str(e)
         p = self.project(pid) or {}
-        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url), "workdir": wd,
+        mode = self.mode(a, pid) if p else "shared"
+        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or []), "workdir": wd,
                 "where": "lokal auf diesem Rechner" if conn is None else "%s (%s)" % (conn["name"], ("%s@%s" % (conn["user"], conn["host"])) if conn["user"] else conn["host"]),
                 "cloud": bool(a.get("cloud", True)), "provider": KINDS[a["kind"]]["provider"], "kind": KINDS[a["kind"]]["label"],
-                "allowed": ok, "reason": why}
+                "allowed": ok, "reason": why, "data_class": data_class(p), "mode": self.mode(a, pid) if p else "",
+                "cloud_paths": p.get("cloud_paths") or [] if self.mode(a, pid) == "export" else []}
 
     # -- Ansichten
     def run_view(self, r):
@@ -431,9 +613,10 @@ class Service:
 
     def view(self):
         agents = [{"id": a["id"], "name": a["name"], "kind": a["kind"], "label": KINDS[a["kind"]]["label"], "cloud": a.get("cloud", True),
+                   "isolation": a.get("isolation", "worktree"),
                    "where": "lokal" if a["connection"] == "local" else (self.conns().get(a["connection"]) or {}).get("name", "?"),
                    "workspace_root": a["workspace_root"]} for a in self.agent_list()]
-        projects = [{"id": p["id"], "name": p.get("name") or str(p["id"])} for p in self.projects()]
+        projects = [{"id": p["id"], "name": p.get("name") or str(p["id"]), "data_class": data_class(p)} for p in self.projects()]
         return {"enabled": bool(agents), "agents": agents, "projects": projects, "runs": [self.run_view(r) for r in self.store.agent_runs(limit=200)]}
 
     # -- Zuweisen, Starten, Stoppen
@@ -445,6 +628,10 @@ class Service:
         for r in self.store.agent_runs(ticket=ticket):
             if r["agent"] == aid and r["status"] in ("zugewiesen", "läuft"):
                 raise AgentError("Dieser Agent ist dem Ticket schon zugewiesen.")
+        if pid is not None:
+            ok, why = self.allowed(self.agent(aid), pid)
+            if not ok:
+                raise AgentError(why)
         return self.store.agent_run_add(aid, ticket, pid, str(branch or "")[:200], str(title or "")[:300])
 
     def start(self, run_id, prompt, pid=None, branch=None):
@@ -464,21 +651,30 @@ class Service:
             if not prompt or len(prompt) > MAX_PROMPT or "\0" in prompt:
                 raise AgentError("Der Prompt fehlt oder ist länger als %d Zeichen." % MAX_PROMPT)
             wd = self.workdir(a, pid)
-            for o in self.store.agent_runs(status="läuft"):
-                if o["agent"] == a["id"] and o["workdir"] == wd:
-                    raise AgentError("Auf diesem Agenten läuft in %s schon eine Aufgabe (%s). Erst beenden." % (wd, o["ticket"]))
-            self.store.agent_run_update(run_id, project_id=pid, branch=str(branch if branch is not None else r["branch"])[:200], workdir=wd, prompt=prompt)
+            mode = self.mode(a, pid)
+            if mode == "shared":
+                for o in self.store.agent_runs(status="läuft"):
+                    if o["agent"] == a["id"] and o["workdir"] == wd and (o.get("mode") or "shared") == "shared":
+                        raise AgentError("Auf diesem Agenten läuft in %s schon eine Aufgabe (%s). Erst beenden." % (wd, o["ticket"]))
+            branch = str(branch if branch is not None else r["branch"])[:200]
+            outb = self.out_branch(r["ticket"], run_id) if mode != "shared" else ""
+            repo, root = self._paths(a, pid)
+            prep = prepare_script(mode, self._q(a, repo), self._q(a, root), run_id, outb, branch, (self.project(pid) or {}).get("cloud_paths") or [])
+            self.store.agent_run_update(run_id, project_id=pid, branch=branch, workdir=wd, prompt=prompt, mode=mode, out_branch=outb)
             try:
                 if conn is None:
-                    self._local_start(a, run_id, wd, prompt)
+                    run_wd = self._local_prepare(a, run_id, prep) if mode != "shared" else wd
+                    self._local_start(a, run_id, run_wd, prompt)
                 else:
-                    rc, out, err = run_remote(conn, remote_start_script(a, run_id, wd, prompt))
-                    if rc == 41:
-                        raise AgentError("Das Arbeitsverzeichnis %s gibt es auf dem Zielhost nicht. Repository dort klonen oder den Ordner beim Projekt/Agenten anpassen." % wd)
+                    rc, out, err = run_remote(conn, remote_start_script(a, run_id, wd, prompt, prep), timeout=60)
+                    if rc in ISO_ERR:
+                        raise AgentError(ISO_ERR[rc] % wd)
                     if rc == 42:
                         raise AgentError("Auf dem Zielhost ist tmux nicht installiert.")
                     if rc != 0 or "started" not in out:
                         raise AgentError("Start fehlgeschlagen (Exit %d): %s" % (rc, clean_text(err or out, 300).strip()))
+                    run_wd = out.split("started", 1)[1].strip().splitlines()[0] if "started" in out else wd
+                self.store.agent_run_update(run_id, wt=run_wd if mode != "shared" else "")
             except AgentError as e:
                 self.store.agent_run_update(run_id, status="fehlgeschlagen", note=str(e)[:300], finished=time.time())
                 log.warning("Start von Lauf %d (%s) fehlgeschlagen: %s", run_id, a["id"], e)
@@ -486,6 +682,15 @@ class Service:
             self.store.agent_run_update(run_id, status="läuft", started=time.time(), note="")
             log.info("Lauf %d gestartet: Agent %s, Ticket %s, %s", run_id, a["id"], r["ticket"], wd)
             return run_id
+
+    def _local_prepare(self, a, rid, prep):
+        rc, out, err = self._sh(a, None, prep + 'echo "WD=$WD"\n', rid)
+        if rc in ISO_ERR:
+            raise AgentError(ISO_ERR[rc] % self.workdir(a, self.store.agent_run(rid)["project_id"]))
+        if rc != 0:
+            raise AgentError("Vorbereitung fehlgeschlagen (Exit %d): %s" % (rc, clean_text(err or out, 300).strip()))
+        line = [x for x in out.splitlines() if x.startswith("WD=")]
+        return line[-1][3:] if line else ""
 
     def _local_start(self, a, rid, wd, prompt):
         if not os.path.isdir(wd):
@@ -629,18 +834,68 @@ class Service:
         except (OSError, subprocess.SubprocessError):
             pass
 
-    def remove(self, run_id):
+    def changes(self, run_id):
+        """Export: geänderte Dateien seit dem Export (committet die offenen Änderungen im Export-Repo)."""
+        r = self.store.agent_run(run_id)
+        if not r or r.get("mode") != "export" or not r.get("wt"):
+            raise AgentError("Nur Läufe im Export-Modus haben Änderungen zum Übernehmen.")
+        a = self.agent(r["agent"])
+        rc, out, err = self._sh(a, self.conn_of(a), changes_script(r["wt"]), run_id)
+        if rc != 0:
+            raise AgentError("Änderungen nicht lesbar (Exit %d): %s" % (rc, clean_text(err or out, 300).strip()))
+        return [x for x in out.splitlines() if x.strip()]
+
+    def takeover(self, run_id):
+        """Export: Änderungen als Branch agent/<key>-<nr> ins echte Repo übernehmen. Nur Dateien innerhalb der freigegebenen Pfade."""
+        with self.lock:
+            r = self.store.agent_run(run_id)
+            if not r:
+                raise AgentError("Diesen Lauf gibt es nicht (mehr).")
+            if r["status"] in ("zugewiesen", "läuft"):
+                raise AgentError("Erst wenn der Lauf beendet ist.")
+            if r.get("taken"):
+                raise AgentError("Schon übernommen: Branch %s." % r["taken"])
+            files = self.changes(run_id)
+            if not files:
+                raise AgentError("Der Agent hat nichts geändert.")
+            a = self.agent(r["agent"])
+            paths = (self.project(r["project_id"]) or {}).get("cloud_paths") or []
+            bad = [f for f in files if not path_allowed(f, paths)]
+            if bad:
+                raise AgentError("Änderungen ausserhalb der freigegebenen Pfade, nichts übernommen: %s" % ", ".join(bad[:8]))
+            repo, root = self._paths(a, r["project_id"])
+            outb = r.get("out_branch") or self.out_branch(r["ticket"], run_id)
+            msg = "%s: Ergebnis von Agent %s (Lauf %d)" % (r["ticket"], a["name"], run_id)
+            rc, out, err = self._sh(a, self.conn_of(a), apply_script(self._q(a, repo), self._q(a, root), run_id, outb, msg), run_id)
+            if rc != 0 or "applied" not in out:
+                raise AgentError((ISO_ERR.get(rc, "Übernehmen fehlgeschlagen (Exit %d)." % rc) % repo if rc in ISO_ERR else "Übernehmen fehlgeschlagen (Exit %d)." % rc)
+                                 + " " + clean_text(err, 300).strip())
+            self.store.agent_run_update(run_id, taken=outb, out_branch=outb, note="Übernommen als Branch %s (%d Dateien). Pushen und MR erstellen machst du." % (outb, len(files)))
+            log.info("Lauf %d übernommen: %s, %d Dateien", run_id, outb, len(files))
+            return {"branch": outb, "files": files}
+
+    def remove(self, run_id, force=False):
         with self.lock:
             r = self.store.agent_run(run_id)
             if not r:
                 return
             if r["status"] == "läuft":
                 raise AgentError("Der Lauf läuft noch. Erst stoppen.")
+            if r.get("mode") == "export" and r.get("wt") and not r.get("taken") and not force:
+                try:
+                    files = self.changes(run_id)
+                except AgentError:
+                    files = []
+                if files:
+                    raise AgentError("Die Änderungen des Agenten (%d Dateien) sind noch nicht übernommen. Erst «Übernehmen», oder «Trotzdem entfernen»." % len(files))
             try:
                 a = self.agent(r["agent"])
                 conn = self.conn_of(a)
+                if r.get("mode") in ("worktree", "export") and r.get("wt"):
+                    repo, _root = self._paths(a, r["project_id"])
+                    self._sh(a, conn, cleanup_script(r["mode"], self._q(a, repo), r["wt"], run_id), run_id)
                 if conn is None:
-                    for ext in ("exit", "exit.tmp", "log", "hb", "pid", "prompt", "spec.json"):
+                    for ext in ("exit", "exit.tmp", "log", "hb", "pid", "prompt", "spec.json", "base", "init", "patch", "wd"):
                         try:
                             (self.run_dir / ("%d.%s" % (run_id, ext))).unlink()
                         except OSError:

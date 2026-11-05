@@ -122,7 +122,7 @@ class SettingsTests(WithMock):
                                                                                      "repos": [{"full": "adrian/hooks", "id": 42, "agent_dir": "hooks", "allow_cloud_agents": True},
                                                                                                {"full": "adrian/hooks"}]}})
         self.assertEqual(errors, {})
-        self.assertEqual(new["github"]["repos"], [{"full": "adrian/hooks", "id": 42, "agent_dir": "hooks", "allow_cloud_agents": True}])
+        self.assertEqual(new["github"]["repos"], [{"full": "adrian/hooks", "id": 42, "agent_dir": "hooks", "data_class": "internal"}])
         _, errors = settings.build_config(cur, {"github": {"enabled": True, "api_url": "http://evil.example", "repos": [{"full": "a b"}]}})
         self.assertIn("github.api_url", errors)
         self.assertIn("github.repos", errors)
@@ -156,7 +156,7 @@ class AppTests(WithMock):
                 app.cache_t = 0.0
                 ov = app.overview()
                 self.assertIn(r["key"], {c["id"] for c in ov["board"]["cards"]})
-                self.assertIn({"id": github.pid_of(42), "name": "hooks"}, app.agents.view()["projects"])
+                self.assertIn({"id": github.pid_of(42), "name": "hooks", "data_class": "internal"}, app.agents.view()["projects"])
             finally:
                 if old is None:
                     os.environ.pop("TINYOPS_HOME", None)

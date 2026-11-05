@@ -187,7 +187,8 @@
   @media (prefers-reduced-motion: reduce) { .agspin { animation: none; } }
   .agbox { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
   .agbox .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
-  label.sm { font-size: 12px; color: var(--quiet); display: grid; gap: 2px; }
+  label.sm { font-size: 12px; color: var(--quiet); display: grid; gap: 2px; align-content: start; }
+  .agbox select, .agbox input[type=text], .agbox input[type=number] { width: 100%; min-width: 0; box-sizing: border-box; }
   #agLog { max-height: 42vh; min-height: 120px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .pchip input.pa { width: 120px; }
   dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); width: min(720px, 92vw); }
@@ -234,12 +235,13 @@
   .pchip button { border: 0; background: transparent; padding: 0 2px; font-size: 15px; line-height: 1; }
   .pchip input { width: 150px; padding: 2px 6px; font-size: 13px; }
   .ptab { display: grid; gap: 2px; margin-bottom: 10px; }
-  .ptab .ph, .ptab .pr { display: grid; grid-template-columns: 64px minmax(140px, 1.3fr) minmax(120px, 1.3fr) minmax(110px, 1fr) 96px 28px; gap: 8px; align-items: center; }
+  .ptab .ph, .ptab .pr { display: grid; grid-template-columns: 58px minmax(120px, 1.2fr) minmax(110px, 1.1fr) minmax(100px, .9fr) 108px minmax(120px, 1.2fr) 28px; gap: 8px; align-items: center; }
+  .ptab select { font-size: 13px; padding: 3px 4px; }
   .ptab .ph { font-size: 12px; color: var(--quiet); font-weight: 600; padding: 0 4px 4px; border-bottom: 1px solid var(--line); }
   .ptab .pr { padding: 3px 4px; border-radius: 8px; } .ptab .pr:hover { background: var(--raised); }
   .ptab input[type=text] { width: 100%; min-width: 0; padding: 4px 8px; font-size: 13px; }
   .ptab .pc { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--quiet); white-space: nowrap; }
-  .ptab.gh .ph, .ptab.gh .pr { grid-template-columns: minmax(180px, 2fr) minmax(110px, 1fr) 96px 28px; }
+  .ptab.gh .ph, .ptab.gh .pr { grid-template-columns: minmax(170px, 1.8fr) minmax(100px, 1fr) 108px minmax(120px, 1.2fr) 28px; }
   @media (max-width: 800px) { .ptab .ph { display: none; } .ptab .pr, .ptab.gh .pr { grid-template-columns: 1fr 1fr; } }
   .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--ground) 94%, transparent); backdrop-filter: blur(8px);
              border-top: 1px solid var(--line); padding: 10px 20px; display: flex; gap: 14px; justify-content: center; align-items: center; z-index: 6; }
@@ -1450,7 +1452,11 @@ function agentRow(ticket, key, title, url, items) {
   agCtx[ticket] = { key, title, url, items: items || [] };
   const chips = ag.runs.filter(r => r.ticket === ticket).slice(0, 4).map(r =>
     `<button class="chip ${AG_ST[r.status] || ''}" data-arun="${r.id}" title="${esc(r.agent_name)} · ${esc(r.where)}${r.note ? ' · ' + esc(r.note) : ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)} · ${esc(r.status)}</button>`).join('');
-  return `<div class="bagent">${chips}<select data-aassign="1" data-ticket="${esc(ticket)}" aria-label="Agent zuweisen"><option value="">Agent zuweisen …</option>${ag.agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)} (${esc(a.where)})</option>`).join('')}</select></div>`;
+  const pid = (items && items[0]) ? items[0].project_id : null;
+  const cls = (ag.projects.find(p => p.id === pid) || {}).data_class;
+  return `<div class="bagent">${chips}<select data-aassign="1" data-ticket="${esc(ticket)}" aria-label="Agent zuweisen"><option value="">Agent zuweisen …</option>${ag.agents.map(a => {
+    const no = cls === 'restricted' && a.cloud;
+    return `<option value="${esc(a.id)}" ${no ? 'disabled' : ''}>${esc(a.name)} (${esc(a.where)})${no ? ' · nicht für restricted' : ''}</option>`; }).join('')}</select></div>`;
 }
 const fmtSecs = n => n >= 3600 ? Math.floor(n / 3600) + ' h ' + Math.floor(n % 3600 / 60) + ' min' : n >= 60 ? Math.floor(n / 60) + ' min ' + (n % 60) + ' s' : n + ' s';
 let agTimer = null;
@@ -1470,7 +1476,8 @@ async function openAgentDlg(o) {
     const projSel = ag.projects.length > 1 ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(ctx.key || 'Aufgabe')} an ${esc(a.name)}</strong><span class="quiet small">${esc(info.kind)}</span></div>
       <div class="quiet small" style="margin:4px 0 8px">${esc(ctx.title)}</div>
-      <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Ordner: <code>${esc(info.workdir || '—')}</code></div></div></div>
+      <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Repository: <code>${esc(info.workdir || '—')}</code><br>Datenklasse: <b>${esc(info.data_class || '?')}</b></div>
+        <div class="quiet small">${info.mode === 'export' ? `Arbeitet in einem <b>Export</b> nur dieser Pfade: <code>${esc(info.cloud_paths.join(', '))}</code>. Eigenes Git ohne den Rest des Repos. Ergebnis per «Übernehmen» als Branch.` : info.mode === 'worktree' ? 'Arbeitet in einem <b>eigenen Worktree</b> auf Branch <code>agent/…</code>; dein Checkout bleibt unberührt.' : 'Arbeitet im <b>gemeinsamen Ordner</b> (ohne Isolation).'}</div></div></div>
       ${info.cloud ? `<div class="banner ${info.allowed ? 'warn' : 'bad'}">${info.allowed ? `Dieser Agent sendet Prompt und Code an ${esc(info.provider)}. Das Projekt ist dafür freigegeben.` : esc(info.reason)}</div>` : (!info.allowed ? `<div class="banner bad">${esc(info.reason)}</div>` : '')}
       <label class="sm" for="agPrompt">Prompt (nur Ticketangaben, du kannst ihn ändern)</label>
       <textarea id="agPrompt" spellcheck="false" style="height:230px">${esc(info.prompt)}</textarea>
@@ -1505,13 +1512,14 @@ async function openRunDlg(id) {
     const atBottom = !$('agLog') || $('agLog').scrollTop + $('agLog').clientHeight >= $('agLog').scrollHeight - 30;
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
       <div class="quiet small" style="margin:4px 0">${esc(r.title)}</div>
-      <div class="quiet small">Ziel: ${esc(r.where)} · Ordner: <code>${esc(r.workdir)}</code>${r.branch ? ' · Branch: ' + esc(r.branch) : ''} · Dauer: ${esc(fmtSecs(r.secs))}</div>
+      <div class="quiet small">Ziel: ${esc(r.where)} · ${r.mode === 'export' ? 'Export' : r.mode === 'worktree' ? 'Worktree' : 'Ordner'}: <code>${esc(r.wt || r.workdir)}</code>${r.out_branch ? ' · Ergebnis-Branch: <code>' + esc(r.out_branch) + '</code>' + (r.mode === 'export' && !r.taken ? ' (nach «Übernehmen»)' : '') : ''} · Dauer: ${esc(fmtSecs(r.secs))}</div>
       ${r.note ? `<div class="banner warn">${esc(r.note)}</div>` : ''}
       <pre class="log" id="agLog">${esc(text)}</pre>
       <details style="margin-top:6px"><summary class="quiet small">Prompt</summary><pre class="log" style="max-height:30vh;white-space:pre-wrap">${esc(r.prompt_text || '(nur beim Start gesendet)')}</pre></details>
       <div class="row" style="margin-top:8px;justify-content:flex-end">
         ${r.attach ? '<button id="agAttach" title="Im Terminal einfügen, um live mitzulesen und einzugreifen">Befehl zum Mitlesen kopieren</button>' : ''}
         <button id="agReload">Aktualisieren</button>
+        ${!r.active && r.mode === 'export' && !r.taken && r.status !== 'zugewiesen' ? '<button class="primary" id="agTake" title="Änderungen prüfen (nur freigegebene Pfade) und als Branch ins Repository übernehmen. Pushen machst du.">Übernehmen</button>' : ''}
         ${r.active ? '<button id="agStop">Stoppen</button>' : '<button id="agRemove">Entfernen</button>'}
         <button class="primary" id="agClose">Schließen</button></div>`;
     const lg = $('agLog'); if (lg && (first || atBottom)) lg.scrollTop = lg.scrollHeight;
@@ -1519,7 +1527,15 @@ async function openRunDlg(id) {
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
     if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
-    if ($('agRemove')) $('agRemove').onclick = async () => { try { await post('/api/agents/remove', { run: id }); agClose(); await load(); } catch (e) { toast(e.message); } };
+    if ($('agTake')) $('agTake').onclick = async () => { try { const t = await post('/api/agents/takeover', { run: id }); toast(`Übernommen: Branch ${t.branch} (${t.files.length} Dateien)`); await load(); await draw(); } catch (e) { toast(e.message); } };
+    if ($('agRemove')) $('agRemove').onclick = async () => {
+      try { await post('/api/agents/remove', { run: id }); agClose(); await load(); }
+      catch (e) {
+        if (/noch nicht übernommen/.test(e.message) && confirm(e.message + '\n\nTrotzdem entfernen? Die Änderungen gehen verloren.')) {
+          try { await post('/api/agents/remove', { run: id, force: true }); agClose(); await load(); } catch (e2) { toast(e2.message); }
+        } else toast(e.message);
+      }
+    };
   }
   await draw(true);
   $('agDlg').showModal();
@@ -2074,17 +2090,32 @@ $('viewSettings').addEventListener('click', ev => {
 
 // Projekte
 function renderProjects() {
-  $('pj-list').innerHTML = P.length ? `<div class="ptab" role="table" aria-label="Projekte"><div class="ph" role="row"><span>ID</span><span>Anzeigename</span><span>Sonar-Schlüssel</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Anzeigename)">Agent-Ordner</span><span title="Darf Claude, Codex oder Vibe Prompt und Code dieses Projekts an den Anbieter senden?">Cloud-Agent</span><span></span></div>` +
+  $('pj-list').innerHTML = P.length ? `<div class="ptab" role="table" aria-label="Projekte"><div class="ph" role="row"><span>ID</span><span>Anzeigename</span><span>Sonar-Schlüssel</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Anzeigename)">Agent-Ordner</span><span title="restricted: nur lokale Agenten · internal: Cloud-Agenten erlaubt, optional nur freigegebene Pfade · public: ohne Einschränkung">Datenklasse</span><span title="Nur bei internal: Cloud-Agenten bekommen einen Export nur dieser Pfade (kommagetrennt). Leer = ganzes Repo">Cloud-Pfade</span><span></span></div>` +
     P.map((p, i) => `<div class="pr" role="row"><span class="quiet">#${esc(p.id)}</span>
     <input type="text" data-pn="${i}" value="${esc(p.name)}" aria-label="Anzeigename">
     <input type="text" data-pk="${i}" value="${esc(p.sonar_key || '')}" placeholder="—" aria-label="Sonar-Projektschlüssel">
     <input type="text" data-pa="${i}" value="${esc(p.agent_dir || '')}" placeholder="${esc(p.name)}" aria-label="Agent-Ordner">
-    <label class="pc" title="Erlaubt, dass Claude, Codex oder Vibe Prompt und Code dieses Projekts an ihren Anbieter senden"><input type="checkbox" data-pc="${i}" ${p.allow_cloud_agents ? 'checked' : ''}> erlaubt</label>
+    ${classSel('pcl', i, p.data_class)}
+    <input type="text" data-pcp="${i}" value="${esc(pathsStr(p.cloud_paths))}" placeholder="${p.data_class === 'internal' ? 'ganzes Repo' : '—'}" ${p.data_class === 'internal' ? '' : 'disabled'} aria-label="Freigegebene Pfade für Cloud-Agenten">
     <button class="quiet-btn" data-pdel="${i}" title="Projekt entfernen" aria-label="Projekt entfernen">×</button></div>`).join('') + '</div>'
     : '<div class="empty">Noch kein Projekt.</div>';
 }
 $('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; const a = ev.target.dataset.pa; if (a !== undefined) P[+a].agent_dir = ev.target.value; });
-$('viewSettings').addEventListener('change', ev => { const c = ev.target.dataset.pc; if (c !== undefined) P[+c].allow_cloud_agents = ev.target.checked; });
+const pathsStr = x => Array.isArray(x) ? x.join(', ') : (x || '');
+function classSel(attr, i, cur) {
+  const c = cur || 'restricted';
+  return `<select data-${attr}="${i}" aria-label="Datenklasse">${(S.data_classes || []).map(x => `<option value="${esc(x.id)}" ${x.id === c ? 'selected' : ''} title="${esc(x.label)}">${esc(x.id)}</option>`).join('')}</select>`;
+}
+$('viewSettings').addEventListener('change', ev => {
+  const t = ev.target;
+  if (t.dataset.pcl !== undefined) { P[+t.dataset.pcl].data_class = t.value; renderProjects(); }
+  if (t.dataset.ghcl !== undefined) { GH[+t.dataset.ghcl].data_class = t.value; renderGhRepos(); }
+});
+$('viewSettings').addEventListener('input', ev => {
+  const t = ev.target;
+  if (t.dataset.pcp !== undefined) P[+t.dataset.pcp].cloud_paths = t.value;
+  if (t.dataset.ghcp !== undefined) GH[+t.dataset.ghcp].cloud_paths = t.value;
+});
 $('viewSettings').addEventListener('click', ev => {
   const d = ev.target.closest('[data-pdel]');
   if (d) { P.splice(+d.dataset.pdel, 1); renderProjects(); }
@@ -2138,14 +2169,15 @@ async function suggestIdentity() {
 function ghForm() { return { api_url: val('gh-api'), ca_bundle: val('gl-ca'), secret: $('gh-secret').value, repos: GH }; }
 function renderGhRepos() {
   const box = $('gh-list'); if (!box) return;
-  box.innerHTML = GH.length ? `<div class="ptab gh" role="table" aria-label="GitHub-Repos"><div class="ph" role="row"><span>Repo</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Repo-Name)">Agent-Ordner</span><span title="Darf Claude, Codex oder Vibe Prompt und Code dieses Repos an den Anbieter senden?">Cloud-Agent</span><span></span></div>` +
+  box.innerHTML = GH.length ? `<div class="ptab gh" role="table" aria-label="GitHub-Repos"><div class="ph" role="row"><span>Repo</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Repo-Name)">Agent-Ordner</span><span>Datenklasse</span><span title="Nur bei internal: Cloud-Agenten bekommen einen Export nur dieser Pfade">Cloud-Pfade</span><span></span></div>` +
     GH.map((r, i) => `<div class="pr" role="row"><span title="${r.id ? 'Repo-ID ' + esc(r.id) : 'ID wird beim Test ermittelt'}">${esc(r.full)}</span>
       <input type="text" data-gha="${i}" value="${esc(r.agent_dir || '')}" placeholder="${esc(r.full.split('/').pop())}" aria-label="Agent-Ordner">
-      <label class="pc"><input type="checkbox" data-ghc="${i}" ${r.allow_cloud_agents ? 'checked' : ''}> erlaubt</label>
+      ${classSel('ghcl', i, r.data_class)}
+      <input type="text" data-ghcp="${i}" value="${esc(pathsStr(r.cloud_paths))}" placeholder="${r.data_class === 'internal' ? 'ganzes Repo' : '—'}" ${r.data_class === 'internal' ? '' : 'disabled'} aria-label="Freigegebene Pfade">
       <button class="quiet-btn" data-ghdel="${i}" aria-label="Repo entfernen" title="Repo entfernen">×</button></div>`).join('') + '</div>' : '<div class="empty">Noch kein Repo.</div>';
 }
 $('viewSettings').addEventListener('input', ev => { const a = ev.target.dataset.gha; if (a !== undefined) GH[+a].agent_dir = ev.target.value; });
-$('viewSettings').addEventListener('change', ev => { const c = ev.target.dataset.ghc; if (c !== undefined) GH[+c].allow_cloud_agents = ev.target.checked; });
+
 $('viewSettings').addEventListener('click', ev => {
   const d = ev.target.closest('[data-ghdel]'); if (d) { GH.splice(+d.dataset.ghdel, 1); renderGhRepos(); }
   const a = ev.target.closest('[data-ghadd]');
@@ -2201,11 +2233,14 @@ function renderAgentCfg() {
       <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/adrian/work"></label>
       <label class="sm">Zusätzliche Argumente<input type="text" data-ag="${i}" data-f="extra_args" value="${esc(a.extra_args || '')}" placeholder="--model opus"></label>
       <label class="sm" title="Danach wird der Lauf beendet (Prozesse und tmux-Sitzung). 0 = kein Limit">Zeitlimit in Minuten<input type="number" min="0" max="1440" data-ag="${i}" data-f="max_minutes" value="${esc(a.max_minutes ?? 60)}"></label>
+      ${['goose', 'opencode'].includes(a.kind) ? `<label class="sm" title="Lokales Modell, z. B. über Ollama">Modell<input type="text" data-ag="${i}" data-f="model" value="${esc(a.model || '')}" placeholder="qwen2.5-coder:32b"></label>` : ''}
+      <label class="sm" title="Worktree: jeder Lauf bekommt einen eigenen Ordner und Branch agent/<key>-<nr>; der Hauptcheckout bleibt unberührt">Isolation<select data-ag="${i}" data-f="isolation"><option value="worktree" ${a.isolation !== 'shared' ? 'selected' : ''}>Worktree je Lauf (empfohlen)</option><option value="shared" ${a.isolation === 'shared' ? 'selected' : ''}>gemeinsamer Ordner (wie bis 0.15)</option></select></label>
     </div>
-    ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud === false ? '' : 'checked'}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
+    ${['goose', 'opencode'].includes(a.kind) ? `<div class="quiet small"><label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label> · Aus lassen nur, wenn ${esc(a.kind === 'goose' ? 'Goose' : 'opencode')} wirklich mit einem lokalen Modell (Ollama) läuft. Nur dann darf er an restricted-Projekte.</div>` : ''}
+    ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
     <div class="row"><button data-agtest="${i}">Testen</button><button data-agdel="${i}">Entfernen</button><span class="quiet small">Prüft Verbindung, tmux, Arbeitsordner und Programm. Gespeichert wird erst mit «Speichern».</span></div>
     <div id="ag-res-${i}"></div>
-    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div></div>`).join('')
+    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div><div class="ferr" data-err="agents.${i}.model"></div></div>`).join('')
     : '<div class="quiet small" style="margin-bottom:8px">Noch kein Agent.</div>';
 }
 $('viewSettings').addEventListener('input', ev => {
@@ -2225,7 +2260,7 @@ $('viewSettings').addEventListener('click', async ev => {
   const b = ev.target.closest('button');
   if (!b) return;
   if (b.id === 'cn-add') { CN.push({ name: '', host: '', user: '', port: 22, identity_file: '', host_key: 'strict' }); renderAgentCfg(); }
-  if (b.id === 'ag-add') { AGC.push({ name: '', kind: 'claude', connection: 'local', workspace_root: '', extra_args: '' }); renderAgentCfg(); }
+  if (b.id === 'ag-add') { AGC.push({ name: '', kind: 'claude', connection: 'local', workspace_root: '', extra_args: '', isolation: 'worktree', max_minutes: 60 }); renderAgentCfg(); }
   if (b.dataset.cndel !== undefined) { const c = CN.splice(+b.dataset.cndel, 1)[0]; const id = c.id || agSlug(c.name); AGC.forEach(a => { if (a.connection === id) a.connection = 'local'; }); renderAgentCfg(); }
   if (b.dataset.agdel !== undefined) { AGC.splice(+b.dataset.agdel, 1); renderAgentCfg(); }
   if (b.dataset.agtest !== undefined) {

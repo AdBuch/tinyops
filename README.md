@@ -378,6 +378,20 @@ Verlangen die Approval-Regeln in GitLab noch Freigaben, zählt ein Daumen nicht.
 - **Zeitlimit:** Jeder Agent hat ein Zeitlimit (Standard 60 min). Danach wird der Lauf beendet und steht auf «abgelaufen».
 - **Fokus anheften:** Im Panel «Als Fokus anheften». Der Fokus bleibt, bis du ihn löst; Blocker anderswo siehst du als Hinweis.
 
+## 4t. Datenklassen, Worktree und Export (neu in 0.16.0)
+
+| Datenklasse | Lokale Agenten (Goose/opencode mit Ollama, eigener Befehl ohne Cloud) | Cloud-Agenten (Claude, Codex, Vibe) |
+|---|---|---|
+| restricted (Standard) | ja, im eigenen Worktree | **nein** (Zuweisen gesperrt) |
+| internal ohne Cloud-Pfade | ja, Worktree | ja, Worktree mit dem ganzen Repo |
+| internal mit Cloud-Pfaden | ja, Worktree | ja, aber nur im **Export** dieser Pfade; Ergebnis per «Übernehmen» |
+| public | ja | ja, Worktree |
+
+**Worktree:** `<Arbeitsordner>/.tinyops-wt/<Nr>`, Branch `agent/<key>-<nr>`. Das Repository muss unter dem Arbeitsordner geklont sein. Aufräumen mit «Entfernen».
+**Export:** Ein Ordner mit nur den freigegebenen Dateien und eigenem Git. «Übernehmen» legt einen Commit auf `agent/<key>-<nr>` im echten Repo an, wenn nur Dateien in den Pfaden geändert wurden.
+Pushen und MR erstellen bleiben bei dir. Ob ein Pfad in die Cloud darf, entscheidet dein DLP- oder Sicherheitsverantwortlicher; tinyops setzt nur durch, was eingetragen ist.
+**Eigener Agent-Benutzer (empfohlen für restricted):** auf dem Zielhost einen Benutzer ohne sudo und ohne Docker-Gruppe anlegen, die Repos dort klonen, in GitLab nur Developer-Rechte und Protected Branches. Der Agenten-Test zeigt Warnungen, wenn das nicht so ist.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
