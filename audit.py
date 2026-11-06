@@ -38,6 +38,7 @@ LABELS = {
     "time.discard": "Zeitentwurf verworfen", "time.merge": "Zeitentwürfe zusammengelegt", "time.confirm": "Zeitentwurf bestätigt",
     "time.send": "Zeit an MCP gesendet", "time.result": "Buchung vom MCP gemeldet",
     "qa.check": "Prüfpunkt abgehakt", "qa.selftest": "Selbsttest",
+    "ux.clear": "UI-Nutzung gelöscht",
     "idea.assess": "Idee bewertet", "idea.ticket": "Ticket aus Idee", "ide.open": "In IntelliJ geöffnet", "ide.close": "IntelliJ-Worktree entfernt",
 }
 

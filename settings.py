@@ -1009,6 +1009,7 @@ def view(cfg, config_path, features_default=None):
                              for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
         "agent_log_days": int(cfg.get("agent_log_days", 30)),
+        "ux": dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {})),
         "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
@@ -1281,6 +1282,17 @@ def build_config(current, p):
                 errors["time.mcp_url"] = "«%s» liegt nicht im eigenen Netz. Nur mit «Externe Adresse erlauben»." % u.hostname
         tc["mcp_url"] = url
         cfg["time"] = tc
+    if isinstance(p.get("ux"), dict):
+        u = dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {}))
+        u["enabled"] = bool(p["ux"].get("enabled", u["enabled"]))
+        try:
+            d = int(p["ux"].get("days", u["days"]))
+            if not 1 <= d <= 365:
+                raise ValueError
+            u["days"] = d
+        except (TypeError, ValueError):
+            errors["ux.days"] = "Ganze Zahl von 1 bis 365."
+        cfg["ux"] = u
     if "ide_command" in p:
         cmd = " ".join(str(p.get("ide_command") or "").split())
         try:

@@ -504,7 +504,15 @@
   .aiacc { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
   .aiacc .aihead { display: flex; gap: 8px; align-items: baseline; }
   .aiacc .aihead b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .aibar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--quiet) 22%, transparent); overflow: hidden; }
+  .aibar { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--quiet) 22%, transparent); overflow: visible; margin: 4px 0; }
+  .aibar i { border-radius: 4px; }
+  /* Zeitmarke (0.22): so viel Zeit ist im Fenster noch übrig. Frei rechts davon = Vorsprung, der verfällt */
+  .aibar b, .ucb b { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; opacity: .8; }
+  .ucb { position: relative; display: inline-block; width: 26px; height: 6px; border-radius: 3px; background: color-mix(in srgb, currentColor 22%, transparent); vertical-align: middle; margin-left: 5px; }
+  .ucb i { display: block; height: 100%; border-radius: 3px; background: currentColor; }
+  .ucb b { top: -2px; bottom: -2px; width: 1.5px; }
+  .aipace { font-size: 12px; }
+  .aipace.ahead { color: var(--ok); } .aipace.fast { color: var(--warn); }
   .aibar i { display: block; height: 100%; background: var(--ok, #2a8); }
   .aibar.s-low i { background: #d8960c; } .aibar.s-empty i { background: var(--bad); }
   .aiacc .aimeta { font-size: 13px; color: var(--quiet); display: flex; gap: 12px; flex-wrap: wrap; }
@@ -1357,6 +1365,15 @@ function fmtAgo(ts) { const m = Math.max(0, Math.round((Date.now() / 1000 - ts) 
 function fmtLeft(secs) { const m = Math.max(0, Math.round(secs / 60)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; }
 let usageData = null, usageT = 0, usageOpen = false;   // nach einem Reload ist die Box immer zu: sie öffnet sich nur per Klick
 const WIN_SHORT = { '5 h': '5 h', 'Woche': 'Woche', 'Woche Opus': 'Opus', 'Vibe Monat': 'Vibe', 'API Monat': 'API' };
+// Tempo (0.22): Verbrauch gegen vergangene Zeit. Für «Token-Maxing»: was am Ende des Fensters übrig bleibt, verfällt.
+function paceLine(w) {
+  if (w.time_left_pct == null || w.left_pct <= 0) return '';
+  if (w.projected_pct == null) return '<div class="aimeta"><span class="aipace quiet">Fenster hat gerade erst begonnen, noch keine Hochrechnung.</span></div>';
+  if (w.empty_in_secs != null && w.empty_in_secs < w.secs_left) return `<div class="aimeta"><span class="aipace fast">Zu schnell: Bei diesem Tempo leer in ${fmtReset(w.empty_in_secs)}, ${fmtReset(w.secs_left - w.empty_in_secs)} vor dem Reset.</span></div>`;
+  const waste = Math.max(0, Math.round(100 - w.projected_pct));
+  if (w.ahead >= 10 && waste >= 10) return `<div class="aimeta"><span class="aipace ahead">Vorsprung: Bei diesem Tempo verfallen etwa ${waste} %. Du kannst mehr nutzen.</span></div>`;
+  return '<div class="aimeta"><span class="aipace quiet">Im Plan: Verbrauch passt zur Zeit.</span></div>';
+}
 function renderUsageBox() {
   if (!(state && (state.usage_providers || []).length)) return;
   const det = $('usageDet');
@@ -1364,7 +1381,8 @@ function renderUsageBox() {
     if (!a.ok) return `<span class="ucp na" title="${esc(a.error)}">${esc(a.name.split(' ')[0])}: n/a</span>`;
     return a.windows.map(w => {
       const c = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : '';
-      return `<span class="ucp ${c}" title="${esc(a.name)}, ${esc(w.label)}: ${esc(w.left_pct)} % frei${a.stale ? ' (veraltet)' : ''}">${esc(a.name.split(' ')[0])} ${esc(WIN_SHORT[w.label] || w.label)} ${Math.round(w.left_pct)} %${a.stale ? ' ⚠' : ''}</span>`;
+      const mini = w.time_left_pct == null ? '' : `<span class="ucb" aria-hidden="true"><i style="width:${w.left_pct}%"></i><b style="left:${w.time_left_pct}%"></b></span>`;
+      return `<span class="ucp ${c}" title="${esc(a.name)}, ${esc(w.label)}: ${esc(w.left_pct)} % frei${w.time_left_pct == null ? '' : ', ' + w.time_left_pct + ' % der Zeit übrig'}${a.stale ? ' (veraltet)' : ''}">${esc(a.name.split(' ')[0])} ${esc(WIN_SHORT[w.label] || w.label)} ${Math.round(w.left_pct)} %${mini}${a.stale ? ' ⚠' : ''}</span>`;
     }).join('');
   }).join('');
   $('usageSum').innerHTML = sum;
@@ -1379,8 +1397,10 @@ function usageBody() {
     if (!a.ok) return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b><span class="chip warn">nicht abrufbar</span></div><div class="aimeta"><span>${esc(a.error)}</span></div></div>`;
     const ws = a.windows.map(w => {
       const st = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : 'ok';
-      return `<div class="aibar s-${st}" title="${esc(w.used_pct)} % verbraucht"><i style="width:${w.left_pct}%"></i></div>
-        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + fmtReset(w.secs_left)}</span></div>`;
+      const mark = w.time_left_pct == null ? '' : `<b style="left:${w.time_left_pct}%" title="${w.time_left_pct} % der Zeit im Fenster übrig"></b>`;
+      return `<div class="aibar s-${st}" title="${esc(w.used_pct)} % verbraucht${w.time_left_pct == null ? '' : ' · Strich: ' + w.time_left_pct + ' % der Zeit übrig'}"><i style="width:${w.left_pct}%"></i>${mark}</div>
+        <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + fmtReset(w.secs_left)}</span></div>
+        ${paceLine(w)}`;
     }).join('');
     const age = a.manual ? `<div class="aimeta"><span class="quiet small">${a.stale ? '<b style="color:var(--warn)">Stand ist alt.</b> ' : ''}Zuletzt per Lesezeichen gesendet vor ${fmtAgo(a.fetched)}.</span></div>` : '';
     return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b>${a.stale ? '<span class="chip warn">veraltet</span>' : ''}</div>${ws}${age}</div>`;
@@ -1824,10 +1844,32 @@ $('viewTime').addEventListener('change', async ev => {
   }
 });
 
+// ------------------------------------------------ UI-Nutzung im Tab «Prüfen»
+let UXR = null;
+function uxCard() {
+  if (!UXR) return '<div class="quiet small">UI-Nutzung wird geladen …</div>';
+  if (!UXR.enabled) return '<h3>UI-Nutzung</h3><div class="small quiet">Ausgeschaltet (Einstellungen → Weiteres).</div>';
+  return `<div class="row" style="justify-content:space-between"><h3 style="margin:0">UI-Nutzung <span class="quiet small">letzte ${UXR.days} Tage, nur lokal</span></h3>
+      <span class="row"><select id="uxDays" aria-label="Zeitraum">${[1, 7, 30].map(d => `<option value="${d}" ${d === UXR.days ? 'selected' : ''}>${d === 1 ? 'heute' : d + ' Tage'}</option>`).join('')}</select><button class="primary" id="uxCopy">Bericht kopieren</button><button class="quiet-btn" id="uxClear">Daten löschen</button></span></div>
+    <div class="psum" style="margin:6px 0"><span>Sitzungen <b>${UXR.sessions}</b></span><span>aktiv <b>${UXR.active_min} min</b></span><span>Ereignisse <b>${UXR.events}</b></span></div>
+    ${UXR.hints.length ? `<ul class="small" style="margin:4px 0 0 18px;padding:0">${UXR.hints.map(h => `<li>${esc(h)}</li>`).join('')}</ul>` : '<div class="small quiet">Noch nichts Auffälliges. Der Bericht enthält Ansichten, Aktionen mit Zögern, tote Klicks, Tasten, Dialoge und eine Maus-Verteilung.</div>'}
+    <div class="small quiet" style="margin-top:6px">Erfasst werden Klicks (welches Element, nicht was darin steht), Mausweg, Tasten ausserhalb von Feldern und Ansichtswechsel. Kopiere den Bericht und gib ihn mir für die nächste UI-Runde.</div>`;
+}
+async function loadUx(days) {
+  try { await uxFlush(false); UXR = await api('GET', '/api/ux/report?days=' + (days || (UXR && UXR.days) || 7)); } catch (e) { UXR = null; }
+  if ($('qUx')) $('qUx').innerHTML = uxCard();
+}
+$('viewQa').addEventListener('click', async ev => {
+  if (ev.target.closest('#uxCopy')) { await loadUx(); if (UXR) await copyText(UXR.text, 'Bericht zur UI-Nutzung'); }
+  if (ev.target.closest('#uxClear')) { if (!confirm('Alle erfassten UI-Daten löschen?')) return; try { const r = await post('/api/ux/clear', {}); toast(r.deleted + ' Ereignisse gelöscht'); } catch (e) { toast(e.message); } loadUx(); }
+});
+$('viewQa').addEventListener('change', ev => { if (ev.target.id === 'uxDays') loadUx(+ev.target.value); });
+
 // ------------------------------------------------ Prüfen (0.19): Prüfliste je Release und Selbsttest
 let QA = null, QAONLY = false, QARES = null;
 try { QAONLY = localStorage.getItem('tinyops.qaonly') === '1'; } catch (e) { /* egal */ }
 async function loadQa() {
+  loadUx();
   try { QA = await api('GET', '/api/qa'); renderQa(); } catch (e) { $('viewQa').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
 }
 function renderQa() {
@@ -1845,6 +1887,7 @@ function renderQa() {
       <div class="psum"><span>geprüft <b>${done}/${all.length}</b></span><span>Fehler <b>${fails}</b></span></div>
       <label class="check"><input type="checkbox" id="qOnly" ${QAONLY ? 'checked' : ''}><span>nur offene</span></label>
       <button id="qSelf">Selbsttest ausführen</button><button class="primary" id="qRep">Ergebnis kopieren</button></div>
+    <div class="pcard" id="qUx">${uxCard()}</div>
     <div id="qSelfRes">${QARES ? `<details class="pcard" ${QARES.ok ? '' : 'open'}><summary><b>${QARES.ok ? 'Selbsttest bestanden' : 'Selbsttest mit Fehlern'}</b> <span class="quiet small">${QARES.steps.length} Prüfungen, ${QARES.secs} s${QARES.steps.some(x => x.status === 'warn') ? ', mit Warnungen' : ''}</span></summary>${stepsHtml(QARES).replace(/<div class="verdict[^>]*>[^<]*<\/div>/, '')}</details>` : '<div class="small quiet" style="margin-bottom:10px">Der Selbsttest prüft Vorlagen, Hilfsskripte, Datenbank und Verlauf und spielt die Kernfunktionen mit Demo-Daten in einem leeren Ordner durch. Deine Daten bleiben unberührt.</div>'}</div>
     ${[...QA.sections].sort((a, z) => (z.version ? 1 : 0) - (a.version ? 1 : 0) || (z.version || '').localeCompare(a.version || '', undefined, { numeric: true })).map(sec => {
       const items = sec.items.filter(i => !QAONLY || i.status === 'offen');
@@ -2254,6 +2297,7 @@ let GH = [];           // Arbeitskopie der GitHub-Repos
 let view = 'focus';
 
 function setView(v) {
+  uxPush({ k: 'view', t: v });
   if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'focus';
   view = v;
   $('viewFocus').hidden = v !== 'focus';
@@ -2494,7 +2538,9 @@ async function loadSettings() {
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
     <label class="check"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}><span>Testumgebungen, Prompts und Agenten-Knöpfe <span class="quiet small">(braucht Helm-Angaben je Projekt in der config.json)</span></span></label>
-    <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>`)}
+    <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
+    <label class="check"><input type="checkbox" id="ux-on" ${S.ux.enabled ? 'checked' : ''}><span>UI-Nutzung lokal erfassen <span class="quiet small">(Klicks, Mausweg, Tasten ausserhalb von Feldern, nie Eingaben oder Titel; Bericht unter «Prüfen», zum Kopieren für die Verbesserung der Oberfläche)</span></span></label>
+    ${field('ux-days', 'UI-Nutzung aufbewahren (Tage)', S.ux.days, { type: 'number', err: 'ux.days' })}`)}
 
   ${sect('where', 'Ablage', 'Wo Zugangsdaten, Konfiguration und Log liegen.', `
     <div class="small">Zugangsdaten: ${esc(S.storage.text)}</div>
@@ -2865,6 +2911,7 @@ function collect() {
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
+    ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     secrets,
   };
 }
@@ -3336,6 +3383,99 @@ setInterval(() => {   // laufende Agenten: Stand nachfragen, aber keine offene A
   const ae = document.activeElement;
   if (state && state.agents && state.agents.runs.some(r => r.active) && !$('agDlg').open && !(ae && ae.dataset && ae.dataset.aassign)) load();
 }, 5000);
+// ------------------------------------------------ UI-Nutzung (0.22): lokal erfassen, damit die Oberfläche besser wird
+// Erfasst Klicks (Element-Beschreibung, keine Inhalte), tote Klicks, Tasten ausserhalb von Feldern, Dialoge, Ansichten,
+// Mausweg und grobe Verteilung. Nie: Text aus Feldern, Titel von Zeilen und Karten. Ausschalten: Einstellungen → Weiteres.
+const UX = { q: [], sess: Math.random().toString(36).slice(2, 12), hover: null, hoverT: 0, move: {}, lastMove: null, lastMoveT: 0, typing: null };
+const uxOn = () => !!(state && state.ux && state.ux.enabled);
+function uxPush(e) {
+  if (!uxOn() && !(state === undefined || state === null)) return;
+  e.ts = Date.now() / 1000; e.v = e.v || (typeof view !== 'undefined' ? view : '');
+  UX.q.push(e);
+  if (UX.q.length > 400) UX.q.splice(0, UX.q.length - 400);
+}
+const UX_ACT = 'button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.bcard,.tab,.chip[data-arun],dialog';
+function uxDesc(el) {
+  if (!el || el === document.body || el === document.documentElement) return 'body';
+  const tag = el.tagName.toLowerCase();
+  let d = tag + (el.id ? '#' + el.id : '');
+  const da = [...el.attributes].map(a => a.name).find(n => n.startsWith('data-') && !['data-tbase'].includes(n));
+  if (da) d += '[' + da.slice(5) + ']';
+  else if (!el.id && el.classList.length) d += '.' + el.classList[0];
+  const labelled = tag === 'button' || tag === 'summary' || el.classList.contains('tab') || el.getAttribute('role') === 'button';
+  if (labelled) {
+    const t = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().replace(/\d+/g, '#');
+    if (t && t.length <= 40) d += ' «' + t + '»';
+  } else if (tag === 'a') d += el.target === '_blank' ? ' (extern)' : ' (intern)';
+  else if (tag === 'input') d += '(' + (el.type || 'text') + ')';
+  return d.slice(0, 110);
+}
+function uxCtx(el) {
+  const c = el && el.closest && el.closest('dialog[id],#fx,#viewTime,#viewQa,#viewSettings,#fHero,#fList,#fRail,#board,#left,#aside,header,nav');
+  return c ? (c.id ? c.id : c.tagName.toLowerCase()) : '';
+}
+document.addEventListener('pointerover', ev => {
+  const el = ev.target.closest && ev.target.closest(UX_ACT);
+  if (el !== UX.hover) { UX.hover = el; UX.hoverT = performance.now(); }
+}, { passive: true, capture: true });
+document.addEventListener('click', ev => {
+  if (!uxOn()) return;
+  const el = ev.target.closest && ev.target.closest(UX_ACT);
+  const x = ev.clientX / Math.max(1, innerWidth), y = ev.clientY / Math.max(1, innerHeight);
+  if (!el) { uxPush({ k: 'dead', t: uxDesc(ev.target), c: uxCtx(ev.target), x, y }); return; }
+  const h = el === UX.hover ? Math.round(performance.now() - UX.hoverT) : null;
+  uxPush({ k: 'click', t: uxDesc(el), c: uxCtx(el), x, y, e: h != null && ev.detail ? { h } : (ev.detail ? {} : { kb: 1 }) });
+}, { capture: true });
+document.addEventListener('keydown', ev => {
+  if (!uxOn()) return;
+  const t = ev.target, field = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
+  if (field) {     // nur zählen, nie den Inhalt
+    const d = uxDesc(t);
+    if (!UX.typing || UX.typing.t !== d) { uxFlushTyping(); UX.typing = { t: d, c: uxCtx(t), n: 0 }; }
+    UX.typing.n++;
+    if (['Enter', 'Escape', 'Tab'].includes(ev.key)) uxPush({ k: 'key', t: ev.key + ' in Feld' });
+    return;
+  }
+  if (['Shift', 'Control', 'Alt', 'Meta'].includes(ev.key)) return;
+  const k = (ev.ctrlKey ? 'Ctrl+' : '') + (ev.metaKey ? 'Cmd+' : '') + (ev.altKey ? 'Alt+' : '') + (ev.key.length === 1 ? ev.key.toLowerCase() : ev.key);
+  uxPush({ k: 'key', t: k.slice(0, 24) });
+}, { capture: true });
+function uxFlushTyping() { if (UX.typing && UX.typing.n) uxPush({ k: 'type', t: UX.typing.t, c: UX.typing.c, e: { n: UX.typing.n } }); UX.typing = null; }
+document.addEventListener('focusout', () => uxFlushTyping(), true);
+document.addEventListener('pointermove', ev => {
+  if (!uxOn() || ev.pointerType === 'touch') return;
+  const now = performance.now();
+  if (now - UX.lastMoveT < 80) return;
+  UX.lastMoveT = now;
+  const v = typeof view !== 'undefined' ? view : '', m = UX.move[v] || (UX.move[v] = { d: 0, g: {} });
+  const x = ev.clientX / Math.max(1, innerWidth), y = ev.clientY / Math.max(1, innerHeight);
+  if (UX.lastMove) m.d += Math.hypot(x - UX.lastMove[0], (y - UX.lastMove[1]) * innerHeight / Math.max(1, innerWidth));
+  UX.lastMove = [x, y];
+  const cell = Math.min(11, Math.floor(x * 12)) + ',' + Math.min(7, Math.floor(y * 8));
+  m.g[cell] = (m.g[cell] || 0) + 1;
+}, { passive: true });
+window.addEventListener('error', ev => { if (uxOn()) uxPush({ k: 'error', t: String(ev.message || 'Fehler').slice(0, 100) + (ev.lineno ? ' (Zeile ' + ev.lineno + ')' : '') }); });
+(() => {      // Dialoge auf/zu
+  const so = HTMLDialogElement.prototype.showModal, cl = HTMLDialogElement.prototype.close;
+  HTMLDialogElement.prototype.showModal = function () { if (!this.open) uxPush({ k: 'dialog', t: this.id || 'dialog', e: { s: 'open' } }); return so.apply(this, arguments); };
+  HTMLDialogElement.prototype.close = function () { if (this.open) uxPush({ k: 'dialog', t: this.id || 'dialog', e: { s: 'close' } }); return cl.apply(this, arguments); };
+  document.addEventListener('cancel', ev => { if (ev.target.tagName === 'DIALOG') uxPush({ k: 'dialog', t: ev.target.id || 'dialog', e: { s: 'close' } }); }, true);
+})();
+let uxEnvSent = false;
+async function uxFlush(keepalive) {
+  if (!uxOn()) { UX.q = []; UX.move = {}; return; }
+  uxFlushTyping();
+  if (!uxEnvSent) { uxPush({ k: 'env', e: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio, touch: matchMedia('(pointer: coarse)').matches } }); uxEnvSent = true; }
+  for (const [v, m] of Object.entries(UX.move)) if (m.d || Object.keys(m.g).length) UX.q.push({ k: 'move', v, ts: Date.now() / 1000, e: { d: Math.round(m.d * 100) / 100, g: m.g } });
+  UX.move = {};
+  if (!UX.q.length) return;
+  const events = UX.q.splice(0, UX.q.length);
+  try { await fetch('/api/ux/events', { method: 'POST', headers: H, body: JSON.stringify({ sess: UX.sess, events }), keepalive: !!keepalive }); }
+  catch (e) { if (!keepalive) UX.q.unshift(...events.slice(-200)); }
+}
+setInterval(() => uxFlush(false), 15000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') uxFlush(true); });
+window.addEventListener('pagehide', () => uxFlush(true));
 </script>
 </body>
 </html>

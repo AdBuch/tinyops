@@ -34,6 +34,7 @@ import audit
 import qa
 import review
 import timesheet
+import ux
 import fnmatch
 import flow
 import github
@@ -49,7 +50,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.21.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.22.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -130,6 +131,7 @@ DEFAULTS = {
     "agent_command": [],
     "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
     "agents": [],
+    "ux": {"enabled": True, "days": 30},   # UI-Nutzung lokal erfassen (0.22), für die Optimierung der Oberfläche
     "agent_log_days": 30,      # Logs, Prompts und Patches der Agentenläufe nach so vielen Tagen löschen (0 = nie)
     "idea_cap": 25,
     "idea_expire_days": 30,
@@ -1323,6 +1325,7 @@ class App:
         self._rv_cache = {}
         self.timebook = timesheet.TimeBook(data_dir(cfg) / "tinyops.db")
         self.qabook = qa.QaBook(data_dir(cfg) / "tinyops.db")
+        self.uxlog = ux.UxLog(data_dir(cfg) / "tinyops.db")
         self.tc = time_cfg(cfg)
         self.mcp_token = secrets.get("mcp_token", "")
         self.ssl_ctx = ssl.create_default_context()
@@ -2558,6 +2561,7 @@ class App:
             "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
             "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "usage_providers": self.usage_providers(), "problems": list(self.problems),
             "update": self.update_note(),
+            "ux": {"enabled": bool((self.cfg.get("ux") or {}).get("enabled", True))},
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
@@ -3042,6 +3046,29 @@ class App:
         self.audit("time.result", dr["ticket"], ok=new == "gebucht", actor="mcp", draft=dr["id"], state=new, reference=str(b.get("reference") or "")[:200])
         return {"state": new}
 
+    # -- UI-Nutzung (0.22): lokal erfassen, auswerten, als Bericht kopieren
+    def _ux_cfg(self):
+        c = dict(DEFAULTS["ux"])
+        c.update(self.cfg.get("ux") or {})
+        return c
+
+    def ux_events(self, b):
+        c = self._ux_cfg()
+        if not c["enabled"]:
+            return {"ok": False, "off": True}
+        return {"ok": True, "n": self.uxlog.add_batch(b.get("sess"), b.get("events"), int(c["days"] or 30))}
+
+    def ux_report(self, days=7):
+        days = max(1, min(int(days or 7), 365))
+        a = ux.analyse(self.uxlog.events(time.time() - days * 86400))
+        return {"text": ux.report_md(a, days, VERSION), "sessions": a["sessions"], "events": a["events"], "active_min": a["active_min"],
+                "hints": ux.hints(a), "enabled": self._ux_cfg()["enabled"], "stored": self.uxlog.count(), "days": days}
+
+    def ux_clear(self):
+        n = self.uxlog.clear()
+        self.audit("ux.clear", "", events=n)
+        return {"deleted": n}
+
     # -- Hinweis vom Starter (0.21): «Aktualisiert auf …» einmal im Panel zeigen
     def update_note(self):
         f = store.home_dir() / "last-update.json"
@@ -3460,6 +3487,13 @@ def make_handler(app):
                     return self._send(200, app.ide_open(self._body()))
                 if method == "POST" and path == "/api/ide/close":
                     return self._send(200, app.ide_close(self._body()))
+                if method == "POST" and path == "/api/ux/events":
+                    return self._send(200, app.ux_events(self._body()))
+                if method == "GET" and path == "/api/ux/report":
+                    q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
+                    return self._send(200, app.ux_report(q.get("days") or 7))
+                if method == "POST" and path == "/api/ux/clear":
+                    return self._send(200, app.ux_clear())
                 if method == "POST" and path == "/api/update/seen":
                     return self._send(200, app.update_seen())
                 if method == "GET" and path == "/api/update/news":

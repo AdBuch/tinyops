@@ -459,6 +459,15 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4ä. KI-Tempo und UI-Nutzung (neu in 0.22.0)
+
+**Zeitmarke im KI-Kontingent:** Der Strich im Balken zeigt, wie viel Zeit im Fenster noch übrig ist, die Füllung, wie viel Kontingent frei ist. Füllung rechts vom Strich heisst Vorsprung (der Rest verfällt beim Reset, also ruhig mehr nutzen), links davon heisst zu schnell. 20 % nach 15 Minuten ist etwas anderes als 20 % in der letzten halben Stunde; die Tempo-Zeile darunter rechnet das aus.
+
+**UI-Nutzung:** tinyops erfasst lokal, wie du die Oberfläche benutzt, und wertet es unter **Prüfen → UI-Nutzung** aus: Ansichten, Aktionen mit Zögern, tote Klicks, Wutklicks, Tasten, Dialoge ohne Aktion und eine Maus-Verteilung.
+- Nie erfasst werden Feldinhalte und Titel.
+- «Bericht kopieren» ergibt Markdown für die nächste UI-Runde.
+- Ausschalten: Einstellungen → Weiteres.
+
 ## 4z. Launcher zum Herunterladen (neu in 0.21.1)
 
 Unter **Releases** auf https://github.com/AdBuch/tinyops liegt für jedes System ein Launcher:

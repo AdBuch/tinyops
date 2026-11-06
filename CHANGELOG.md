@@ -5,6 +5,36 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.22.0]
+
+### Neu
+- **KI-Kontingent mit Zeitmarke:** Jeder Balken hat jetzt einen senkrechten Strich. Er zeigt, wie viel Zeit im Fenster (5 h, Woche, Monat) noch übrig ist; die Füllung zeigt, wie viel Kontingent frei ist.
+  - Liegt die Füllung rechts vom Strich, hast du Vorsprung: Es bleibt etwas übrig, das beim Reset verfällt.
+  - Liegt sie links davon, verbrauchst du zu schnell.
+  - Derselbe Strich steht klein in den Chips der Kopfzeile.
+- **Tempo-Zeile darunter:**
+  - «Vorsprung: Bei diesem Tempo verfallen etwa 78 %. Du kannst mehr nutzen.»
+  - «Zu schnell: Bei diesem Tempo leer in 2 h, 2 h 30 min vor dem Reset.»
+  - «Im Plan.»
+  - Gerechnet wird mit dem bisherigen Tempo im Fenster, eine Hochrechnung gibt es erst ab 5 % vergangener Zeit.
+  - Fensterlängen: Claude 5 h und Woche, Codex aus `limit_window_seconds`, Mistral der Monat vor dem Reset.
+- **UI-Nutzung lokal erfassen** (Einstellungen → Weiteres, Standard an, 30 Tage aufbewahrt):
+  - Erfasst werden Klicks mit einer Beschreibung des Elements: Art, id, data-Attribut, Beschriftung von Knöpfen, Ziffern als `#`.
+  - Dazu Position, Zögern vom Hovern bis zum Klick, Ansicht und Bereich, tote Klicks und Tasten ausserhalb von Feldern.
+  - Dazu Dialoge auf/zu, Ansichtswechsel, Mausweg und eine grobe Verteilung (12 × 8) je Ansicht, Fenstergrösse und JavaScript-Fehler.
+  - **Nie** erfasst: Text aus Eingabefeldern (nur die Anzahl Tasten), Titel von Zeilen und Karten. Bekannte Token-Formen werden geschwärzt.
+- **Bericht im Tab «Prüfen»** (heute, 7 oder 30 Tage), mit «Bericht kopieren» und «Daten löschen». Ausgewertet werden:
+  - Sitzungen und aktive Minuten, Anteil je Ansicht, häufige Wechsel
+  - Aktionen mit Median des Zögerns, tote Klicks, Wutklicks (3+ in 1,5 s)
+  - Tasten, Eingaben, Dialoge (wie oft ohne Aktion wieder zu), Maus-Verteilung als Textbild, Fehler
+  - «Auffällig» fasst die stärksten Signale zusammen
+  - Gedacht zum Kopieren in den nächsten Auftrag an mich, für die UI-Optimierung. Sonst verlässt nichts den Rechner.
+
+### Grenzen
+- Das Zögern misst vom Hovern bis zum Klick. Wer mit der Tastatur arbeitet, erscheint dort nicht, die Tasten aber schon.
+- Gesendet wird alle 15 s und beim Verlassen der Seite. Ein Absturz des Browsers verliert höchstens diese 15 s.
+- Das Tempo setzt gleichmässige Nutzung voraus. Ein Arbeitstag mit Pausen verzerrt die Hochrechnung im Wochenfenster.
+
 ## [0.21.1]
 
 ### Neu

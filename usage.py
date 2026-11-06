@@ -18,7 +18,7 @@ import ssl
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -102,14 +102,36 @@ def _epoch(v):
         return None
 
 
-def _win(label, pct, reset, now):
+WINDOW_SECS = {"5 h": 5 * 3600, "Woche": 7 * 86400, "Woche Opus": 7 * 86400}
+
+
+def pace(w, window_secs):
+    """Zeit gegen Verbrauch (0.22): Wie viel vom Fenster ist vorbei, und reicht das Kontingent bei diesem Tempo?
+    time_left_pct: verbleibende Zeit in Prozent des Fensters (die Marke im Balken).
+    ahead: frei minus Zeit übrig. Positiv = Vorsprung (es bleibt etwas übrig, das verfällt), negativ = zu schnell.
+    projected_pct: Verbrauch am Ende des Fensters, wenn es so weitergeht."""
+    if not window_secs or w.get("secs_left") is None:
+        return w
+    left = max(0, min(window_secs, w["secs_left"]))
+    elapsed = 1.0 - left / float(window_secs)
+    w["window_secs"] = int(window_secs)
+    w["time_left_pct"] = round(100.0 * left / window_secs, 1)
+    w["ahead"] = round(w["left_pct"] - w["time_left_pct"], 1)
+    w["projected_pct"] = round(w["used_pct"] / elapsed, 0) if elapsed >= 0.05 else None   # zu früh im Fenster: keine Hochrechnung
+    if w["projected_pct"] is not None and w["projected_pct"] > 100 and w["used_pct"] > 0:
+        w["empty_in_secs"] = int((100.0 - w["used_pct"]) / (w["used_pct"] / (elapsed * window_secs)))
+    return w
+
+
+def _win(label, pct, reset, now, window_secs=None):
     try:
         pct = max(0.0, min(100.0, float(pct)))
     except (TypeError, ValueError):
         return None
     r = _epoch(reset)
-    return {"label": label, "used_pct": round(pct, 1), "left_pct": round(100 - pct, 1), "resets_at": r,
-            "secs_left": max(0, int(r - now)) if r else None}
+    w = {"label": label, "used_pct": round(pct, 1), "left_pct": round(100 - pct, 1), "resets_at": r,
+         "secs_left": max(0, int(r - now)) if r else None}
+    return pace(w, window_secs or WINDOW_SECS.get(label))
 
 
 def parse_claude(d, now=None):
@@ -138,7 +160,7 @@ def parse_codex(d, now=None):
         if not reset and w.get("reset_after_seconds") is not None:
             reset = now + float(w["reset_after_seconds"])
         label = {300 * 60: "5 h", 7 * 24 * 3600: "Woche"}.get(int(secs or 0)) or ("5 h" if key == "primary_window" else "Woche")
-        x = _win(label, pct, reset, now)
+        x = _win(label, pct, reset, now, int(secs or 0) or None)
         if x:
             out.append(x)
     return out
@@ -241,6 +263,14 @@ def _money(v, cur):
     return ("%.2f %s" % (v, {"USD": "$", "EUR": "€", "CHF": "CHF"}.get(cur, cur))).replace(".", ",")
 
 
+def month_before(ts):
+    """Gleicher Tag und gleiche Uhrzeit einen Monat vorher (Beginn eines Monatsbudgets)."""
+    import calendar
+    d = datetime.fromtimestamp(ts, timezone.utc)
+    y, m = (d.year, d.month - 1) if d.month > 1 else (d.year - 1, 12)
+    return d.replace(year=y, month=m, day=min(d.day, calendar.monthrange(y, m)[1])).timestamp()
+
+
 def mistral_item(push, now=None):
     now = now or time.time()
     res = {"id": "mistral", "name": "Mistral (Le Chat Pro)", "ok": False, "error": "", "windows": [], "fetched": now, "stale": False, "manual": True}
@@ -254,6 +284,7 @@ def mistral_item(push, now=None):
         res["windows"].append({"label": PUSH_LABEL.get(k, k), "used_pct": round(b["pct"], 2), "left_pct": round(left, 1), "resets_at": b["reset"],
                                "secs_left": max(0, int(b["reset"] - now)),
                                "detail": "%s von %s verbraucht" % (_money(used, b["cur"]), _money(b["budget"], b["cur"]).replace(",00", ""))})
+        pace(res["windows"][-1], b["reset"] - month_before(b["reset"]))
     expired = any(w["resets_at"] < now for w in res["windows"])
     if expired:
         res["error"] = "Der Stand gehört zu einem abgelaufenen Monat. Lesezeichen neu anklicken."

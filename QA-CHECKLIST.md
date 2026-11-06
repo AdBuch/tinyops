@@ -117,3 +117,13 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.22.0
+
+- [ ] `r22-01` KI-Kontingent aufklappen → jeder Balken hat einen senkrechten Strich (Zeit übrig), darunter eine Tempo-Zeile
+- [ ] `r22-02` Kurz nach einem 5-h-Reset mit wenig Verbrauch → «Vorsprung … verfallen etwa …»; mitten in einer intensiven Sitzung → «Zu schnell … leer in …»
+- [ ] `r22-03` Chips in der Kopfzeile → kleiner Balken mit Strich, Tooltip nennt «% der Zeit übrig»
+- [ ] `r22-04` Einige Minuten normal arbeiten, dann Tab «Prüfen» → «UI-Nutzung» zeigt Sitzungen, aktive Minuten und Ereignisse
+- [ ] `r22-05` «Bericht kopieren» und einfügen → keine Ticket-Titel, kein eingetippter Text, aber Aktionen, Ansichten und Maus-Verteilung
+- [ ] `r22-06` Drei Mal schnell auf etwas nicht Klickbares klicken, Bericht neu kopieren → «tote Klicks» und «Wutklick» erscheinen
+- [ ] `r22-07` Einstellungen → Weiteres → «UI-Nutzung lokal erfassen» aus, speichern → keine neuen Ereignisse mehr; «Daten löschen» leert den Bericht
+
