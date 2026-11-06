@@ -334,6 +334,12 @@ class _FlowMixin:
             c.execute("delete from flow_events where ts < ?", (now - 400 * 86400,))
         return events
 
+    def flow_events_between(self, a, b):
+        with self._conn() as c:
+            if c is None:
+                return []
+            return [dict(r) for r in c.execute("select * from flow_events where ts >= ? and ts < ? order by ts", (a, b))]
+
     def flow_event_once(self, ref, key, title, kind, phase, xp, text, now=None):
         with self._conn(True) as c:
             if c.execute("select 1 from flow_events where ref=?", (ref,)).fetchone():

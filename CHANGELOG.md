@@ -5,6 +5,36 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.19.0]
+
+### Neu
+- **Fokus-Zeit:** «Als Fokus anheften» startet die Zeit für dieses Vorhaben, ein Wechsel stoppt sie. «Pause» und «Weiter» stehen im Fokus-Kopf.
+  - Das Panel meldet sich jede Minute, solange es sichtbar ist und du in den letzten 5 Minuten etwas getan hast.
+  - Nach `idle_minutes` (Standard 15) ohne Lebenszeichen endet der Abschnitt beim letzten Lebenszeichen. Die Pause wird als **Lücke** vorgeschlagen («Zählen» oder «Verwerfen») und nie still mitgezählt.
+  - Ist der Browser zu, zählt nichts weiter.
+  - Agentenlaufzeit zählt nicht. Abschnitte über Mitternacht werden auf die Tage verteilt.
+- **Tab «Zeit»:** Entwürfe je Tag und Ticket, auf 15 Minuten gerundet (kaufmännisch, unter 5 Minuten kein Entwurf; beides einstellbar).
+  - Text aus Titel und erledigten Teilschritten, Belege aus Stationen, Teilschritten und Abnahmen mit Commit.
+  - Bearbeiten (bleibt beim Neuladen, gemessene Zeit steht daneben), zusammenlegen, verwerfen, wiederherstellen, von Hand hinzufügen, «Alle offenen bestätigen».
+  - Branches ohne Ticket lassen sich erst nach dem Eintragen eines Tickets bestätigen. Ein Hinweis zeigt offene Entwürfe an früheren Tagen.
+- **Übergabe an deinen MCP**, Vertrag `tinyops.time-entry/1` (der Vorschlag aus der Roadmap, siehe README 4w):
+  - «Bestätigen» sendet per `POST` an die Wrapper-API, mit `Idempotency-Key` aus dem Inhalt und optional `Authorization: Bearer` (`mcp_token`).
+  - Nur `status: booked` gilt als gebucht. `rejected` ergibt «abgelehnt». Fehler, Zeitüberschreitung, kein JSON oder kein Status ergeben «fehlgeschlagen» (bestätigt, nicht gebucht), mit «Erneut senden». Gebuchtes sendet tinyops nie ein zweites Mal.
+  - Abholen statt Schieben: `GET /api/time/export`, Rückmeldung über `POST /api/time/result`.
+  - Nur Adressen im eigenen Netz, ausser «Externe Adresse erlauben». «Verbindung testen» prüft mit GET und bucht nichts.
+  - Jede Bestätigung, Sendung, Rückmeldung, Änderung und Lücke steht im Verlauf.
+- **Qualität: Tab «Prüfen».**
+  - **Prüfliste** aus `QA-CHECKLIST.md`: Die Grundprüfung deckt mit 44 kurzen Aufgaben alle Funktionen ab, dazu kommt je Release ein Abschnitt nur mit dem, was sich geändert hat (hier 13 Aufgaben).
+    - Abhaken mit ok, Fehler mit Notiz oder übersprungen. Der Stand liegt in der Datenbank. Ändert sich der Text einer Aufgabe, ist sie wieder offen.
+    - «Ergebnis kopieren» liefert Fehler mit Notizen als Markdown. Fehler lassen sich als Aufgabe ins Board legen.
+    - Ein Test stellt sicher, dass jedes Release einen eigenen Abschnitt hat.
+  - **Selbsttest** (Knopf oder `python3 server.py --selftest`): Oberfläche, Prompt-Vorlagen, Syntax der Hilfsskripte, Prüfliste, Datenbank (`integrity_check`), Kette des Verlaufs. Dazu ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner: Station, «Schritt erledigt», Verlauf, Zeitentwurf, Review-Punkte. Deine Daten bleiben unberührt.
+
+### Grenzen
+- Der Vertrag mit deinem MCP ist mein Vorschlag. Bis dein MCP ihn umsetzt, ist «Senden» nur gegen einen Test-MCP geprüft. Weicht deine Wrapper-API ab, bleibt die Anpassung klein, weil sie in `timesheet.payload()` und `App.time_send()` steckt.
+- Gemessen wird nur, was im Panel passiert. Arbeit in IntelliJ ohne Panel-Aktivität zählt nach dem Leerlauf als Lücke, die du annimmst.
+- Das Lebenszeichen hängt am offenen Tab. Mehrere Tabs schaden nicht, zählen aber auch nicht doppelt.
+
 ## [0.18.0]
 
 ### Neu

@@ -24,7 +24,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.16.0** ✓ | Agenten isoliert, Datenklassen (geliefert 2026-11-05; Export statt Sparse-Checkout, siehe unten) | T-2, SEC-1, SEC-2, F-10, F-14 | L |
 | **0.17.0** ✓ | Audit und Verlauf (geliefert 2026-11-06) | T-3, SEC-6, F-15 | M |
 | **0.18.0** ✓ | Rückfragen und Ergebnisse von Agenten, offene Review-Punkte exportieren (geliefert 2026-11-06) | T-5, F-09 | M |
-| **0.19.0** | Fokus-Zeit und Zeitentwürfe für Projectron | F-20 | M |
+| **0.19.0** ✓ | Fokus-Zeit und Zeitentwürfe für Projectron, Prüfliste und Selbsttest (geliefert 2026-11-06) | F-20 | M |
 | **0.20.0** | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit | F-06, F-07, F-17, G9 | M–L |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
@@ -115,7 +115,7 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 - GitLab-Threads per GET; GitHub-Kommentare per REST (Erledigt-Status dort unbekannt).
 - Im Export-Modus nur Punkte innerhalb der Cloud-Pfade. Jeder Export steht im Verlauf.
 
-## 0.19.0 — Fokus-Zeit und Zeitentwürfe für Projectron
+## 0.19.0 — Fokus-Zeit und Zeitentwürfe für Projectron ✓
 
 **Ziel:** Zeit fällt beim Arbeiten an; gebucht wird nur nach Bestätigung, über deinen MCP.
 
@@ -141,6 +141,17 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 - Ist der MCP nicht erreichbar, bleibt der Entwurf erhalten und ist sichtbar.
 
 **Tests:** Mock-MCP (HTTP) mit Erfolg, Fehler und Doppelsendung; Timer-Tests mit simulierter Zeit.
+
+**Umgesetzt (2026-11-06):**
+- Vertrag wie vorgeschlagen, als `tinyops.time-entry/1`. Der Idempotency-Key entsteht aus dem Inhalt, damit ein geänderter Entwurf nach einem Fehlschlag nicht am alten Schlüssel hängt.
+- Dazu Abholen (`GET /api/time/export`) mit Rückmeldung (`POST /api/time/result`).
+- Lücken statt stiller Pausen; ein Browser ohne Lebenszeichen zählt nicht weiter.
+- **Noch offen:** Abgleich mit der echten Wrapper-API deines MCP.
+
+**Dazu, auf Wunsch:**
+- **Qualität:** Prüfliste `QA-CHECKLIST.md` (Grundprüfung aller Funktionen plus je Release nur das Geänderte) zum Abhaken im Tab «Prüfen».
+- **Selbsttest** `--selftest`.
+- **Regel ab jetzt:** Jedes Release ergänzt die Prüfliste um einen eigenen Abschnitt (ein Test erzwingt das).
 
 ## 0.20.0 — Vom Einfall zum Test
 

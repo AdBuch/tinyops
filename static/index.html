@@ -178,6 +178,49 @@
   .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--raised); color: var(--quiet); }
   .badge.success { background: var(--ok-bg); color: var(--ok); } .badge.failed { background: var(--bad-bg); color: var(--bad); } .badge.running { background: var(--focus-bg); color: var(--focus); }
   textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+  .htime { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--quiet); }
+  .htime b { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 650; }
+  .htime .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok, #1f8a4c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #1f8a4c) 20%, transparent); }
+  .htime.paused .dot { background: var(--quiet); box-shadow: none; }
+  .pview { max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px; }
+  .pview h1 { font-size: 22px; margin: 0; }
+  .phead { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 14px; }
+  .phead .sp { flex: 1; }
+  .psum { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--quiet); }
+  .psum b { color: var(--ink); font-variant-numeric: tabular-nums; font-size: 15px; }
+  .pcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+  .pcard h3 { margin: 0 0 8px; font-size: 14px; }
+  .tdraft { display: grid; grid-template-columns: 150px 92px minmax(0, 1fr) auto; gap: 8px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .tdraft:first-of-type { border-top: 0; }
+  .tdraft input { width: 100%; }
+  .tdraft > span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tdraft .ev { grid-column: 1 / -1; font-size: 12px; color: var(--quiet); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .tdraft .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+  .tdraft.st-verworfen { opacity: .5; }
+  .tdraft.st-gebucht input { border-color: transparent; background: transparent; }
+  .tdraft .msg { grid-column: 1 / -1; font-size: 12px; }
+  .tgap, .tseg { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .tgap:first-of-type, .tseg:first-of-type { border-top: 0; }
+  .tgap .sp, .tseg .sp { flex: 1; }
+  .tseg time, .tgap time { font-variant-numeric: tabular-nums; color: var(--quiet); min-width: 96px; }
+  @media (max-width: 760px) { .tdraft { grid-template-columns: 1fr 80px; } .tdraft .tx, .tdraft .acts { grid-column: 1 / -1; } }
+  .qsec { margin-bottom: 10px; }
+  .qsec > summary { cursor: pointer; display: flex; gap: 10px; align-items: center; padding: 8px 2px; font-weight: 600; }
+  .qsec > summary .sp { flex: 1; }
+  .qbar { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .qbar i { display: block; height: 100%; background: var(--ok, #1f8a4c); }
+  .qitem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 8px 4px; border-top: 1px solid var(--line); }
+  .qitem .qb { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .qitem .qb button { border: 0; border-radius: 0; padding: 4px 9px; background: transparent; min-width: 34px; }
+  .qitem .qb button.on.ok { background: var(--ok-bg); color: var(--ok); }
+  .qitem .qb button.on.fehler { background: var(--bad-bg, #fde8e8); color: var(--bad, #b42318); }
+  .qitem .qb button.on.übersprungen { background: var(--raised); }
+  .qitem .tx { font-size: 13.5px; }
+  .qitem .tx code { font-size: 12px; }
+  .qitem .ex { font-size: 12.5px; color: var(--quiet); }
+  .qitem .qid { font-family: var(--mono); font-size: 11.5px; color: var(--quiet); }
+  .qitem textarea { grid-column: 2 / -1; height: 54px; }
+  .qitem.st-ok .tx { color: var(--quiet); }
   .rvlist { list-style: none; margin: 8px 0 0; padding: 0; max-height: 52vh; overflow: auto; border-top: 1px solid var(--line); }
   .rvlist li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
   .rvlist li.off { opacity: .55; }
@@ -637,7 +680,7 @@
 <body>
 <header>
   <h1>Arbeitspanel</h1>
-  <nav class="tabs"><button class="tab on" data-view="focus" title="Was ist als Nächstes dran?">Fokus</button><button class="tab" data-view="board">Board</button><button class="tab" data-view="overview" title="Die bisherige Übersicht: alle MRs und Branches als Listen">Listen</button><button class="tab" data-view="settings">Einstellungen</button></nav>
+  <nav class="tabs"><button class="tab on" data-view="focus" title="Was ist als Nächstes dran?">Fokus</button><button class="tab" data-view="board">Board</button><button class="tab" data-view="overview" title="Die bisherige Übersicht: alle MRs und Branches als Listen">Listen</button><button class="tab" data-view="time" title="Fokus-Zeit und Zeitentwürfe für Projectron">Zeit</button><button class="tab" data-view="qa" title="Prüfliste und Selbsttest">Prüfen</button><button class="tab" data-view="settings">Einstellungen</button></nav>
   <span class="spacer"></span>
   <a id="pGl" class="conn" href="#settings" style="display:none"></a>
   <a id="pJi" class="conn" href="#settings" style="display:none"></a>
@@ -710,6 +753,8 @@
   <div class="bcols" id="bcols"></div>
 </div>
 <div id="viewSettings" hidden></div>
+<div id="viewTime" class="pview" hidden></div>
+<div id="viewQa" class="pview" hidden></div>
 
 <nav id="bottomnav" aria-label="Hauptmenü">
   <button class="bn on" data-view="focus"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg>Fokus</button>
@@ -1135,6 +1180,7 @@ async function load() {
   try {
     state = await api('GET', '/api/overview');
     renderHeader(); renderLeft(); renderAside(); renderBoard(); renderFocus(); loadUsage(false);
+    if (view === 'time') loadTime();
     if (state.features.ideas) renderIdeas();
     if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
@@ -1568,6 +1614,166 @@ function agReportHtml(r) {
   return `<div class="agrep">${parts.join('')}</div>`;
 }
 
+// ------------------------------------------------ Fokus-Zeit (0.19): läuft nur für den angehefteten Fokus, Lücken statt stiller Pausen
+const hm = secs => { const m = Math.max(0, Math.round(secs / 60)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+let timeAt = Date.now();
+function timeChip(e) {
+  const t = state.time || {};
+  if (!t.enabled || e.t !== 'card') return '';
+  const r = t.running;
+  if (r && r.key === e.id) {
+    return `<div class="htime" data-tbase="${r.today_secs}"><span class="dot"></span><span>Zeit läuft</span><b class="tval">${hm(r.today_secs)}</b><span>heute bei diesem Vorhaben</span>
+      <button class="quiet-btn" data-tpause="1" title="Zeit anhalten; der Fokus bleibt">Pause</button><button class="quiet-btn" data-tview="1">Tag ansehen</button></div>`;
+  }
+  return `<div class="htime paused"><span class="dot"></span><span>Zeit angehalten</span><button class="quiet-btn" data-tresume="1">Weiter</button>${t.gaps ? `<button class="quiet-btn" data-tview="1">${t.gaps} Lücke${t.gaps === 1 ? '' : 'n'} entscheiden</button>` : ''}</div>`;
+}
+setInterval(() => {   // die Anzeige zählt zwischen zwei Abfragen weiter
+  document.querySelectorAll('.htime[data-tbase] .tval').forEach(el => { const b = +el.parentElement.dataset.tbase; el.textContent = hm(b + (Date.now() - timeAt) / 1000); });
+}, 20000);
+let lastInput = Date.now();
+['keydown', 'pointerdown', 'pointermove', 'wheel', 'focus'].forEach(t => window.addEventListener(t, () => { lastInput = Date.now(); }, { passive: true, capture: true }));
+setInterval(async () => {   // Lebenszeichen: nur wenn das Panel sichtbar ist und du in den letzten 5 Minuten etwas getan hast
+  const t = state && state.time;
+  if (!t || !t.enabled || !t.running || document.visibilityState !== 'visible' || Date.now() - lastInput > 5 * 60000) return;
+  try { const was = t.running && t.gaps; state.time = await post('/api/time/ping', {}); timeAt = Date.now(); if (state.time.gaps !== (t.gaps || 0) || was !== state.time.gaps) renderFocus(); } catch (e) { /* nächstes Mal */ }
+}, 60000);
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest && ev.target.closest('[data-tpause],[data-tresume],[data-tview]');
+  if (!t) return;
+  ev.stopPropagation();
+  if (t.dataset.tview) { setView('time'); return; }
+  try { state.time = await post(t.dataset.tpause ? '/api/time/pause' : '/api/time/resume', {}); timeAt = Date.now(); renderFocus(); } catch (e) { toast(e.message); }
+});
+
+let TDAY = null, TDATA = null;
+async function loadTime() {
+  try { TDATA = await api('GET', '/api/time/day' + (TDAY ? '?date=' + TDAY : '')); TDAY = TDATA.date; renderTime(); }
+  catch (e) { $('viewTime').innerHTML = `<div class="pview"><div class="banner bad">${esc(e.message)}</div></div>`; }
+}
+const T_ST = { offen: '', bestätigt: 'tk', gebucht: 'sq-ok', abgelehnt: 'sq-bad', fehlgeschlagen: 'warn', verworfen: 'sq-none' };
+function shiftDay(d, n) { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); }
+function renderTime() {
+  const d = TDATA, box = $('viewTime');
+  const dd = new Date(d.date + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const open = d.drafts.filter(x => x.state === 'offen' && x.ticket_ok && x.minutes > 0);
+  const sameDay = id => d.drafts.filter(x => x.id !== id && x.state === 'offen');
+  const draft = x => {
+    const lock = x.state === 'gebucht' || x.state === 'verworfen';
+    const acts = [];
+    if (x.state === 'offen') acts.push(`<button class="primary" data-tconf="${esc(x.id)}" ${x.ticket_ok && x.minutes > 0 ? '' : 'disabled'} title="${x.ticket_ok ? (d.mcp && d.send_on_confirm ? 'Bestätigen und an deinen MCP senden' : 'Bestätigen; dein MCP holt es ab') : 'Erst ein Ticket eintragen'}">${d.mcp && d.send_on_confirm ? 'Bestätigen & buchen' : 'Bestätigen'}</button>`);
+    if (['bestätigt', 'fehlgeschlagen'].includes(x.state) && d.mcp) acts.push(`<button class="primary" data-tsend="${esc(x.id)}">${x.state === 'fehlgeschlagen' ? 'Erneut senden' : 'Senden'}</button>`);
+    if (x.state === 'offen' && sameDay(x.id).length) acts.push(`<select data-tmerge="${esc(x.id)}" title="In einen anderen Entwurf legen"><option value="">Zusammenlegen …</option>${sameDay(x.id).map(o => `<option value="${esc(o.id)}">mit ${esc(o.ticket)}</option>`).join('')}</select>`);
+    if (!lock) acts.push(`<button class="quiet-btn" data-tdisc="${esc(x.id)}">Verwerfen</button>`);
+    if (x.state === 'verworfen') acts.push(`<button class="quiet-btn" data-trest="${esc(x.id)}">Wiederherstellen</button>`);
+    const calc = x.edited && !x.manual && x.calc_minutes !== x.minutes ? ` <span class="quiet small" title="gemessen und gerundet">(gemessen ${x.calc_minutes})</span>` : '';
+    return `<div class="tdraft st-${esc(x.state)}">
+      <input type="text" data-tedit="${esc(x.id)}" data-f="ticket" value="${esc(x.ticket)}" ${lock ? 'readonly' : ''} aria-label="Ticket" title="${esc(x.title)}">
+      <span><input data-tedit="${esc(x.id)}" data-f="minutes" type="number" min="0" max="1440" step="${d.round}" value="${x.minutes}" ${lock ? 'readonly' : ''} aria-label="Minuten" style="width:72px"> min${calc}</span>
+      <input type="text" class="tx" data-tedit="${esc(x.id)}" data-f="text" value="${esc(x.text)}" maxlength="300" ${lock ? 'readonly' : ''} aria-label="Text">
+      <div class="acts"><span class="chip ${T_ST[x.state] || ''}">${esc(x.state)}${x.edited && x.state === 'offen' ? ' · bearbeitet' : ''}${x.manual ? ' · von Hand' : ''}</span>${acts.join('')}</div>
+      ${x.evidence.length || !x.ticket_ok ? `<div class="ev">${!x.ticket_ok ? '<span class="chip warn">kein Ticket: Branch ohne Ticket, erst ein Ticket eintragen</span>' : ''}${x.evidence.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : ''}
+      ${x.reference || x.message ? `<div class="msg ${x.state === 'gebucht' ? 'quiet' : ''}">${x.reference ? 'Referenz: <code>' + esc(x.reference) + '</code> ' : ''}${esc(x.message)}${x.attempts ? ` <span class="quiet">(${x.attempts}× gesendet)</span>` : ''}</div>` : ''}
+    </div>`;
+  };
+  box.innerHTML = `<div class="phead"><button data-tday="-1" aria-label="Tag davor">‹</button><h1>${esc(dd)}</h1><button data-tday="1" aria-label="Tag danach">›</button>
+      <button class="quiet-btn" data-tday="0">Heute</button><span class="sp"></span>
+      <div class="psum"><span>gemessen <b>${hm(d.total_secs)}</b></span><span>Entwürfe <b>${hm(d.draft_minutes * 60)}</b></span><span>gebucht <b>${hm(d.booked_minutes * 60)}</b></span></div>
+      ${open.length ? `<button class="primary" id="tAll">Alle ${open.length} offenen bestätigen</button>` : ''}</div>
+    ${d.earlier_open.length ? `<div class="banner warn">Offene Entwürfe an früheren Tagen: ${d.earlier_open.map(x => `<button class="quiet-btn" data-tgo="${x}">${new Date(x + 'T12:00:00').toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}</button>`).join(' ')}</div>` : ''}
+    ${d.gaps.length ? `<div class="pcard"><h3>Lücken <span class="quiet small">Pausen über der Leerlaufgrenze. Sie zählen erst, wenn du sie annimmst.</span></h3>${d.gaps.map(g => `<div class="tgap"><time>${g.from_}–${g.to}</time><b>${g.minutes} min</b><span class="sp">${esc(g.key)} ${esc(g.title)}</span><button data-tgap="${g.id}" data-c="1">Zählen</button><button class="quiet-btn" data-tgap="${g.id}" data-c="0">Verwerfen</button></div>`).join('')}</div>` : ''}
+    <div class="pcard"><h3>Entwürfe <span class="quiet small">je Ticket, auf ${d.round} min gerundet. Gebucht wird erst nach «Bestätigen»${d.mcp ? ', über deinen MCP' : '; dein MCP holt bestätigte Entwürfe über <code>GET /api/time/export</code> ab'}.</span></h3>
+      ${d.drafts.length ? d.drafts.map(draft).join('') : '<div class="quiet small">Noch nichts. Zeit entsteht, solange ein Vorhaben als Fokus angeheftet ist.</div>'}
+      <div class="tdraft" style="border-top:1px dashed var(--line)"><input type="text" id="tNewT" placeholder="Ticket, z. B. DLP-123" aria-label="Ticket"><span><input id="tNewM" type="number" min="0" max="1440" step="${d.round}" value="${d.round}" style="width:72px" aria-label="Minuten"> min</span><input type="text" id="tNewX" placeholder="Text (z. B. Meeting, Review)" maxlength="300" aria-label="Text"><div class="acts"><button id="tNew">Von Hand hinzufügen</button></div></div>
+    </div>
+    <details class="pcard"><summary><b>Abschnitte</b> <span class="quiet small">${d.segments.length} gemessen, nur Fokus-Zeit (Agentenlaufzeit zählt nie)</span></summary>
+      ${d.segments.map(x => `<div class="tseg"><time>${x.from_}–${x.open ? 'jetzt' : x.to}</time><b>${hm(x.secs)}</b><span class="sp">${esc(x.key)} ${esc(x.title)}</span><span class="quiet small">${esc(x.source)}</span></div>`).join('') || '<div class="quiet small">keine</div>'}
+    </details>`;
+}
+$('viewTime').addEventListener('click', async ev => {
+  const t = ev.target;
+  const dayB = t.closest('[data-tday]'); if (dayB) { const n = +dayB.dataset.tday; TDAY = n ? shiftDay(TDATA.date, n) : null; return loadTime(); }
+  const go = t.closest('[data-tgo]'); if (go) { TDAY = go.dataset.tgo; return loadTime(); }
+  const run = async (path, body, msg) => { try { const r = await post(path, body); if (msg) toast(typeof msg === 'function' ? msg(r) : msg); await loadTime(); } catch (e) { toast(e.message); await loadTime(); } };
+  const sendMsg = r => r.state === 'gebucht' ? `Gebucht${r.reference ? ': ' + r.reference : ''}` : r.state === 'bestätigt' ? 'Bestätigt. Dein MCP kann es abholen.' : `${r.state}: ${r.message || ''}`;
+  const g = t.closest('[data-tgap]'); if (g) return run('/api/time/gap', { id: +g.dataset.tgap, count: g.dataset.c === '1' }, g.dataset.c === '1' ? 'Lücke zählt' : 'Lücke verworfen');
+  const c = t.closest('[data-tconf]'); if (c) return run('/api/time/confirm', { id: c.dataset.tconf }, sendMsg);
+  const sd = t.closest('[data-tsend]'); if (sd) return run('/api/time/send', { id: sd.dataset.tsend }, sendMsg);
+  const di = t.closest('[data-tdisc]'); if (di) return run('/api/time/discard', { id: di.dataset.tdisc }, 'Verworfen');
+  const re = t.closest('[data-trest]'); if (re) return run('/api/time/restore', { id: re.dataset.trest });
+  if (t.id === 'tNew') return run('/api/time/add', { date: TDATA.date, ticket: $('tNewT').value, minutes: $('tNewM').value, text: $('tNewX').value }, 'Hinzugefügt');
+  if (t.id === 'tAll') {
+    const open = TDATA.drafts.filter(x => x.state === 'offen' && x.ticket_ok && x.minutes > 0);
+    if (!confirm(`${open.length} Entwürfe (${hm(open.reduce((a, x) => a + x.minutes * 60, 0))}) bestätigen${TDATA.mcp && TDATA.send_on_confirm ? ' und an deinen MCP senden' : ''}?`)) return;
+    let ok = 0, bad = 0;
+    for (const x of open) { try { const r = await post('/api/time/confirm', { id: x.id }); (r.state === 'gebucht' || r.state === 'bestätigt') ? ok++ : bad++; } catch (e) { bad++; } }
+    toast(`${ok} bestätigt${bad ? ', ' + bad + ' mit Fehler' : ''}`); return loadTime();
+  }
+});
+$('viewTime').addEventListener('change', async ev => {
+  const t = ev.target;
+  if (t.dataset.tmerge !== undefined && t.value) {
+    try { await post('/api/time/merge', { id: t.dataset.tmerge, into: t.value }); toast('Zusammengelegt'); } catch (e) { toast(e.message); }
+    return loadTime();
+  }
+  if (t.dataset.tedit) {
+    try { await post('/api/time/edit', { id: t.dataset.tedit, [t.dataset.f]: t.value }); } catch (e) { toast(e.message); }
+    return loadTime();
+  }
+});
+
+// ------------------------------------------------ Prüfen (0.19): Prüfliste je Release und Selbsttest
+let QA = null, QAONLY = false, QARES = null;
+try { QAONLY = localStorage.getItem('tinyops.qaonly') === '1'; } catch (e) { /* egal */ }
+async function loadQa() {
+  try { QA = await api('GET', '/api/qa'); renderQa(); } catch (e) { $('viewQa').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+}
+function renderQa() {
+  const all = QA.sections.flatMap(x => x.items), done = all.filter(i => i.status !== 'offen').length, fails = all.filter(i => i.status === 'fehler').length;
+  const keep = [...document.querySelectorAll('#viewQa textarea[data-qnote]')].map(t => [t.dataset.qnote, t.value, document.activeElement === t]);
+  const openSet = new Set([...document.querySelectorAll('#viewQa details[data-qsec][open]')].map(d => d.dataset.qsec));
+  const first = !document.querySelector('#viewQa details[data-qsec]');
+  const md = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
+  const item = i => `<div class="qitem st-${esc(i.status)}"><span class="qb" role="group" aria-label="Ergebnis">
+      <button class="${i.status === 'ok' ? 'on ok' : ''}" data-qset="${esc(i.id)}" data-s="ok" title="ok">${ic('check')}</button><button class="${i.status === 'fehler' ? 'on fehler' : ''}" data-qset="${esc(i.id)}" data-s="fehler" title="Fehler">${ic('x')}</button><button class="${i.status === 'übersprungen' ? 'on übersprungen' : ''}" data-qset="${esc(i.id)}" data-s="übersprungen" title="übersprungen">–</button></span>
+    <div><div class="tx">${md(i.text)}</div>${i.expect ? `<div class="ex">erwartet: ${md(i.expect)}</div>` : ''}${i.changed ? '<div class="ex" style="color:var(--warn)">Text geändert, bitte neu prüfen</div>' : ''}</div>
+    <span class="qid" title="${i.checked_in ? 'geprüft in ' + esc(i.checked_in) : ''}">${esc(i.id)}</span>
+    ${i.status === 'fehler' ? `<textarea data-qnote="${esc(i.id)}" placeholder="Was ist passiert? (wird mit «Ergebnis kopieren» mitgegeben)">${esc(i.note)}</textarea><div style="grid-column:2/-1"><button class="quiet-btn" data-qtask="${esc(i.id)}">Als Aufgabe ins Board</button></div>` : ''}</div>`;
+  $('viewQa').innerHTML = `<div class="phead"><h1>Prüfliste tinyops ${esc(QA.version)}</h1><span class="sp"></span>
+      <div class="psum"><span>geprüft <b>${done}/${all.length}</b></span><span>Fehler <b>${fails}</b></span></div>
+      <label class="check"><input type="checkbox" id="qOnly" ${QAONLY ? 'checked' : ''}><span>nur offene</span></label>
+      <button id="qSelf">Selbsttest ausführen</button><button class="primary" id="qRep">Ergebnis kopieren</button></div>
+    <div id="qSelfRes">${QARES ? `<details class="pcard" ${QARES.ok ? '' : 'open'}><summary><b>${QARES.ok ? 'Selbsttest bestanden' : 'Selbsttest mit Fehlern'}</b> <span class="quiet small">${QARES.steps.length} Prüfungen, ${QARES.secs} s${QARES.steps.some(x => x.status === 'warn') ? ', mit Warnungen' : ''}</span></summary>${stepsHtml(QARES).replace(/<div class="verdict[^>]*>[^<]*<\/div>/, '')}</details>` : '<div class="small quiet" style="margin-bottom:10px">Der Selbsttest prüft Vorlagen, Hilfsskripte, Datenbank und Verlauf und spielt die Kernfunktionen mit Demo-Daten in einem leeren Ordner durch. Deine Daten bleiben unberührt.</div>'}</div>
+    ${[...QA.sections].sort((a, z) => (z.version ? 1 : 0) - (a.version ? 1 : 0) || (z.version || '').localeCompare(a.version || '', undefined, { numeric: true })).map(sec => {
+      const items = sec.items.filter(i => !QAONLY || i.status === 'offen');
+      const isOpen = first ? (sec.current || (!QA.sections.some(x => x.current) && sec.done < sec.total)) : openSet.has(sec.title);
+      return `<details class="pcard qsec" data-qsec="${esc(sec.title)}" ${isOpen ? 'open' : ''}><summary>${esc(sec.title)}${sec.current ? ' <span class="chip tk">dieses Release</span>' : ''}<span class="sp"></span>${sec.fails ? `<span class="chip sq-bad">${sec.fails} Fehler</span>` : ''}<span class="quiet small">${sec.done}/${sec.total}</span><span class="qbar"><i style="width:${Math.round(100 * sec.done / sec.total)}%"></i></span></summary>
+        ${items.map(item).join('') || '<div class="quiet small">alles geprüft</div>'}</details>`;
+    }).join('')}
+    <div class="quiet small">Quelle: <code>${esc(QA.file)}</code>. Je Release kommt ein Abschnitt dazu, nur mit dem, was sich geändert hat.</div>`;
+  keep.forEach(([id, v, f]) => { const t = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(id)}"]`); if (t) { t.value = v; if (f) t.focus(); } });
+}
+$('viewQa').addEventListener('click', async ev => {
+  const t = ev.target;
+  const b = t.closest('[data-qset]');
+  if (b) {
+    const cur = QA.sections.flatMap(x => x.items).find(i => i.id === b.dataset.qset);
+    const s2 = cur && cur.status === b.dataset.s ? 'offen' : b.dataset.s;
+    try { await post('/api/qa/set', { id: b.dataset.qset, status: s2, note: s2 === 'fehler' ? (cur.note || '') : '' }); await loadQa(); if (s2 === 'fehler') { const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`); if (ta) ta.focus(); } } catch (e) { toast(e.message); }
+    return;
+  }
+  const tk = t.closest('[data-qtask]');
+  if (tk) { try { const r = await post('/api/qa/task', { id: tk.dataset.qtask }); toast(`${r.key} im Ideenpool angelegt`); } catch (e) { toast(e.message); } return; }
+  if (t.closest('#qRep')) { try { const r = await post('/api/qa/report', {}); await copyText(r.text, 'Prüfergebnis'); } catch (e) { toast(e.message); } return; }
+  if (t.closest('#qSelf')) {
+    await busy($('qSelf'), 'Prüfe …', async () => { try { QARES = await post('/api/qa/selftest', {}); renderQa(); } catch (e) { toast(e.message); } });
+  }
+});
+$('viewQa').addEventListener('change', async ev => {
+  const t = ev.target;
+  if (t.id === 'qOnly') { QAONLY = t.checked; try { localStorage.setItem('tinyops.qaonly', QAONLY ? '1' : '0'); } catch (e) { /* egal */ } renderQa(); return; }
+  if (t.dataset.qnote) { try { await post('/api/qa/set', { id: t.dataset.qnote, status: 'fehler', note: t.value }); const it = QA.sections.flatMap(x => x.items).find(i => i.id === t.dataset.qnote); if (it) it.note = t.value; } catch (e) { toast(e.message); } }
+});
+
 // ------------------------------------------------ Offene Review-Punkte: ansehen, als Prompt oder JSON exportieren, einem Agenten geben
 const RV_CLASS = { restricted: 'Kommentare können Code oder Kundendaten enthalten. Projekt ist restricted: nur an lokale Werkzeuge und lokale Agenten geben.',
   internal: 'Projekt ist internal: Cloud nur im Rahmen der freigegebenen Pfade.', public: '' };
@@ -1948,13 +2154,17 @@ function setView(v) {
   if (v === 'ideas' && !matchMedia('(max-width: 960px)').matches) v = 'focus';
   view = v;
   $('viewFocus').hidden = v !== 'focus';
-  document.getElementById('viewOverview').hidden = v === 'settings' || v === 'board' || v === 'focus';
+  document.getElementById('viewOverview').hidden = ['settings', 'board', 'focus', 'time', 'qa'].includes(v);
+  $('viewTime').hidden = v !== 'time';
+  $('viewQa').hidden = v !== 'qa';
   document.getElementById('viewBoard').hidden = v !== 'board';
   document.getElementById('viewSettings').hidden = v !== 'settings';
   $('viewOverview').classList.toggle('showideas', v === 'ideas');
   document.querySelectorAll('.tab, .bn').forEach(t => t.classList.toggle('on', t.dataset.view === v));
   try { history.replaceState(null, '', '#' + v); } catch (e) { /* egal */ }
   if (v === 'settings') loadSettings();
+  if (v === 'time') loadTime();
+  if (v === 'qa') loadQa();
 }
 document.querySelectorAll('.tab, .bn').forEach(t => t.onclick = () => setView(t.dataset.view));
 document.querySelectorAll('#pGl, #pJi').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); setView('settings'); }));
@@ -2017,7 +2227,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -2127,6 +2337,20 @@ async function loadSettings() {
     ${field('ag-days', 'Logs, Prompts und Patches der Läufe aufbewahren (Tage, 0 = nie löschen)', S.agent_log_days ?? 30, { type: 'number', err: 'agent_log_days' })}
     <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
 
+  ${sect('time', 'Zeiterfassung', 'Zeit läuft, solange ein Vorhaben als Fokus angeheftet ist und du das Panel benutzt. Daraus entstehen Entwürfe je Ticket. Gebucht wird erst nach «Bestätigen», über die Wrapper-API deines MCP (Projectron).', `
+    <label class="check"><input type="checkbox" id="tm-on" ${S.time.enabled ? 'checked' : ''}><span><strong>Fokus-Zeit erfassen</strong></span></label>
+    <div class="grid3">
+      ${field('tm-round', 'Runden auf Minuten', S.time.round_minutes, { type: 'number', err: 'time.round_minutes' })}
+      ${field('tm-min', 'Kein Entwurf unter Minuten', S.time.min_minutes, { type: 'number', err: 'time.min_minutes' })}
+      ${field('tm-idle', 'Leerlauf ab Minuten', S.time.idle_minutes, { type: 'number', err: 'time.idle_minutes', help: 'So lange ohne Aktivität im Panel: Die Zeit endet beim letzten Lebenszeichen, die Pause wird als Lücke vorgeschlagen.' })}
+    </div>
+    ${field('tm-url', 'Wrapper-API deines MCP (POST)', S.time.mcp_url, { ph: 'http://127.0.0.1:3100/time-entries', err: 'time.mcp_url', help: 'tinyops sendet je bestätigtem Entwurf ein JSON (Schema <code>tinyops.time-entry/1</code>) mit Header <code>Idempotency-Key</code> und erwartet <code>{"status": "booked"|"rejected", "reference", "message"}</code>. Leer lassen, wenn dein MCP selbst über <code>GET /api/time/export</code> abholt und über <code>POST /api/time/result</code> zurückmeldet.' })}
+    ${field('tm-secret', 'Token für die Wrapper-API (optional)', '', { type: 'password', err: 'mcp_token', ph: S.secrets.mcp_token && S.secrets.mcp_token.set ? '•••••••• gespeichert' : '', help: secretHelp('mcp_token', 'Token') + ' Geht als <code>Authorization: Bearer</code> mit.' })}
+    <label class="check"><input type="checkbox" id="tm-send" ${S.time.send_on_confirm ? 'checked' : ''}><span>Beim Bestätigen sofort senden</span></label>
+    <label class="check"><input type="checkbox" id="tm-remote" ${S.time.allow_remote ? 'checked' : ''}><span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(Tickets, Zeiten und Texte verlassen dann das Netz)</span></span></label>
+    <div class="row"><button class="primary" id="tm-test">Verbindung testen</button><span class="quiet small">Testet mit GET, bucht nichts.</span></div>
+    <div id="tm-result"></div>`)}
+
   ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist (gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern) und das Monatsbudget von Mistral (per Lesezeichen aus deinem Browser).', `
     <label class="check"><input type="checkbox" id="us-claude" ${S.usage.claude ? 'checked' : ''}><span><strong>Claude lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei von Claude Code)</span></span></label>
     ${field('us-claude-file', 'Pfad der Claude-Anmeldedatei', S.usage.claude_file, { ph: '~/.claude/.credentials.json', err: 'usage.claude_file' })}
@@ -2179,6 +2403,10 @@ async function loadSettings() {
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
   renderLlmKey();
+  $('tm-test').onclick = () => busy($('tm-test'), 'Teste …', async () => {
+    try { $('tm-result').innerHTML = stepsHtml(await api('POST', '/api/settings/test/mcp', { url: val('tm-url'), allow_remote: $('tm-remote').checked, secret: $('tm-secret').value })); }
+    catch (e) { $('tm-result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
     const p = S.llm.providers.find(x => x.id === $('lm-prov').value), cur = val('lm-url');
     if (p && (!cur || S.llm.providers.some(x => x.url === cur))) $('lm-url').value = p.url;
@@ -2496,9 +2724,12 @@ function collect() {
   if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
+  if ($('tm-secret') && $('tm-secret').value.trim()) secrets.mcp_token = $('tm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'),
+    time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), mcp_url: val('tm-url'),
+      send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked },
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
@@ -2657,6 +2888,7 @@ function heroHtml(e, g) {
   return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
     ${trackHtml(e.d, true)}
+    ${pin ? timeChip(e) : ''}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
       <div class="hbtns">${goBtn(e, 'primary big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}

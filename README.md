@@ -420,6 +420,26 @@ Für eigene Befehle (LangGraph usw.) gilt dieselbe Konvention: `$TINYOPS_RUN_DIR
 
 Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Kundendaten enthalten können.
 
+## 4w. Fokus-Zeit, Zeitentwürfe, Prüfen (neu in 0.19.0)
+
+**Fokus-Zeit:** Solange ein Vorhaben als Fokus angeheftet ist, läuft die Zeit (Pause im Fokus-Kopf). Das Panel meldet sich jede Minute, solange du es benutzt. Nach 15 Minuten ohne Aktivität endet der Abschnitt beim letzten Lebenszeichen; die Pause erscheint als **Lücke** und zählt nur, wenn du sie annimmst. Agentenlaufzeit zählt nie.
+
+**Zeitentwürfe (Tab «Zeit»):** je Tag und Ticket, auf 15 Minuten gerundet, mit Text und Belegen (Stationen, Teilschritte, Abnahmen). Bearbeiten, zusammenlegen, verwerfen, von Hand ergänzen. Gebucht wird erst nach **Bestätigen**.
+
+**Übergabe an deinen MCP (Projectron):**
+- **Schieben:** Ist unter Einstellungen → Zeiterfassung eine Wrapper-URL eingetragen, sendet «Bestätigen» ein `POST`. Der Body hat das Schema `tinyops.time-entry/1`, dazu kommen `Idempotency-Key` und optional `Authorization: Bearer <mcp_token>`.
+  - Gebucht ist der Entwurf nur bei `{"status": "booked", "reference": "..."}`.
+  - `rejected` gibt «abgelehnt». Alles andere gibt «fehlgeschlagen» mit «Erneut senden».
+- **Abholen:** `GET /api/time/export?state=bestätigt`, Rückmeldung mit `POST /api/time/result` `{"id", "status": "booked"|"rejected", "reference", "message"}` (Header `X-Requested-With: tinyops`).
+
+    {"schema": "tinyops.time-entry/1", "id": "td-2026-11-05-DLP-5351", "date": "2026-11-05", "ticket": "DLP-5351",
+     "project_hint": "dlp-mailhandler", "minutes": 135, "text": "Resilient Cache: Tests ergänzt",
+     "evidence": ["Station Prüfen 10:42", "Abnahme 1:feature/DLP-5351 @ a1b2c3d4"], "idempotency_key": "td-2026-11-05-DLP-5351-3f9a…"}
+
+Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. Wird der Entwurf nach einem Fehlschlag geändert, gibt es einen neuen Schlüssel.
+
+**Prüfen (Tab «Prüfen»):** Prüfliste aus `QA-CHECKLIST.md` zum Abhaken (ok, Fehler mit Notiz, übersprungen), «Ergebnis kopieren», Fehler als Aufgabe ins Board. **Selbsttest** (Knopf oder `python3 server.py --selftest`): Vorlagen, Hilfsskripte, Datenbank, Kette des Verlaufs und ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
@@ -513,6 +533,9 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     secretstore.py       Secret-Speicher
     audit.py             Verlauf: nur anhängend, Hash-Kette, Prüfen und Export
     review.py            Offene Review-Punkte: lesen, Prompt und JSON
+    timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe, Vertrag mit dem MCP
+    qa.py                Prüfliste und Selbsttest
+    QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
     flow.py              Ablauf, nächster Schritt, Spielstand
     static/index.html    Oberfläche

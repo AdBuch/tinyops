@@ -20,6 +20,7 @@ import secretstore as store
 import sonar
 import usage
 import sprint
+import timesheet
 import tlog
 
 log = tlog.get("settings")
@@ -27,7 +28,7 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token")
+SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token", "mcp_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
@@ -447,6 +448,39 @@ def test_llm(form, stored):
     for status, title, detail, hint in steps:
         r.add(title.lower(), title, status, detail, hint)
     return r.result(models=models[:40])
+
+
+def test_mcp(form, stored):
+    """Prüft die Wrapper-API deines MCP, ohne etwas zu buchen: Adresse im eigenen Netz, erreichbar (GET), Token angenommen."""
+    r = Report()
+    url = (form.get("url") or "").strip()
+    u = urllib.parse.urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        r.add("url", "Adresse", "fail", "Keine gültige Adresse.", "Zum Beispiel http://127.0.0.1:3100/time-entries")
+        r.skip("reach", "Erreichbar")
+        return r.result()
+    if not form.get("allow_remote") and not llm.is_local(url):
+        r.add("url", "Adresse", "fail", "«%s» liegt nicht im eigenen Netz." % u.hostname, "Nur mit «Externe Adresse erlauben».")
+        r.skip("reach", "Erreichbar")
+        return r.result()
+    r.add("url", "Adresse", "ok", url)
+    tok = (form.get("secret") or "").strip() or (stored("mcp_token")[0] or "")
+    if tok:
+        store.register(tok)
+    h = {"Accept": "application/json", "User-Agent": "tinyops"}
+    if tok:
+        h["Authorization"] = "Bearer " + tok
+    try:
+        resp = net.probe(url, h, None, timeout=8)
+    except net.NetError as e:
+        r.add("reach", "Erreichbar", "fail", e.detail, net_hint(e.kind, u.scheme) if hasattr(e, "kind") else "")
+        return r.result()
+    st = resp["status"]
+    if st in (401, 403):
+        r.add("reach", "Erreichbar", "fail", "HTTP %s: Token fehlt oder wird abgelehnt." % st, "Token unten eintragen (wird als mcp_token gespeichert).")
+    else:
+        r.add("reach", "Erreichbar", "ok", "HTTP %s auf GET (gebucht wird nur per POST nach «Bestätigen»)." % st)
+    return r.result()
 
 
 def test_sonar(form, stored):
@@ -973,6 +1007,7 @@ def view(cfg, config_path, features_default=None):
                              for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
         "agent_log_days": int(cfg.get("agent_log_days", 30)),
+        "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
         "branch_filter": {
@@ -1205,6 +1240,29 @@ def build_config(current, p):
             errors["github.repos"] = "Zum Einschalten mindestens ein Repo wählen."
         cfg["github"] = g
 
+    if isinstance(p.get("time"), dict):
+        t, tc = p["time"], dict(timesheet.DEFAULTS, **(cfg.get("time") or {}))
+        tc["enabled"] = bool(t.get("enabled", tc["enabled"]))
+        tc["send_on_confirm"] = bool(t.get("send_on_confirm", tc["send_on_confirm"]))
+        tc["allow_remote"] = bool(t.get("allow_remote", tc["allow_remote"]))
+        for k, lo, hi in (("round_minutes", 1, 60), ("min_minutes", 0, 60), ("idle_minutes", 3, 240)):
+            if k in t:
+                try:
+                    v = int(t[k])
+                    if not lo <= v <= hi:
+                        raise ValueError
+                    tc[k] = v
+                except (TypeError, ValueError):
+                    errors["time." + k] = "Ganze Zahl von %d bis %d." % (lo, hi)
+        url = str(t.get("mcp_url", tc["mcp_url"]) or "").strip()
+        if url:
+            u = urllib.parse.urlparse(url)
+            if u.scheme not in ("http", "https") or not u.hostname:
+                errors["time.mcp_url"] = "Erwartet eine Adresse wie http://127.0.0.1:3100/time-entries."
+            elif not tc["allow_remote"] and not llm.is_local(url):
+                errors["time.mcp_url"] = "«%s» liegt nicht im eigenen Netz. Nur mit «Externe Adresse erlauben»." % u.hostname
+        tc["mcp_url"] = url
+        cfg["time"] = tc
     if "agent_log_days" in p:
         try:
             d = int(p.get("agent_log_days"))

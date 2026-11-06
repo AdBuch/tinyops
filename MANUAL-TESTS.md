@@ -4,6 +4,10 @@ Bisher lief alles gegen Mock-Server. Diese Liste zeigt, was nur du prüfen kanns
 Block baut auf dem vorigen auf. Bei einem Fehler: Log-Ausschnitt (er ist von Secrets bereinigt) und die Zeile dieser Liste
 zurückmelden, mehr brauche ich nicht.
 
+**Ab 0.19 zum Abhaken:** `QA-CHECKLIST.md`, im Panel unter **Prüfen**. Kurze Aufgaben: die Grundprüfung über alle Funktionen,
+dazu je Release ein Abschnitt mit nur dem, was sich geändert hat. «Ergebnis kopieren» liefert Fehler und Notizen zum Zurückgeben.
+Die Tabellen hier bleiben die ausführlichere Beschreibung.
+
 ## 0. Lokal starten (IntelliJ)
 
 1. Projektordner `tinyops` öffnen. Unter *Run* erscheinen die Konfigurationen aus `.run/` automatisch

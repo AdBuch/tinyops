@@ -30,7 +30,9 @@ from pathlib import Path
 
 import agents
 import audit
+import qa
 import review
+import timesheet
 import fnmatch
 import flow
 import github
@@ -46,7 +48,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.18.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.19.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -253,6 +255,15 @@ def usage_cfg(cfg):
 
 
 GITHUB_DEFAULTS = {"enabled": False, "api_url": github.API_DEFAULT, "repos": []}
+
+
+TIME_DEFAULTS = timesheet.DEFAULTS
+
+
+def time_cfg(cfg):
+    c = dict(TIME_DEFAULTS)
+    c.update(cfg.get("time") or {})
+    return c
 
 
 def github_cfg(cfg):
@@ -1185,7 +1196,7 @@ class Jobs:
 
 # ---------------------------------------------------------------- App
 class App:
-    def __init__(self, cfg, demo, secrets, config_path=None):
+    def __init__(self, cfg, demo, secrets, config_path=None, watchdog=True):
         self.demo = demo
         self.config_path = Path(config_path) if config_path else default_config_path()
         self.access_token = secrets.get("access_token") or ""
@@ -1197,7 +1208,7 @@ class App:
         self.ideas = None
         self.jobs = None
         self.apply(cfg, secrets)
-        if not os.environ.get("TINYOPS_NO_WATCHDOG"):
+        if watchdog and not os.environ.get("TINYOPS_NO_WATCHDOG"):
             threading.Thread(target=self._watchdog, name="agent-watchdog", daemon=True).start()
 
     def _watchdog(self):
@@ -1231,6 +1242,13 @@ class App:
         if not hasattr(self, "_audit_ctx"):
             self._audit_ctx = threading.local()
         self._rv_cache = {}
+        self.timebook = timesheet.TimeBook(data_dir(cfg) / "tinyops.db")
+        self.qabook = qa.QaBook(data_dir(cfg) / "tinyops.db")
+        self.tc = time_cfg(cfg)
+        self.mcp_token = secrets.get("mcp_token", "")
+        self.ssl_ctx = ssl.create_default_context()
+        if not hasattr(self, "_send_lock"):
+            self._send_lock = threading.Lock()
         self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
         self.agents.audit = self.audit
         if self.demo and not self.store.flow_stats()["total_xp"]:
@@ -1266,6 +1284,7 @@ class App:
         except SystemExit as e:
             self.problems.append(str(e))
             ctx = ssl.create_default_context()
+        self.ssl_ctx = ctx
         if not cfg["gitlab_url"]:
             self.problems.append("GitLab-Adresse fehlt.")
         elif not secrets.get("gitlab_token"):
@@ -2227,6 +2246,11 @@ class App:
         except Exception as e:   # der Ablauf ist eine Ansicht; er darf die Übersicht nie verhindern
             log.warning("Ablauf: %s", scrub(e))
             data["flow"] = None
+        try:
+            data["time"] = self.time_state()
+        except Exception as e:      # die Zeit ist eine Zugabe; sie darf die Übersicht nie verhindern
+            log.warning("Zeit: %s", scrub(e))
+            data["time"] = {"enabled": False, "error": str(e)}
         data.update({
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
@@ -2310,6 +2334,11 @@ class App:
                 if cid and cid not in self._cards and not str(cid).startswith("rv:"):
                     raise UserError("Dieses Vorhaben gibt es (gerade) nicht.")
                 self.store.pin_set(cid)
+                if self.tc["enabled"]:
+                    if cid and not str(cid).startswith("rv:"):
+                        self.timebook.start(cid, (self._cards.get(cid) or {}).get("title") or "", idle=self.tc["idle_minutes"])
+                    else:
+                        self.timebook.stop(idle=self.tc["idle_minutes"])
                 return {"pinned": cid}
         except (TypeError, ValueError):
             raise UserError("Teilschritt-Nummer fehlt.")
@@ -2459,6 +2488,295 @@ class App:
             return int(b.get("run"))
         except (TypeError, ValueError):
             raise UserError("Lauf-Nummer fehlt.")
+
+    # -- Fokus-Zeit und Zeitentwürfe (0.19)
+    def time_state(self, now=None):
+        now = now or time.time()
+        if not self.tc["enabled"]:
+            return {"enabled": False}
+        tb, idle = self.timebook, self.tc["idle_minutes"]
+        cur = tb.current()
+        d = timesheet.today(now)
+        tot = tb.totals(d, now, idle)
+        run = None
+        if cur:
+            idle_now = now - cur["last_seen"] > idle * 60
+            run = {"key": cur["key"], "title": cur["title"], "since": cur["start"], "idle": idle_now,
+                   "today_secs": (tot.get(cur["key"]) or {}).get("secs", 0)}
+        return {"enabled": True, "running": run, "today_secs": sum(x["secs"] for x in tot.values()), "gaps": len(tb.gaps(d)),
+                "open_drafts": len([x for x in tb.drafts(state="offen") if x["date"] < d]), "date": d}
+
+    def _time_meta(self):
+        meta = {}
+        for cid, c in (self._cards or {}).items():
+            hint = ", ".join(p["name"] for p in c.get("pools") or []) or next((x.get("project") for x in c.get("items") or [] if x.get("project")), "")
+            meta[cid] = {"title": c.get("title") or cid, "project_hint": hint}
+        return meta
+
+    def time_day(self, d=None, now=None):
+        """Abschnitte, Lücken und Entwürfe eines Tages. Führt die automatischen Entwürfe nach."""
+        now = now or time.time()
+        if not self.tc["enabled"]:
+            raise UserError("Die Zeiterfassung ist ausgeschaltet (Einstellungen → Zeiterfassung).")
+        d = d or timesheet.today(now)
+        try:
+            timesheet.day_bounds(d)
+        except ValueError:
+            raise UserError("Datum im Format JJJJ-MM-TT.")
+        tb, idle = self.timebook, self.tc["idle_minutes"]
+        a, b = timesheet.day_bounds(d)
+        labels = dict(flow.PHASES)
+        names = [p for p, _ in flow.PHASES]
+        events = []
+        for e in self.store.flow_events_between(a, b):
+            if e["kind"] == "phase" and 0 <= e["phase"] < len(names):
+                events.append({"key": e["key"], "text": "Station %s" % labels[names[e["phase"]]], "ts": e["ts"], "kind": "phase"})
+            elif e["kind"] in ("check", "agent") and e["text"]:
+                events.append({"key": e["key"], "text": e["text"], "ts": e["ts"], "kind": e["kind"]})
+        accs = []
+        for key, refs in self.store.acceptances().items():
+            for ref, r in refs.items():
+                if a <= (r.get("ts") or 0) < b:
+                    accs.append({"key": key, "ref": ref, "label": ref, "sha": r.get("sha"), "ts": r["ts"]})
+        tot = tb.totals(d, now, idle)
+        meta = self._time_meta()
+        tb.sync_auto(d, timesheet.compose(d, tot, meta, events, accs, self.tc["round_minutes"], self.tc["min_minutes"]), now)
+        drafts = tb.drafts(d)
+        for x in drafts:
+            x["ticket_ok"] = not links.is_ref_key(x["ticket"])
+            x["payload"] = timesheet.payload(x) if x["state"] != "verworfen" else None
+        return {"date": d, "segments": tb.segments(d, now, idle), "gaps": tb.gaps(d), "drafts": drafts,
+                "total_secs": sum(x["secs"] for x in tot.values()), "booked_minutes": sum(x["minutes"] for x in drafts if x["state"] == "gebucht"),
+                "draft_minutes": sum(x["minutes"] for x in drafts if x["state"] not in ("verworfen",)),
+                "mcp": bool(self.tc["mcp_url"]), "send_on_confirm": bool(self.tc["send_on_confirm"]), "round": self.tc["round_minutes"],
+                "earlier_open": sorted({x["date"] for x in tb.drafts(state="offen") if x["date"] < d})[-7:]}
+
+    def _draft(self, did):
+        dr = self.timebook.draft(str(did or ""))
+        if not dr:
+            raise UserError("Diesen Entwurf gibt es nicht.")
+        return dr
+
+    def time_action(self, action, b):
+        if not self.tc["enabled"]:
+            raise UserError("Die Zeiterfassung ist ausgeschaltet.")
+        tb, idle = self.timebook, self.tc["idle_minutes"]
+        if action == "ping":
+            tb.ping(idle=idle)
+            return self.time_state()
+        if action == "pause":
+            tb.stop(idle=idle)
+            self.audit("time.pause", (self.store.pin_get() or ""))
+            return self.time_state()
+        if action == "resume":
+            pin = self.store.pin_get()
+            if not pin or str(pin).startswith("rv:"):
+                raise UserError("Erst ein Vorhaben als Fokus anheften.")
+            tb.start(pin, (self._cards.get(pin) or {}).get("title") or "", idle=idle)
+            return self.time_state()
+        if action == "gap":
+            g = tb.gap_set(int(b.get("id")), bool(b.get("count")))
+            if not g:
+                raise UserError("Diese Lücke ist schon erledigt.")
+            self.audit("time.gap", g["key"], counted=bool(b.get("count")), minutes=int((g["end"] - g["start"]) // 60))
+            return {"ok": True}
+        if action == "add":
+            d = str(b.get("date") or timesheet.today())
+            ticket = " ".join(str(b.get("ticket") or "").split()).upper() if not links.is_ref_key(str(b.get("ticket") or "")) else str(b.get("ticket"))
+            minutes = self._minutes(b.get("minutes"))
+            if not ticket or len(ticket) > 120:
+                raise UserError("Ticket fehlt.")
+            did = tb.add_manual(d, ticket, minutes, str(b.get("text") or "")[:300], title=(self._cards.get(ticket) or {}).get("title", ""),
+                                project_hint=(self._time_meta().get(ticket) or {}).get("project_hint", ""))
+            self.audit("time.add", ticket, date=d, minutes=minutes)
+            return {"id": did}
+        dr = self._draft(b.get("id"))
+        if dr["state"] in timesheet.LOCKED and action not in ("send",):
+            raise UserError("Schon gebucht (%s). Ändern nur noch in Projectron." % (dr["reference"] or "ohne Referenz"))
+        if action == "edit":
+            if dr["state"] not in ("offen", "abgelehnt", "fehlgeschlagen", "bestätigt"):
+                raise UserError("Verworfene Entwürfe erst wiederherstellen.")
+            kw = {"edited": 1}
+            if "minutes" in b:
+                kw["minutes"] = self._minutes(b.get("minutes"))
+            if "text" in b:
+                kw["text"] = str(b.get("text") or "")[:300]
+            if "ticket" in b:
+                t = str(b.get("ticket") or "").strip()
+                if not t:
+                    raise UserError("Ticket fehlt.")
+                kw["ticket"] = t[:120]
+            if dr["state"] != "offen":
+                kw["state"] = "offen"            # nach dem Ändern erneut bestätigen
+            tb.update(dr["id"], **kw)
+            self.audit("time.edit", dr["ticket"], draft=dr["id"], **{k: v for k, v in kw.items() if k in ("minutes", "ticket")})
+            return {"ok": True}
+        if action == "discard":
+            tb.update(dr["id"], state="verworfen")
+            self.audit("time.discard", dr["ticket"], draft=dr["id"], minutes=dr["minutes"])
+            return {"ok": True}
+        if action == "restore":
+            tb.update(dr["id"], state="offen", merged_into="")
+            return {"ok": True}
+        if action == "merge":
+            into = self._draft(b.get("into"))
+            if into["id"] == dr["id"] or into["date"] != dr["date"] or into["state"] not in ("offen",) or dr["state"] != "offen":
+                raise UserError("Zusammenlegen geht nur mit einem anderen offenen Entwurf desselben Tages.")
+            ev = into["evidence"] + [e for e in dr["evidence"] if e not in into["evidence"]]
+            tb.update(into["id"], minutes=into["minutes"] + dr["minutes"], text=(into["text"] + "; " + dr["text"])[:300], evidence=ev, edited=1)
+            tb.update(dr["id"], state="verworfen", merged_into=into["id"])
+            self.audit("time.merge", into["ticket"], draft=into["id"], merged=dr["id"], minutes=into["minutes"] + dr["minutes"])
+            return {"ok": True}
+        if action == "confirm":
+            if dr["state"] != "offen":
+                raise UserError("Nur offene Entwürfe lassen sich bestätigen (Status: %s)." % dr["state"])
+            if links.is_ref_key(dr["ticket"]):
+                raise UserError("Dieser Entwurf hängt an einem Branch ohne Ticket. Erst ein Ticket eintragen.")
+            if dr["minutes"] <= 0:
+                raise UserError("0 Minuten bucht man nicht. Verwerfen oder Zeit eintragen.")
+            tb.update(dr["id"], state="bestätigt", message="")
+            self.audit("time.confirm", dr["ticket"], draft=dr["id"], minutes=dr["minutes"], date=dr["date"])
+            if self.tc["mcp_url"] and self.tc["send_on_confirm"]:
+                return self.time_send(dr["id"])
+            return {"state": "bestätigt"}
+        if action == "send":
+            return self.time_send(dr["id"])
+        raise UserError("Unbekannte Aktion.")
+
+    def _minutes(self, v):
+        try:
+            m = int(v)
+        except (TypeError, ValueError):
+            raise UserError("Minuten müssen eine ganze Zahl sein.")
+        if not 0 <= m <= 24 * 60:
+            raise UserError("Minuten zwischen 0 und 1440.")
+        return m
+
+    def _mcp_url(self):
+        url = (self.tc.get("mcp_url") or "").strip()
+        if not url:
+            raise UserError("Keine Wrapper-API eingetragen (Einstellungen → Zeiterfassung).")
+        try:
+            return llm.check_url({"url": url, "allow_remote": self.tc.get("allow_remote")})
+        except llm.LlmError as e:
+            raise UserError(str(e))
+
+    def time_send(self, did):
+        """Einen bestätigten Entwurf an die Wrapper-API des MCP schicken. Gebucht ist er nur, wenn der MCP «booked» sagt."""
+        with self._send_lock:
+            dr = self._draft(did)
+            if dr["state"] == "gebucht":
+                return {"state": "gebucht", "reference": dr["reference"], "already": True}
+            if dr["state"] not in timesheet.SENDABLE:
+                raise UserError("Senden geht nur für bestätigte Entwürfe (Status: %s)." % dr["state"])
+            url = self._mcp_url()
+            body = timesheet.payload(dr)
+            headers = {"Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": body["idempotency_key"], "User-Agent": "tinyops"}
+            if self.mcp_token:
+                headers["Authorization"] = "Bearer " + self.mcp_token
+            state, ref, msg, code = "fehlgeschlagen", "", "", 0
+            try:
+                req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+                opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.ssl_ctx), NoRedirect)
+                with opener.open(req, timeout=20) as r:
+                    code = r.status
+                    res = json.loads(r.read(1 << 20).decode("utf-8") or "{}")
+                st = str(res.get("status") or "")
+                if st == "booked":
+                    state, ref, msg = "gebucht", str(res.get("reference") or "")[:200], str(res.get("message") or "")[:300]
+                elif st == "rejected":
+                    state, msg = "abgelehnt", str(res.get("message") or "abgelehnt, ohne Begründung")[:300]
+                else:
+                    msg = "Antwort ohne «status: booked/rejected» (HTTP %s). Nicht als gebucht gewertet." % code
+            except urllib.error.HTTPError as e:
+                code = e.code
+                try:
+                    res = json.loads(e.read(1 << 16).decode("utf-8") or "{}")
+                except ValueError:
+                    res = {}
+                if res.get("status") == "rejected":
+                    state, msg = "abgelehnt", str(res.get("message") or "abgelehnt")[:300]
+                else:
+                    msg = "HTTP %s%s" % (e.code, (": " + str(res.get("message"))[:200]) if res.get("message") else "")
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+                msg = "nicht erreichbar (%s)" % scrub(getattr(e, "reason", e))
+            except ValueError:
+                msg = "Antwort ist kein JSON (HTTP %s). Nicht als gebucht gewertet." % code
+            tb = self.timebook
+            tb.update(dr["id"], state=state, reference=ref, message=scrub(msg), attempts=int(dr["attempts"] or 0) + 1, sent=time.time())
+            self.audit("time.send", dr["ticket"], ok=state == "gebucht", draft=dr["id"], minutes=dr["minutes"], date=dr["date"], state=state,
+                       reference=ref, message=scrub(msg)[:200], http=code, key=body["idempotency_key"])
+            log.info("Zeitentwurf %s → %s %s", dr["id"], state, ref or msg)
+            return {"state": state, "reference": ref, "message": scrub(msg)}
+
+    def time_export(self, state="bestätigt", d=None):
+        """Für deinen MCP zum Abholen: Entwürfe im Vertragsformat."""
+        out = []
+        for x in self.timebook.drafts(d or None, state or None):
+            if x["state"] == "verworfen":
+                continue
+            p = timesheet.payload(x)
+            p["state"] = x["state"]
+            p["reference"] = x["reference"]
+            out.append(p)
+        return {"schema": timesheet.CONTRACT, "drafts": out}
+
+    def time_result(self, b):
+        """Rückmeldung deines MCP nach dem Abholen: {id, status: booked|rejected, reference, message}."""
+        dr = self._draft(b.get("id"))
+        st = b.get("status")
+        if st not in ("booked", "rejected"):
+            raise UserError("status muss booked oder rejected sein.")
+        if dr["state"] not in timesheet.SENDABLE + ("gebucht",):
+            raise UserError("Nur bestätigte Entwürfe lassen sich buchen (Status: %s)." % dr["state"])
+        if dr["state"] == "gebucht":
+            return {"state": "gebucht", "already": True}
+        new = "gebucht" if st == "booked" else "abgelehnt"
+        self.timebook.update(dr["id"], state=new, reference=str(b.get("reference") or "")[:200], message=str(b.get("message") or "")[:300])
+        self.audit("time.result", dr["ticket"], ok=new == "gebucht", actor="mcp", draft=dr["id"], state=new, reference=str(b.get("reference") or "")[:200])
+        return {"state": new}
+
+    # -- Qualität (0.19): Prüfliste und Selbsttest
+    def _checklist(self):
+        try:
+            return qa.parse_checklist((BASE / "QA-CHECKLIST.md").read_text(encoding="utf-8"))
+        except OSError:
+            return []
+        except ValueError as e:
+            raise UserError(str(e))
+
+    def qa_view(self):
+        secs = qa.view(self._checklist(), self.qabook.states())
+        for s_ in secs:
+            s_["current"] = s_["version"] == VERSION
+        return {"version": VERSION, "sections": secs, "file": str(BASE / "QA-CHECKLIST.md")}
+
+    def qa_action(self, action, b):
+        if action == "report":
+            return {"text": qa.report_md(self.qa_view()["sections"], VERSION)}
+        if action == "selftest":
+            res = run_selftest(self.cfg)
+            self.audit("qa.selftest", VERSION, ok=res["ok"], failed=[x["title"] for x in res["steps"] if x["status"] == "fail"],
+                       warn=[x["title"] for x in res["steps"] if x["status"] == "warn"])
+            return res
+        iid = str(b.get("id") or "")
+        it = next((i for s_ in self._checklist() for i in s_["items"] if i["id"] == iid), None)
+        if not it:
+            raise UserError("Diesen Prüfpunkt gibt es nicht (mehr).")
+        if action == "set":
+            st = b.get("status") or "offen"
+            if st not in qa.STATES + ("offen",):
+                raise UserError("Status: ok, fehler, übersprungen oder offen.")
+            note = str(b.get("note") or "").strip()
+            self.qabook.set(iid, st, note, VERSION, it["hash"])
+            if st != "offen":
+                self.audit("qa.check", iid, ok=st != "fehler", status=st, note=note[:200])
+            return {"ok": True}
+        if action == "task":
+            title = "QA %s: %s" % (iid, it["text"])
+            res = self.board_action("add", {"title": title[:200], "stage": "idea"})
+            return {"key": res["key"]}
+        raise UserError("Unbekannte Aktion.")
 
     # -- Offene Review-Punkte (0.18): lesen, exportieren, als Agenten-Auftrag
     def _find_mr(self, host, pid, iid):
@@ -2794,6 +3112,22 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/qa":
+                    return self._send(200, app.qa_view())
+                if method == "POST" and path.startswith("/api/qa/"):
+                    return self._send(200, app.qa_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/time/day":
+                    q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
+                    return self._send(200, app.time_day(q.get("date") or None))
+                if method == "GET" and path == "/api/time/export":
+                    q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
+                    if not app.tc["enabled"]:
+                        return self._err(400, "Die Zeiterfassung ist ausgeschaltet.")
+                    return self._send(200, app.time_export(q.get("state", "bestätigt"), q.get("date") or None))
+                if method == "POST" and path == "/api/time/result":
+                    return self._send(200, app.time_result(self._body()))
+                if method == "POST" and path.startswith("/api/time/"):
+                    return self._send(200, app.time_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path == "/api/review/topics":
                     return self._send(200, app.review_topics(self._body()))
                 if method == "POST" and path == "/api/review/export":
@@ -2921,6 +3255,8 @@ def make_handler(app):
                 res = settings.test_agent(body, stored)
                 hlog.info("Test Agent: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
+            if path == "/api/settings/test/mcp":
+                return self._send(200, settings.test_mcp(body, stored))
             if path == "/api/settings/test/llm":
                 res = settings.test_llm(body, stored)
                 hlog.info("Test KI: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
@@ -2990,6 +3326,8 @@ def resolve_secrets(cfg, demo, show=False):
         names.append("sonar_token")
     if not demo and github_cfg(cfg).get("enabled"):
         names.append("github_token")
+    if time_cfg(cfg).get("mcp_url"):
+        names.append("mcp_token")
     out = {}
     for name in names:
         try:
@@ -3004,7 +3342,7 @@ def resolve_secrets(cfg, demo, show=False):
             log.info("Secret %s ← %s", name, src)
             if show:
                 print("  %-14s ← %s" % (name, src))
-        elif show and name not in ("access_token", "llm_key"):
+        elif show and name not in ("access_token", "llm_key", "mcp_token"):
             print("  %-14s nicht gesetzt (Einstellungen im Browser)" % name)
     return out
 
@@ -3114,6 +3452,58 @@ def run_preflight(cfg, config_path, demo):
     return 1 if problems[0] else 0
 
 
+def run_selftest(cfg):
+    """Prüft die eigenen Teile (ohne deine Daten zu ändern) und spielt die Kernfunktionen mit Demo-Daten in einem leeren Ordner durch."""
+    import shutil
+    import tempfile
+    steps = []
+    step = lambda sid, title, status, detail="": steps.append({"id": sid, "title": title, "status": status, "detail": scrub(detail)})
+    t0 = time.time()
+    try:
+        text = (BASE / "QA-CHECKLIST.md").read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    qa.check_static(BASE, VERSION, text, agents.HELPERS, step)
+    db = data_dir(cfg) / "tinyops.db"
+    qa.check_db(db, audit.AuditLog(db), step)
+    tmp = tempfile.mkdtemp(prefix="tinyops-selftest-")
+    try:
+        c = load_config(None)
+        c.update(data_dir=tmp, log_level=cfg.get("log_level", "info"), log_dir=cfg.get("log_dir", ""))
+        a = App(c, True, {}, Path(tmp) / "config.json", watchdog=False)
+        ov = a.overview()
+        cards = {x["id"]: x for x in ov["board"]["cards"]}
+        step("demo", "Demo-Daten laden", "ok" if len(cards) >= 5 and ov.get("flow") else "fail", "%d Vorhaben, Ablauf %s" % (len(cards), "da" if ov.get("flow") else "fehlt"))
+        a.board_action("stage", {"key": "DLP-104", "stage": "impl"})
+        a.flow_action("complete", {"id": "DLP-104", "phase": 2})
+        ph = a.overview()["flow"]["items"]["DLP-104"]["phase"]
+        step("flow", "Station und «Schritt erledigt»", "ok" if ph >= 3 else "fail", "DLP-104 steht bei %s" % flow.PHASES[ph][1])
+        v = a.audit_log.verify()
+        step("audit_w", "Verlauf schreibt", "ok" if v["ok"] and v["count"] == 2 else "fail", "%d Einträge (erwartet 2), Kette %s" % (v["count"], "ok" if v["ok"] else "gebrochen"))
+        a.flow_action("pin", {"id": "DLP-104"})
+        now = time.time()
+        a.timebook.stop()
+        a.timebook.add_segment("DLP-104", "Installer: Upgrade-Test", now - 3000, now - 0)
+        day = a.time_day()
+        dr = next((x for x in day["drafts"] if x["ticket"] == "DLP-104"), None)
+        ok = bool(dr) and dr["minutes"] in (45, 60)
+        if ok:
+            a.time_action("confirm", {"id": dr["id"]})
+            ok = a.timebook.draft(dr["id"])["state"] == "bestätigt"
+        step("time", "Zeitentwurf", "ok" if ok else "fail", "50 min → %s min, bestätigt ohne MCP" % (dr or {}).get("minutes", "?"))
+        rv = a.review_topics({"host": "gitlab", "project_id": 1, "iid": 41})
+        md = a.review_export({"host": "gitlab", "project_id": 1, "iid": 41})["text"]
+        step("review", "Offene Review-Punkte", "ok" if len(rv["topics"]) == 3 and "### Punkt 3" in md else "fail", "%d Punkte, Prompt %d Zeichen" % (len(rv["topics"]), len(md)))
+        q = a.qa_view()
+        step("qa", "Prüfliste lesen", "ok" if q["sections"] else "warn", "%d Abschnitte" % len(q["sections"]))
+    except Exception as e:      # der Selbsttest meldet, statt abzustürzen
+        log.exception("Selbsttest")
+        step("smoke", "Kernfunktionen", "fail", "%s: %s" % (type(e).__name__, e))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return {"ok": not any(x["status"] == "fail" for x in steps), "steps": steps, "version": VERSION, "secs": round(time.time() - t0, 1)}
+
+
 def run_audit_cli(cfg, verify, export_to):
     db = data_dir(cfg) / "tinyops.db"
     if not db.exists():
@@ -3148,6 +3538,7 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="Log auf DEBUG: jede Anfrage, jede Branch-Entscheidung")
     ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
     ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
+    ap.add_argument("--selftest", action="store_true", help="prüft die eigenen Teile und spielt die Kernfunktionen mit Demo-Daten durch (Exit-Code 1 bei Fehlern)")
     ap.add_argument("--verify-audit", action="store_true", help="prüft die Hash-Kette des Verlaufs (Exit-Code 1, wenn sie gebrochen ist)")
     ap.add_argument("--export-audit", metavar="DATEI", help="Verlauf als JSON in DATEI schreiben (- = Standardausgabe)")
     args = ap.parse_args()
@@ -3162,6 +3553,14 @@ def main():
         print("\n".join(lines) if lines else "(noch leer)")
         return
 
+    if args.selftest:
+        cfg0 = load_config(path)
+        tlog.setup(cfg0, level, console=False)
+        res = run_selftest(cfg0)
+        for x in res["steps"]:
+            print("  %-4s %-32s %s" % ({"ok": "OK", "warn": "WARN", "fail": "FAIL"}.get(x["status"], x["status"]), x["title"], x["detail"]))
+        print("Selbsttest %s in %.1f s." % ("bestanden" if res["ok"] else "FEHLGESCHLAGEN", res["secs"]))
+        raise SystemExit(0 if res["ok"] else 1)
     if args.verify_audit or args.export_audit:
         cfg0 = load_config(path)
         raise SystemExit(run_audit_cli(cfg0, args.verify_audit, args.export_audit))

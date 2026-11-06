@@ -34,6 +34,10 @@ LABELS = {
     "agent.question": "Agent fragt", "agent.answer": "Agent geantwortet", "review.export": "Review-Punkte exportiert",
         "agent.takeover": "Agenten-Ergebnis übernommen", "agent.retention": "Alte Agenten-Logs gelöscht",
     "settings.save": "Einstellungen gespeichert", "testenv.deploy": "Testumgebung deployt", "testenv.teardown": "Testumgebung abgebaut",
+    "time.pause": "Zeit pausiert", "time.gap": "Lücke entschieden", "time.add": "Zeit von Hand erfasst", "time.edit": "Zeitentwurf geändert",
+    "time.discard": "Zeitentwurf verworfen", "time.merge": "Zeitentwürfe zusammengelegt", "time.confirm": "Zeitentwurf bestätigt",
+    "time.send": "Zeit an MCP gesendet", "time.result": "Buchung vom MCP gemeldet",
+    "qa.check": "Prüfpunkt abgehakt", "qa.selftest": "Selbsttest",
 }
 
 
