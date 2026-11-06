@@ -459,6 +459,21 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4z. Launcher zum Herunterladen (neu in 0.21.1)
+
+Unter **Releases** auf https://github.com/AdBuch/tinyops liegt für jedes System ein Launcher:
+- `tinyops-launcher-windows-x64.exe`
+- `tinyops-launcher-macos-arm64`
+- `tinyops-launcher-linux-x64`
+- `tinyops-launcher.pyz`: läuft überall mit `python3 tinyops-launcher.pyz`
+
+Herunterladen und starten (macOS/Linux vorher `chmod +x`). Beim ersten Mal lädt er tinyops in einen eigenen Ordner, danach hält `start.py` es aktuell. Der Browser geht auf, sobald tinyops läuft. Voraussetzung: git und Python 3.10+.
+
+    tinyops-launcher                 # laden bzw. aktualisieren, starten, Browser
+    tinyops-launcher --demo          # mit Demo-Daten
+    tinyops-launcher --where         # Ordner, Repo, Version
+    tinyops-launcher --dir ~/tools/tinyops --repo https://github.com/AdBuch/tinyops.git
+
 ## 4y. Starter mit Update (neu in 0.21.0)
 
 `python3 start.py` (Windows: `start.cmd`) holt vor dem Start die neueste Version aus dem Repo, prüft sie und startet tinyops. Woher er holt, bestimmt die Git-Remote `origin` (GitHub oder euer GitLab); eine andere Remote setzt du mit `git config tinyops.remote <name>`.
@@ -577,6 +592,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     qa.py                Prüfliste und Selbsttest
     QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt
     start.py, start.cmd  Starter: neueste Version holen, prüfen, starten
+    launcher/            Launcher zum Herunterladen (Skript, Zipapp, PyInstaller über .github/workflows)
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
     flow.py              Ablauf, nächster Schritt, Spielstand
     static/index.html    Oberfläche

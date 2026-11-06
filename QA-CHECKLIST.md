@@ -108,3 +108,12 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r21-05` VPN/Netz aus, `python3 start.py` → «Nicht erreichbar … Start mit dem, was da ist»
 - [ ] `r21-06` Windows (falls genutzt): Doppelklick auf `start.cmd` → wie unter Linux
 
+## 0.21.1
+
+- [ ] `r211-01` GitHub → Actions → «Tests» nach dem Push → grün
+- [ ] `r211-02` GitHub → Releases → v0.21.1 → vier Launcher und der CHANGELOG-Abschnitt sind da
+- [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf
+- [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python
+- [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
+- [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
+

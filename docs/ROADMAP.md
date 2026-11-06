@@ -27,6 +27,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.19.0** ✓ | Fokus-Zeit und Zeitentwürfe für Projectron, Prüfliste und Selbsttest (geliefert 2026-11-06) | F-20 | M |
 | **0.20.0** ✓ | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit (geliefert 2026-11-06) | F-06, F-07, F-17, G9 | M–L |
 | **0.21.0** ✓ | Starter mit Update aus dem Repo (ausser Plan, geliefert 2026-11-06) | – | S |
+| **0.21.1** ✓ | Launcher zum Herunterladen, GitHub Actions für Tests und Releases (geliefert 2026-11-06) | – | S |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.

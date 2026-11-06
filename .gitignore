@@ -10,3 +10,4 @@ __pycache__/
 
 .dev/
 deploy/deploy.local.json
+dist/

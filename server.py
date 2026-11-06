@@ -49,7 +49,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.21.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.21.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 

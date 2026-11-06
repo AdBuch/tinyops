@@ -5,6 +5,28 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.21.1]
+
+### Neu
+- **Launcher zum Herunterladen:** `tinyops-launcher` für Linux, macOS und Windows (`.exe`), dazu `tinyops-launcher.pyz` für jedes Python.
+  - Beim ersten Start klont er https://github.com/AdBuch/tinyops (ohne die Blobs der alten Historie) auf das neueste Release. Der Ordner ist `~/.local/share/tinyops/app`, unter Windows `%LOCALAPPDATA%\tinyops\app`, oder was du mit `--dir` angibst.
+  - Danach übernimmt `start.py`: neue Releases holen, Selbsttest, bei Fehlern zurück.
+  - Er öffnet den Browser, sobald tinyops antwortet. Optionen wie `--demo` gehen an tinyops durch.
+  - `--where` zeigt Ordner, Repo, Version und Python. Fehlen git oder Python 3.10+, sagt er, wie man sie installiert (winget, brew, apt).
+  - Einen fremden, nicht leeren Ordner fasst er nicht an.
+- **GitHub Actions:**
+  - `tests.yml` lässt bei jedem Push auf `main` und bei Pull Requests die Tests und den Selbsttest laufen.
+  - `release.yml` baut bei jedem Tag `vX.Y.Z` nach den Tests die Launcher mit PyInstaller auf Linux, macOS und Windows. Dann veröffentlicht es sie mit der Zipapp und dem CHANGELOG-Abschnitt als GitHub-Release.
+- `python3 launcher/build.py` baut die Zipapp lokal nach `dist/`.
+
+### Geändert
+- Eine interne IP-Adresse in MANUAL-TESTS und im NetworkPolicy-Beispiel durch eine Beispieladresse ersetzt (das Repo ist öffentlich).
+
+### Grenzen
+- tinyops selbst läuft mit dem Python des Rechners, auch wenn der Launcher eine .exe ist. Ein Rechner ohne Python braucht es also zuerst.
+- Die nativen Programme entstehen erst in der GitHub Action. Hier geprüft sind der Launcher als Skript und als Zipapp, nicht die PyInstaller-Builds.
+- Die Programme sind nicht signiert. Windows SmartScreen und macOS Gatekeeper warnen beim ersten Start (macOS: Rechtsklick → Öffnen).
+
 ## [0.21.0]
 
 ### Neu

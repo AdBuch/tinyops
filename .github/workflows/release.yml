@@ -1,0 +1,77 @@
+name: Release
+
+# Bei jedem Tag vX.Y.Z: Tests, dann den Launcher bauen (Zipapp und PyInstaller für Linux, macOS, Windows)
+# und als GitHub-Release mit dem CHANGELOG-Abschnitt veröffentlichen.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q tmux
+      - working-directory: tests
+        env:
+          TINYOPS_NO_WATCHDOG: "1"
+        run: python -m unittest discover -s . -p 'test_*.py'
+
+  launcher:
+    needs: tests
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: tinyops-launcher-linux-x64
+          - os: macos-14
+            name: tinyops-launcher-macos-arm64
+          - os: windows-2022
+            name: tinyops-launcher-windows-x64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pyinstaller==6.10.0
+      - name: Bauen
+        shell: bash
+        run: |
+          pyinstaller --onefile --name launcher --clean launcher/tinyops_launcher.py
+          mkdir -p out
+          if [ -f dist/launcher.exe ]; then cp dist/launcher.exe "out/${{ matrix.name }}"; else cp dist/launcher "out/${{ matrix.name }}"; fi
+          "out/${{ matrix.name }}" --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: out/${{ matrix.name }}
+
+  release:
+    needs: launcher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Zipapp und Release-Text
+        run: |
+          python launcher/build.py assets/tinyops-launcher.pyz
+          V="${GITHUB_REF_NAME#v}"
+          awk -v v="$V" '/^## \[/{p = ($0 ~ "^## \\[" v "\\]")} p' CHANGELOG.md > notes.md
+          printf '\n---\nStart: Launcher für dein System herunterladen und ausführen (macOS/Linux: vorher `chmod +x`). Braucht git und Python 3.10+.\n' >> notes.md
+      - name: Veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" assets/* --title "tinyops $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
