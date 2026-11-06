@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import agents
+import audit
 import fnmatch
 import flow
 import github
@@ -44,7 +45,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.16.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.17.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -125,6 +126,7 @@ DEFAULTS = {
     "agent_command": [],
     "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
     "agents": [],
+    "agent_log_days": 30,      # Logs, Prompts und Patches der Agentenläufe nach so vielen Tagen löschen (0 = nie)
     "idea_cap": 25,
     "idea_expire_days": 30,
     "jira": {},
@@ -191,7 +193,7 @@ PLAIN_SECRET_KEYS = {"token", "password", "access_token", "gitlab_token", "jira_
 
 # ---------------------------------------------------------------- helpers
 class UserError(Exception):
-    pass
+    data = None         # optional: weitere Felder für die Antwort (z. B. duplicate)
 
 
 class HttpStatus(UserError):
@@ -1169,12 +1171,17 @@ class App:
             threading.Thread(target=self._watchdog, name="agent-watchdog", daemon=True).start()
 
     def _watchdog(self):
-        """Prüft alle 30 s laufende Agenten, auch wenn niemand das Panel offen hat (Zeitlimit, Ende, verloren)."""
+        """Prüft alle 30 s laufende Agenten, auch wenn niemand das Panel offen hat (Zeitlimit, Ende, verloren).
+        Einmal am Tag (und kurz nach dem Start) löscht er alte Agenten-Logs nach agent_log_days."""
+        last_ret = time.time() - 86400 + 300
         while True:
             time.sleep(30)
             try:
                 if self.store.agent_runs(status="läuft", limit=1):
                     self.agents.poll(force=True)
+                if time.time() - last_ret >= 86400:
+                    last_ret = time.time()
+                    self.agents.retention(self.cfg.get("agent_log_days", 30))
             except Exception as e:   # der Wächter darf nie sterben
                 log.warning("Agenten-Wächter: %s", scrub(e))
 
@@ -1190,7 +1197,11 @@ class App:
         self._usage_cache, self._usage_lock = None, threading.Lock()
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
+        self.audit_log = audit.AuditLog(data_dir(cfg) / "tinyops.db")
+        if not hasattr(self, "_audit_ctx"):
+            self._audit_ctx = threading.local()
         self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
+        self.agents.audit = self.audit
         if self.demo and not self.store.flow_stats()["total_xp"]:
             t = time.time()      # Demo: ein paar erfundene Erfolge der letzten Tage, damit der Spielstand etwas zeigt
             for i, (k, ph, xp, d) in enumerate((("DLP-098", 7, 60, 3), ("DLP-099", 4, 20, 2), ("DLP-101", 4, 10, 1), ("DLP-102", 4, 20, 1), ("DLP-103", 3, 10, 0))):
@@ -1637,6 +1648,12 @@ class App:
                  "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated"))}
 
     def board_action(self, action, body):
+        tgt = str(body.get("key") or body.get("ref") or ("idea:%s" % body["id"] if action == "plan_idea" and body.get("id") else "") or "")
+        det = {k: body.get(k) for k in ("stage", "pool_id", "title") if body.get(k) not in (None, "")}
+        return self._audited("board." + action, tgt, lambda: self._board_action(action, body),
+                             target_of=lambda r: (r or {}).get("key") if isinstance(r, dict) else None, **det)
+
+    def _board_action(self, action, body):
         st = self.store
         if action == "stage":
             key = body.get("key") or body.get("ref")
@@ -1963,6 +1980,12 @@ class App:
             raise UserError("project_id muss eine Zahl sein.")
 
     def link_ticket(self, body):
+        return self._audited("link.set", "%s:%s" % (body.get("project_id"), body.get("branch")), lambda: self._link_ticket(body), ticket=body.get("ticket"))
+
+    def unlink_ticket(self, body):
+        return self._audited("link.delete", "%s:%s" % (body.get("project_id"), body.get("branch")), lambda: self._unlink_ticket(body))
+
+    def _link_ticket(self, body):
         pid, branch = self._ref(body)
         key = self._local(links.norm_ticket, body.get("ticket"))
         self._check_ticket_exists(key)
@@ -1971,7 +1994,7 @@ class App:
         self.cache_t = 0.0
         return {"ticket": key}
 
-    def unlink_ticket(self, body):
+    def _unlink_ticket(self, body):
         pid, branch = self._ref(body)
         removed = self._local(self.store.unlink, pid, branch)
         log.info("Verknüpfung gelöst: %s:%s", pid, branch)
@@ -1979,6 +2002,11 @@ class App:
         return {"removed": removed}
 
     def pool_action(self, action, body):
+        det = {k: body.get(k) for k in ("id", "name") if body.get(k) not in (None, "")}
+        return self._audited("pool." + action, "pool:%s" % (body.get("id") or body.get("name") or ""), lambda: self._pool_action(action, body),
+                             target_of=lambda r: "pool:%s" % r["id"] if isinstance(r, dict) and r.get("id") else None, **det)
+
+    def _pool_action(self, action, body):
         st = self.store
         if action == "create":
             return {"id": self._local(st.add_pool, body.get("name"))}
@@ -2110,7 +2138,19 @@ class App:
         types = self._types(project)
         if itype not in types:
             raise UserError("Vorgangstyp «%s» gibt es in %s nicht (vorhanden: %s)." % (itype, project, ", ".join(types)))
-        res = self.jira.create_issue(project, itype, summary, description)
+        if not body.get("force"):
+            for r in self.audit_log.rows(action="jira.create", since=time.time() - 600, limit=50):
+                d = r["detail"]
+                if r["ok"] and d.get("project") == project and (d.get("summary") or "").lower() == summary.lower():
+                    err = UserError("Dasselbe Ticket hast du vor %d min schon angelegt: %s." % (max(1, int((time.time() - r["ts"]) // 60)), r["target"]))
+                    err.data = {"duplicate": r["target"], "url": "%s/browse/%s" % (self.jc["url"].rstrip("/"), r["target"]) if self.jc.get("url") else ""}
+                    raise err
+        try:
+            res = self.jira.create_issue(project, itype, summary, description)
+        except UserError as e:
+            self.audit("jira.create", project, ok=False, project=project, summary=summary, issue_type=itype, error=str(e)[:300])
+            raise
+        self.audit("jira.create", res["key"], project=project, summary=summary, issue_type=itype, description_chars=len(description), forced=bool(body.get("force")))
         jlog.info("Ticket %s angelegt (%s, %d Zeichen Beschreibung)", res["key"], itype, len(description))
         self.cache_t = 0.0   # beim nächsten Abruf neu lesen
         return res
@@ -2170,8 +2210,52 @@ class App:
         })
         return data
 
+    # -- Audit
+    def audit(self, action, target="", ok=True, actor="du", **detail):
+        """Eintrag im Audit-Trail. Ein Fehler beim Schreiben bricht die Aktion nicht ab (sie ist schon passiert), steht aber im Log."""
+        try:
+            return self.audit_log.add(action, target, ok, actor, detail)
+        except Exception as e:
+            log.error("Audit-Eintrag %s %s nicht geschrieben: %s", action, target, scrub(e))
+            return None
+
+    def _audited(self, action, target, fn, target_of=None, **detail):
+        """Führt fn aus und schreibt genau einen Eintrag. Verschachtelte Aufrufe (z. B. «Schritt erledigt» setzt eine Station)
+        schreiben nichts Eigenes, sie ergänzen mit audit_note() nur Details zum äusseren Eintrag."""
+        ctx = self._audit_ctx
+        if getattr(ctx, "extra", None) is not None:
+            return fn()
+        ctx.extra = {}
+        try:
+            try:
+                res = fn()
+            except UserError as e:
+                self.audit(action, target, ok=False, error=str(e)[:300], **detail, **ctx.extra)
+                raise
+            if target_of:
+                target = target_of(res) or target
+            self.audit(action, target, **detail, **ctx.extra)
+            return res
+        finally:
+            ctx.extra = None
+
+    def audit_note(self, **kw):
+        extra = getattr(self._audit_ctx, "extra", None)
+        if extra is not None:
+            extra.update(kw)
+
     # -- Teilschritte (Checkliste je Karte)
     def flow_action(self, action, b):
+        tgt = str(b.get("id") or b.get("key") or "")
+        if action in ("add", "toggle", "delete"):
+            return self._flow_action(action, b)          # Teilschritte: im Verlauf über den Spielstand, nicht im Audit
+        if action == "tiny":
+            return self._audited("flow.tiny", "", lambda: self._flow_action(action, b), target_of=lambda r: (r or {}).get("key"),
+                                 branch="%s:%s" % (b.get("project_id"), b.get("branch")))
+        return self._audited("flow." + action, tgt, lambda: self._flow_action(action, b),
+                             **{k: b.get(k) for k in ("phase", "note", "env") if b.get(k) not in (None, "")})
+
+    def _flow_action(self, action, b):
         st = self.store
         try:
             if action == "add":
@@ -2209,6 +2293,7 @@ class App:
                 if x.get("kind") in ("mr", "assigned") and x.get("iid")]
         if refs:
             self.store.accept_set(cid, refs, note, env)
+            self.audit_note(accepted=["%s@%s" % (r, (sh or "?")[:12]) for r, sh in refs])
             log.info("Abnahme %s: %s", cid, ", ".join("%s@%s" % (r, (sh or "?")[:8]) for r, sh in refs))
         return refs
 
@@ -2235,6 +2320,7 @@ class App:
         if stage is None:
             raise UserError("Schon fertig.")
         self.board_action("stage", {"key": cid, "stage": stage})
+        self.audit_note(stage=stage)
         return {"stage": stage}
 
     def _flow_tiny(self, b):
@@ -2382,6 +2468,7 @@ class App:
         argv = self._argv(proj.get("deploy_command", self.cfg["deploy_command"]), vals, proj.get("extra_args", []))
         cwd = proj.get("repo_path") or BASE
         title = "Deploy %s !%s → %s (Tag %s)" % (vals["project"], iid, vals["namespace"], vals["tag"])
+        self.audit("testenv.deploy", "%s!%s" % (project_id, iid), namespace=vals["namespace"], tag=vals["tag"])
         return self.jobs.start(title, argv, cwd)
 
     def teardown(self, project_id, iid):
@@ -2389,6 +2476,7 @@ class App:
         proj, vals = self._mr_vars(project_id, iid)
         self._guard_namespace(vals["namespace"])
         argv = self._argv(proj.get("teardown_command", self.cfg["teardown_command"]), vals)
+        self.audit("testenv.teardown", "%s!%s" % (project_id, iid), namespace=vals["namespace"])
         return self.jobs.start("Abbauen %s" % vals["namespace"], argv, proj.get("repo_path") or BASE)
 
     def run_agent(self, name, project_id, iid):
@@ -2558,6 +2646,19 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/audit":
+                    ql = urllib.parse.parse_qs(parsed.query)
+                    q = {k: v[0] for k, v in ql.items()}
+                    return self._send(200, {"rows": app.audit_log.rows(target=ql.get("target") or None, action=q.get("action") or None,
+                                                                        limit=max(1, min(int(q.get("limit") or 200), 2000))),
+                                            "instance": app.audit_log.instance()})
+                if method == "GET" and path == "/api/audit/verify":
+                    return self._send(200, app.audit_log.verify())
+                if method == "GET" and path == "/api/audit/export":
+                    body = json.dumps({"exported": time.time(), "instance": app.audit_log.instance(), "verify": app.audit_log.verify(),
+                                       "rows": app.audit_log.export()}, ensure_ascii=False, indent=1).encode("utf-8")
+                    return self._send(200, body, "application/json",
+                                      {"Content-Disposition": 'attachment; filename="tinyops-audit-%s.json"' % time.strftime("%Y%m%d-%H%M")})
                 if method == "POST" and path.startswith("/api/flow/"):
                     return self._send(200, app.flow_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/agents/"):
@@ -2628,6 +2729,8 @@ def make_handler(app):
                 return self._err(404, "Nicht gefunden.")
             except UserError as e:
                 hlog.warning("%s %s abgelehnt: %s", method, scrub(path), e)
+                if e.data:
+                    return self._send(400, dict(e.data, error=scrub(str(e))))
                 return self._err(400, str(e))
             except (KeyError, TypeError, ValueError) as e:
                 hlog.warning("%s %s: ungültige Anfrage (%s)", method, scrub(path), repr(e))
@@ -2691,6 +2794,8 @@ def make_handler(app):
                 if serr:
                     return self._send(400, {"error": "Secret konnte nicht gespeichert werden.", "errors": serr})
                 settings.write_config(app.config_path, new)
+                changed = sorted(k for k in set(disk) | set(new) if disk.get(k) != new.get(k))
+                app.audit("settings.save", "", sections=changed, stored=sorted(where))
                 log.info("Einstellungen gespeichert: GitLab %s, Jira %s, %d Projekt(e), Secrets neu: %s",
                          new.get("gitlab_url") or "-", (new.get("jira") or {}).get("url") or "-", len(new["projects"]),
                          ", ".join(where) or "keine")
@@ -2857,6 +2962,28 @@ def run_preflight(cfg, config_path, demo):
     return 1 if problems[0] else 0
 
 
+def run_audit_cli(cfg, verify, export_to):
+    db = data_dir(cfg) / "tinyops.db"
+    if not db.exists():
+        print("Kein Verlauf: %s gibt es nicht." % db)
+        return 1 if verify else 0
+    al = audit.AuditLog(db)
+    v = al.verify()
+    if export_to:
+        body = json.dumps({"exported": time.time(), "instance": al.instance(), "verify": v, "rows": al.export()}, ensure_ascii=False, indent=1)
+        if export_to == "-":
+            print(body)
+        else:
+            Path(export_to).write_text(body + "\n", encoding="utf-8")
+            print("%d Einträge nach %s geschrieben." % (v["count"], export_to))
+    if verify:
+        if v["ok"]:
+            print("Verlauf in Ordnung: %d Einträge, Instanz %s, letzter Hash %s" % (v["count"], al.instance(), v.get("last_hash", "")[:16]))
+        else:
+            print("Verlauf GEBROCHEN bei Eintrag %s: %s (%d Einträge)" % (v["broken_at"], v["reason"], v["count"]))
+    return 0 if v["ok"] or not verify else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="tinyops Arbeitspanel")
     ap.add_argument("--config", default=str(default_config_path()), help="Standard: ~/.config/tinyops/config.json (oder $TINYOPS_HOME)")
@@ -2869,6 +2996,8 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="Log auf DEBUG: jede Anfrage, jede Branch-Entscheidung")
     ap.add_argument("--log-level", choices=sorted(tlog.LEVELS), help="debug, info, warning oder error (sonst config.json, Standard info)")
     ap.add_argument("--show-log", nargs="?", const=100, type=int, metavar="N", help="letzte N Logzeilen zeigen und beenden")
+    ap.add_argument("--verify-audit", action="store_true", help="prüft die Hash-Kette des Verlaufs (Exit-Code 1, wenn sie gebrochen ist)")
+    ap.add_argument("--export-audit", metavar="DATEI", help="Verlauf als JSON in DATEI schreiben (- = Standardausgabe)")
     args = ap.parse_args()
     migrated = migrate_legacy(args.config) if args.config == str(default_config_path()) else []
     path = args.config if Path(args.config).exists() else None
@@ -2880,6 +3009,10 @@ def main():
         print("Log: %s" % tlog.log_file(cfg0))
         print("\n".join(lines) if lines else "(noch leer)")
         return
+
+    if args.verify_audit or args.export_audit:
+        cfg0 = load_config(path)
+        raise SystemExit(run_audit_cli(cfg0, args.verify_audit, args.export_audit))
 
     try:
         if args.set_secret:

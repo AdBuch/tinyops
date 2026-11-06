@@ -5,6 +5,40 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.17.0]
+
+### Neu
+- **Verlauf (Audit-Trail):** Tabelle `audit` in `tinyops.db`, nur anhängend. Trigger in SQLite sperren UPDATE und DELETE.
+  - Jeder Eintrag trägt den Hash des vorigen (SHA-256-Kette) und eine Instanz-Kennung, damit später mehrere Instanzen oder eine zentrale Datenbank unterscheidbar bleiben.
+  - Erfasst werden:
+    - Jira-Ticket anlegen, auch abgelehnte Versuche
+    - Station setzen und zurücksetzen, «Schritt erledigt» (mit Zielstation), tiny-Ticket (Ziel ist das neue Ticket, der Branch steht in den Details), Aufgabe anlegen oder löschen, Idee einplanen, Kategorien
+    - Branch verknüpfen und lösen
+    - Abnahme mit den Commits (`ref@sha`), Notiz und Umgebung
+    - Fokus anheften
+    - Agent zuweisen, starten, stoppen, fertig, abgelaufen, entfernen und übernehmen, jeweils mit Datenklasse, Ort, Modus und dem **Prompt nur als Hash**; gesperrte Zuweisungen und Übernahmen mit Pfaden ausserhalb der Freigabe auch
+    - Einstellungen gespeichert: welche Bereiche sich geändert haben und welche Zugangsdaten neu gespeichert wurden, nie Werte
+    - Testumgebung deployen und abbauen
+  - Abgelehnte Aktionen stehen als Fehler im Verlauf.
+  - Verschachtelte Aktionen schreiben genau einen Eintrag. Beispiel: «Schritt erledigt» setzt intern eine Station, im Verlauf steht trotzdem nur «Schritt erledigt».
+  - Schreibt der Verlauf nicht (Platte voll), läuft die Aktion trotzdem und der Fehler steht im Log.
+- **Verlauf im Detail-Panel** je Vorhaben: Ticket plus alle Branches der Karte, die letzten 30 Einträge.
+- **«Log» hat zwei Ansichten:** «Verlauf» (Standard) mit «Kette prüfen» und «Export (JSON)», daneben das technische Log wie bisher.
+- **Kommandozeile:**
+  - `python3 server.py --verify-audit` prüft die Kette (Exit-Code 1, wenn sie gebrochen ist) und zeigt den letzten Hash.
+  - `--export-audit DATEI` schreibt den Verlauf als JSON (`-` für die Standardausgabe).
+  - Erkannt werden geänderte Einträge, gelöschte Einträge in der Mitte und fehlende letzte Einträge.
+- **Doppelt-Schutz beim Jira-Anlegen:** Gleicher Titel (ohne Gross/klein und Leerzeichen) im selben Projekt innerhalb von 10 Minuten fragt nach und nennt das schon angelegte Ticket. Ein zweites gibt es nur auf ausdrücklichen Wunsch.
+- **Aufbewahrung der Agenten-Dateien:** `agent_log_days` (Standard 30, 0 = nie), einstellbar unter Einstellungen → Coding-Agenten.
+  - Der Wächter löscht einmal am Tag Logs, Prompts und Patches älterer Läufe lokal und auf jedem SSH-Ziel.
+  - Laufende Läufe bleiben unangetastet, die Einträge in der Liste auch. Gelöschtes steht im Verlauf.
+- Die Token-Schwärzung (bekannte Formen wie `glpat-…`, `ghp_…`, `Bearer …`) liegt jetzt zentral in `secretstore` und gilt für Agenten-Logs und den Verlauf.
+
+### Grenzen
+- Die Kette zeigt Änderungen an, verhindert sie aber nicht. Wer Schreibrechte auf `tinyops.db` hat, kann die ganze Kette neu berechnen. Auffallen tut das nur, wenn der letzte Hash ausserhalb liegt, zum Beispiel in einem regelmässigen Export oder in der Ausgabe von `--verify-audit`.
+- Teilschritte (Haken in der Checkliste) stehen nicht im Verlauf, sondern nur im Spielstand.
+- Der Verlauf wird nicht automatisch gekürzt; bei normaler Nutzung sind das wenige MB im Jahr.
+
 ## [0.16.0]
 
 ### Neu

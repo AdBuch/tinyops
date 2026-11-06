@@ -24,6 +24,7 @@ from pathlib import Path
 
 import secretstore as store
 import tlog
+import audit as _audit
 
 log = tlog.get("agents")
 
@@ -407,9 +408,7 @@ def run_remote(conn, script, timeout=25):
     return r.returncode, out, err
 
 
-# Bekannte Token-Formen. Beste Mühe: Die Ausgabe eines Agenten kann beliebig sein, sicher ist nur, was gar nicht erst im Log landet.
-TOKEN_RE = re.compile(r"(glpat-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_\-]{20,}|"
-                      r"(?i:bearer)\s+[A-Za-z0-9._~+/=\-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$))")
+TOKEN_RE = store.TOKEN_RE
 
 
 def clean_text(s, limit=20000):
@@ -466,6 +465,25 @@ class Service:
         self.run_dir, self.base = Path(run_dir), Path(base_dir)
         self.lock = threading.RLock()
         self.poll_t = 0.0
+        self.audit = lambda *a, **k: None          # setzt die App: audit(action, target, ok, actor, **detail)
+
+    def _ev(self, action, r, ok=True, actor="du", **kw):
+        """Audit-Eintrag zu einem Lauf: wer, wo, welche Datenklasse, welcher Modus. Der Prompt nur als Hash."""
+        try:
+            a = self.agent(r["agent"])
+        except AgentError:
+            a = None
+        p = self.project(r.get("project_id")) if r.get("project_id") is not None else None
+        det = {"run": r["id"], "agent": r["agent"], "kind": a["kind"] if a else "?", "cloud": bool(a.get("cloud", True)) if a else None,
+               "where": ("lokal" if a["connection"] == "local" else a["connection"]) if a else "?",
+               "project_id": r.get("project_id"), "data_class": data_class(p) if p else None}
+        if r.get("mode"):
+            det["mode"] = r["mode"]
+        det.update(kw)
+        try:
+            self.audit(action, r.get("ticket") or "", ok, actor, **det)
+        except Exception as e:      # Audit darf einen Lauf nie aufhalten
+            log.error("Audit %s für Lauf %s: %s", action, r.get("id"), e)
 
     # -- Konfiguration
     def agent_list(self):
@@ -631,8 +649,11 @@ class Service:
         if pid is not None:
             ok, why = self.allowed(self.agent(aid), pid)
             if not ok:
+                self._ev("agent.assign", {"id": None, "agent": aid, "ticket": ticket, "project_id": pid}, ok=False, error=why)
                 raise AgentError(why)
-        return self.store.agent_run_add(aid, ticket, pid, str(branch or "")[:200], str(title or "")[:300])
+        rid = self.store.agent_run_add(aid, ticket, pid, str(branch or "")[:200], str(title or "")[:300])
+        self._ev("agent.assign", self.store.agent_run(rid), branch=str(branch or "")[:200])
+        return rid
 
     def start(self, run_id, prompt, pid=None, branch=None):
         with self.lock:
@@ -646,6 +667,7 @@ class Service:
             pid = pid if pid is not None else r["project_id"]
             ok, why = self.allowed(a, pid)
             if not ok:
+                self._ev("agent.start", dict(r, project_id=pid), ok=False, error=why)
                 raise AgentError(why)
             prompt = str(prompt or "").replace("\r\n", "\n").strip()
             if not prompt or len(prompt) > MAX_PROMPT or "\0" in prompt:
@@ -678,8 +700,11 @@ class Service:
             except AgentError as e:
                 self.store.agent_run_update(run_id, status="fehlgeschlagen", note=str(e)[:300], finished=time.time())
                 log.warning("Start von Lauf %d (%s) fehlgeschlagen: %s", run_id, a["id"], e)
+                self._ev("agent.start", self.store.agent_run(run_id), ok=False, error=str(e)[:300], prompt_hash=_audit.prompt_hash(prompt))
                 raise
             self.store.agent_run_update(run_id, status="läuft", started=time.time(), note="")
+            self._ev("agent.start", self.store.agent_run(run_id), prompt_hash=_audit.prompt_hash(prompt), prompt_chars=len(prompt),
+                     workdir=wd, branch=branch, out_branch=outb, max_minutes=int(a.get("max_minutes", DEFAULT_MAX_MINUTES) or 0))
             log.info("Lauf %d gestartet: Agent %s, Ticket %s, %s", run_id, a["id"], r["ticket"], wd)
             return run_id
 
@@ -776,9 +801,12 @@ class Service:
                         continue
                     if st[0] == "exit":
                         self.store.agent_run_update(r["id"], status="fertig" if st[1] == 0 else "fehlgeschlagen", exit_code=st[1], finished=time.time(), note="")
+                        self._ev("agent.finish", r, ok=st[1] == 0, actor="agent", status="fertig" if st[1] == 0 else "fehlgeschlagen", exit_code=st[1],
+                                 minutes=int((time.time() - (r["started"] or time.time())) // 60))
                     elif st[0] == "gone":
                         self.store.agent_run_update(r["id"], status="verloren", finished=time.time(),
                                                     note="Weder Exit-Datei noch Sitzung gefunden (Zielhost neu gestartet, tmux beendet?).")
+                        self._ev("agent.finish", r, ok=False, actor="agent", status="verloren")
                     else:
                         if r["note"]:
                             self.store.agent_run_update(r["id"], note="")
@@ -801,8 +829,11 @@ class Service:
         except AgentError as e:
             log.warning("Lauf %d: Zeitlimit erreicht, Beenden fehlgeschlagen: %s", r["id"], e)
             self.store.agent_run_update(r["id"], note="Zeitlimit erreicht, Beenden fehlgeschlagen: %s" % str(e)[:200])
+            if "Beenden fehlgeschlagen" not in (r.get("note") or ""):
+                self._ev("agent.expire", r, ok=False, actor="watchdog", max_minutes=mx, error=str(e)[:200])
             return False
         self.store.agent_run_update(r["id"], status="abgelaufen", finished=time.time(), note="Zeitlimit von %d min erreicht und beendet." % mx)
+        self._ev("agent.expire", r, actor="watchdog", max_minutes=mx)
         log.warning("Lauf %d (%s, Ticket %s) nach %d min beendet (Zeitlimit)", r["id"], a["id"], r["ticket"], mx)
         return True
 
@@ -818,6 +849,7 @@ class Service:
             else:
                 run_remote(conn, remote_kill_script(run_id), timeout=20)
             self.store.agent_run_update(run_id, status="abgebrochen", finished=time.time(), note="Von dir gestoppt.")
+            self._ev("agent.stop", r, minutes=int((time.time() - (r["started"] or time.time())) // 60))
 
     def _local_kill(self, r):
         pidf = self.run_dir / ("%d.pid" % r["id"])
@@ -862,6 +894,7 @@ class Service:
             paths = (self.project(r["project_id"]) or {}).get("cloud_paths") or []
             bad = [f for f in files if not path_allowed(f, paths)]
             if bad:
+                self._ev("agent.takeover", r, ok=False, error="Pfade ausserhalb der Freigabe", blocked=bad[:20])
                 raise AgentError("Änderungen ausserhalb der freigegebenen Pfade, nichts übernommen: %s" % ", ".join(bad[:8]))
             repo, root = self._paths(a, r["project_id"])
             outb = r.get("out_branch") or self.out_branch(r["ticket"], run_id)
@@ -872,6 +905,7 @@ class Service:
                                  + " " + clean_text(err, 300).strip())
             self.store.agent_run_update(run_id, taken=outb, out_branch=outb, note="Übernommen als Branch %s (%d Dateien). Pushen und MR erstellen machst du." % (outb, len(files)))
             log.info("Lauf %d übernommen: %s, %d Dateien", run_id, outb, len(files))
+            self._ev("agent.takeover", r, branch=outb, files=len(files), file_list=files[:40])
             return {"branch": outb, "files": files}
 
     def remove(self, run_id, force=False):
@@ -904,7 +938,54 @@ class Service:
                     run_remote(conn, 'R="$HOME/.tinyops/runs"; rm -f "$R/%d."*; true' % int(run_id), timeout=15)
             except AgentError:
                 pass     # Aufräumen ist Beiwerk; der Eintrag verschwindet trotzdem
+            self._ev("agent.remove", r, status=r["status"], force=bool(force), taken=r.get("taken") or "")
             self.store.agent_run_delete(run_id)
+
+    # -- Aufbewahrung: alte Logs, Prompts und Patches auf allen Rechnern löschen. Die Läufe in der Liste bleiben, nur ihre Dateien gehen.
+    def retention(self, days, now=None):
+        days = int(days or 0)
+        if days <= 0:
+            return None
+        now = now or time.time()
+        cut = now - days * 86400
+        active = {r["id"] for r in self.store.agent_runs(status="läuft")}
+        local = 0
+        if self.run_dir.is_dir():
+            for f in self.run_dir.iterdir():
+                m = re.match(r"(\d+)\.", f.name)
+                if not m or int(m.group(1)) in active:
+                    continue
+                try:
+                    if f.is_file() and f.stat().st_mtime < cut:
+                        f.unlink()
+                        local += 1
+                except OSError:
+                    pass
+        remote, failed = {}, []
+        used = {a["connection"] for a in self.agent_list() if a["connection"] != "local"}
+        for cid in sorted(used):
+            conn = self.conns().get(cid)
+            if not conn:
+                continue
+            keep = " ".join("! -name '%d.*'" % i for i in sorted(active))
+            script = ('R="$HOME/.tinyops/runs"; [ -d "$R" ] || { echo 0; exit 0; }\n'
+                      'find "$R" -maxdepth 1 -type f -mtime +%d %s -print -delete 2>/dev/null | wc -l\n' % (max(0, days - 1), keep))
+            try:
+                rc, out, err = run_remote(conn, script, timeout=30)
+                remote[conn.get("name") or cid] = int((out.strip().splitlines() or ["0"])[-1]) if rc == 0 else 0
+                if rc != 0:
+                    failed.append(conn.get("name") or cid)
+            except (AgentError, ValueError) as e:
+                failed.append(conn.get("name") or cid)
+                log.warning("Aufbewahrung auf %s: %s", cid, e)
+        res = {"days": days, "local": local, "remote": remote, "failed": failed}
+        if local or any(remote.values()) or failed:
+            try:
+                self.audit("agent.retention", "", not failed, "watchdog", **res)
+            except Exception as e:
+                log.error("Audit agent.retention: %s", e)
+            log.info("Aufbewahrung %d Tage: %d lokale, %s entfernte Dateien gelöscht", days, local, remote)
+        return res
 
     def tail(self, run_id, lines=80):
         r = self.store.agent_run(run_id)

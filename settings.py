@@ -972,6 +972,7 @@ def view(cfg, config_path, features_default=None):
                    "repos": [dict(r, data_class=agents.data_class(r), cloud_paths=list(r.get("cloud_paths") or []))
                              for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
+        "agent_log_days": int(cfg.get("agent_log_days", 30)),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
         "branch_filter": {
@@ -1204,6 +1205,14 @@ def build_config(current, p):
             errors["github.repos"] = "Zum Einschalten mindestens ein Repo wählen."
         cfg["github"] = g
 
+    if "agent_log_days" in p:
+        try:
+            d = int(p.get("agent_log_days"))
+            if not 0 <= d <= 3650:
+                raise ValueError
+            cfg["agent_log_days"] = d
+        except (TypeError, ValueError):
+            errors["agent_log_days"] = "Ganze Zahl von 0 bis 3650 (0 = nie löschen)."
     if "connections" in p or "agents" in p:
         conns = agents.clean_connections(p.get("connections") if "connections" in p else cfg.get("connections"), errors)
         cfg["connections"] = conns

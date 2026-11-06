@@ -22,7 +22,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 |---|---|---|---|
 | **0.15.0** ✓ | Ehrlich und an den Commit gebunden (geliefert 2026-11-05) | T-1, T-4, T-6, Zeitlimit aus T-2 | M |
 | **0.16.0** ✓ | Agenten isoliert, Datenklassen (geliefert 2026-11-05; Export statt Sparse-Checkout, siehe unten) | T-2, SEC-1, SEC-2, F-10, F-14 | L |
-| **0.17.0** | Audit und Verlauf | T-3, SEC-6, F-15 | M |
+| **0.17.0** ✓ | Audit und Verlauf (geliefert 2026-11-06) | T-3, SEC-6, F-15 | M |
 | **0.18.0** | Rückfragen und Ergebnisse von Agenten | T-5, F-09 | M |
 | **0.19.0** | Fokus-Zeit und Zeitentwürfe für Projectron | F-20 | M |
 | **0.20.0** | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit | F-06, F-07, F-17, G9 | M–L |
@@ -77,7 +77,7 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 
 **Grenze:** Netz-Egress und Dateisystem ausserhalb des Worktrees sichert tinyops nicht. Das bleibt Sache des Hosts (eigener Benutzer, Firewall); die Doku nennt das klar.
 
-## 0.17.0 — Audit und Verlauf
+## 0.17.0 — Audit und Verlauf ✓
 
 **Ziel:** Jede Aktion nach aussen und jede Entscheidung ist nachvollziehbar.
 
@@ -92,6 +92,8 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 - Jede genannte Aktion erzeugt genau einen Eintrag.
 - Eine geänderte Zeile meldet `--verify-audit`.
 - Keine Secrets im Audit (Schwärzungstest).
+
+**Umgesetzt (2026-11-06):** wie geplant, dazu `--export-audit`, Instanz-Kennung je Eintrag, Erkennung fehlender letzter Einträge, Audit von Deploy/Teardown, Kategorien und Agent-Ende. Teilschritte bleiben ausserhalb des Audits (nur Spielstand).
 
 ## 0.18.0 — Rückfragen und Ergebnisse von Agenten
 

@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 import urllib.request
 from pathlib import Path
@@ -198,6 +199,7 @@ class AppTicketFlow(unittest.TestCase):
 
     def app(self, jira=None, llm_cfg=None):
         cfg = server.load_config(None)
+        cfg["data_dir"] = tempfile.mkdtemp()          # eigener Verlauf je Test (Doppelt-Schutz beim Anlegen)
         cfg["jira"] = dict({"url": "https://jira.example", "project_keys": ["DLP"]}, **(jira or {}))
         if llm_cfg:
             cfg["llm"] = llm_cfg

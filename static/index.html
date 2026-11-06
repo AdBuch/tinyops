@@ -178,6 +178,18 @@
   .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--raised); color: var(--quiet); }
   .badge.success { background: var(--ok-bg); color: var(--ok); } .badge.failed { background: var(--bad-bg); color: var(--bad); } .badge.running { background: var(--focus-bg); color: var(--focus); }
   textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+  .aud { list-style: none; margin: 6px 0 0; padding: 0; }
+  .aud li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 12px; padding: 7px 4px; border-top: 1px solid var(--line); font-size: 13px; }
+  .aud li:first-child { border-top: 0; }
+  .aud time { color: var(--quiet); font-variant-numeric: tabular-nums; font-size: 12px; padding-top: 1px; white-space: nowrap; }
+  .aud .what b { font-weight: 600; }
+  .aud .what .tg { font-family: var(--mono); font-size: 12px; margin-left: 6px; }
+  .aud .det { grid-column: 2; color: var(--quiet); font-size: 12px; overflow-wrap: anywhere; }
+  .aud li.fail .what b { color: var(--bad, #c0392b); }
+  .aud li.fail .what b::before { content: "✕ "; }
+  .aud .by { color: var(--quiet); font-size: 12px; margin-left: 6px; }
+  .aud.short li { grid-template-columns: 92px minmax(0, 1fr); padding: 5px 0; }
+  #logDlg #logSeg { margin-left: 0; display: inline-flex; }
   pre.log { background: #0d1015; color: #d8dde6; padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; font: 12px/1.5 var(--mono); white-space: pre-wrap; margin: 6px 0 0; }
   .bagent { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
   .bagent select { max-width: 172px; font-size: 12px; padding: 2px 4px; }
@@ -722,14 +734,23 @@
 <dialog id="agDlg" style="width:min(780px,96vw)"><div id="agBody"></div></dialog>
 <dialog id="logDlg" style="width:min(1000px,96vw)">
   <div class="row" style="justify-content:space-between">
-    <strong>Log <span id="logFile" class="quiet small" style="font-weight:400"></span></strong>
+    <span class="seg logseg" id="logSeg" role="group" aria-label="Was zeigen"><button data-logview="audit">Verlauf</button><button data-logview="log">Technisches Log</button></span>
     <span class="row">
-      <select id="logLevel"><option value="debug">alles</option><option value="info" selected>ab Info</option><option value="warning">nur Warnungen und Fehler</option></select>
+      <span id="logTools" class="row"><select id="logLevel"><option value="debug">alles</option><option value="info" selected>ab Info</option><option value="warning">nur Warnungen und Fehler</option></select></span>
+      <span id="audTools" class="row"><button id="audVerify" title="Prüft, ob ein Eintrag nachträglich geändert oder gelöscht wurde">Kette prüfen</button><button id="audExport" title="Ganzer Verlauf als JSON-Datei, zum Ablegen ausserhalb von tinyops">Export (JSON)</button></span>
       <button id="logReload">Neu laden</button><button id="logClose">Schließen</button>
     </span>
   </div>
-  <pre class="log" id="logText" style="max-height:60vh"></pre>
-  <div class="quiet small" style="margin-top:6px">Jede Anfrage und jede Branch-Entscheidung steht nur im Log, wenn der Server mit <code>-v</code> oder <code>log_level: debug</code> läuft.</div>
+  <div id="logPane">
+    <div class="quiet small" id="logFile" style="margin-top:6px"></div>
+    <pre class="log" id="logText" style="max-height:60vh"></pre>
+    <div class="quiet small" style="margin-top:6px">Jede Anfrage und jede Branch-Entscheidung steht nur im Log, wenn der Server mit <code>-v</code> oder <code>log_level: debug</code> läuft.</div>
+  </div>
+  <div id="audPane">
+    <div class="small" id="audState" style="margin-top:8px"></div>
+    <ol class="aud" id="audList" style="max-height:60vh;overflow:auto"></ol>
+    <div class="quiet small" style="margin-top:6px">Was du (und der Wächter) in tinyops entschieden hast: Tickets, Stationen, Abnahmen, Agenten, Einstellungen. Nur anhängend; jeder Eintrag trägt den Hash des vorigen. Prompts stehen nur als Hash drin, Secrets nie.</div>
+  </div>
 </dialog>
 
 <script>
@@ -1209,15 +1230,25 @@ function renderTicket(r) {
     if (!body.summary.trim()) { tkMsg('Der Titel fehlt.', 'bad'); return; }
     if (!confirm(`In Jira ${body.project} als «${body.issue_type}» anlegen?\n\n${body.summary}`)) return;
     await busy($('tk-create'), 'Lege an …', async () => {
+      let x = null;
       try {
-        const x = await api('POST', '/api/ticket/create', body);
-        $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a></div>
-          <div class="small" style="margin:10px 0">Nimm den Key in den Branch-Namen auf (zum Beispiel <code>feature/${esc(x.key)}-…</code>), dann verknüpft das Panel Ticket und Branch von selbst.</div>
-          <div class="row"><button id="tk-ck">Key kopieren</button><button class="primary" id="tk-done">Fertig</button></div>`;
-        $('tk-ck').onclick = () => copyText(x.key, 'Ticket-Key');
-        $('tk-done').onclick = () => $('tkDlg').close();
-        load();
-      } catch (e) { tkMsg(esc(e.message), 'bad'); }
+        x = await api('POST', '/api/ticket/create', body);
+      } catch (e) {
+        const dup = e.data && e.data.duplicate;
+        if (!dup) { tkMsg(esc(e.message), 'bad'); return; }
+        // Doppelt-Schutz: dasselbe Ticket in den letzten 10 min. Nur auf ausdrücklichen Wunsch ein zweites.
+        if (!confirm(`${e.message}\n\nTrotzdem ein zweites Ticket anlegen?`)) {
+          tkMsg(`${esc(e.message)} ${e.data.url ? `<a href="${esc(e.data.url)}" target="_blank" rel="noopener">${esc(dup)} öffnen</a>` : ''}`, 'bad');
+          return;
+        }
+        try { x = await api('POST', '/api/ticket/create', { ...body, force: true }); } catch (e2) { tkMsg(esc(e2.message), 'bad'); return; }
+      }
+      $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a></div>
+        <div class="small" style="margin:10px 0">Nimm den Key in den Branch-Namen auf (zum Beispiel <code>feature/${esc(x.key)}-…</code>), dann verknüpft das Panel Ticket und Branch von selbst.</div>
+        <div class="row"><button id="tk-ck">Key kopieren</button><button class="primary" id="tk-done">Fertig</button></div>`;
+      $('tk-ck').onclick = () => copyText(x.key, 'Ticket-Key');
+      $('tk-done').onclick = () => $('tkDlg').close();
+      load();
     });
   };
 }
@@ -1699,11 +1730,74 @@ document.getElementById('jobs').addEventListener('click', ev => {
 });
 
 // Dialog
+let LOGVIEW = 'audit';
+try { LOGVIEW = localStorage.getItem('tinyops.logview') || 'audit'; } catch (e) { /* ohne Speicher: Verlauf */ }
+const AUD_KEYS = { stage: 'Station', ticket: 'Ticket', accepted: 'Abgenommen auf', note: 'Notiz', env: 'Umgebung', summary: 'Titel', issue_type: 'Typ',
+  agent: 'Agent', where: 'wo', data_class: 'Datenklasse', mode: 'Modus', branch: 'Branch', out_branch: 'Ergebnis-Branch', prompt_hash: 'Prompt',
+  files: 'Dateien', status: 'Status', exit_code: 'Exit', minutes: 'min', max_minutes: 'Limit min', sections: 'Bereiche', stored: 'Zugangsdaten gespeichert',
+  namespace: 'Namespace', tag: 'Tag', title: 'Titel', name: 'Name', force: 'erzwungen', forced: 'trotz Doppelt', blocked: 'blockiert', error: 'Fehler',
+  local: 'lokal gelöscht', remote: 'entfernt gelöscht', days: 'Tage', phase: 'Station', pool_id: 'Kategorie' };
+function audDetail(d) {
+  const out = [];
+  for (const [k, lab] of Object.entries(AUD_KEYS)) {
+    let v = d[k];
+    if (v === undefined || v === null || v === '' || v === false || (Array.isArray(v) && !v.length)) continue;
+    if (k === 'phase' && state && state.flow && state.flow.phases[v]) v = state.flow.phases[v].label;
+    if (Array.isArray(v)) v = v.join(', ');
+    else if (typeof v === 'object') v = Object.entries(v).map(([a, b]) => a + ' ' + b).join(', ');
+    else if (v === true) v = 'ja';
+    out.push(`${lab}: ${esc(v)}`);
+  }
+  return out.join(' · ');
+}
+const audWhen = (ts, short) => new Date(ts * 1000).toLocaleString('de-CH', short ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' } : { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+function audRows(rows, short) {
+  if (!rows.length) return `<li class="quiet small" style="display:block">${short ? 'Noch nichts entschieden.' : 'Noch keine Einträge.'}</li>`;
+  return rows.map(r => {
+    const det = audDetail(r.detail || {});
+    const by = r.actor && r.actor !== 'du' ? `<span class="by">${esc(r.actor)}</span>` : '';
+    return `<li class="${r.ok ? '' : 'fail'}"><time datetime="${new Date(r.ts * 1000).toISOString()}" title="#${r.id} · ${esc(r.hash.slice(0, 12))}">${audWhen(r.ts, short)}</time><div class="what"><b>${esc(r.label)}</b>${short ? '' : `<span class="tg">${esc(r.target)}</span>`}${by}</div>${det ? `<div class="det">${det}</div>` : ''}</li>`;
+  }).join('');
+}
+function setLogView(v) {
+  LOGVIEW = v; try { localStorage.setItem('tinyops.logview', v); } catch (e) { /* egal */ }
+  document.querySelectorAll('#logSeg button').forEach(b => b.classList.toggle('on', b.dataset.logview === v));
+  $('logPane').hidden = v !== 'log'; $('logTools').hidden = v !== 'log';
+  $('audPane').hidden = v !== 'audit'; $('audTools').hidden = v !== 'audit';
+}
+async function showAudit() {
+  const r = await api('GET', '/api/audit?limit=500');
+  $('audList').innerHTML = audRows(r.rows, false);
+  $('audState').innerHTML = `<span class="quiet">${r.rows.length} neueste Einträge · Instanz <code>${esc(r.instance)}</code></span>`;
+}
+document.querySelectorAll('#logSeg button').forEach(b => b.onclick = () => { setLogView(b.dataset.logview); showLog(); });
+document.getElementById('audExport').onclick = async () => {
+  try {
+    const r = await fetch('/api/audit/export', { headers: H });
+    if (!r.ok) throw new Error('Export fehlgeschlagen (HTTP ' + r.status + ')');
+    const name = ((r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || 'tinyops-audit.json';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Verlauf exportiert: ' + name);
+  } catch (e) { toast(e.message); }
+};
+document.getElementById('audVerify').onclick = async () => {
+  try {
+    const v = await api('GET', '/api/audit/verify');
+    $('audState').innerHTML = v.ok ? `<span class="chip sq-ok">${ic('check')} Kette in Ordnung</span> <span class="quiet">${v.count} Einträge, letzter Hash <code>${esc((v.last_hash || '').slice(0, 16))}</code></span>`
+      : `<span class="chip warn">Kette gebrochen bei #${esc(v.broken_at)}</span> <span>${esc(v.reason)}</span>`;
+  } catch (e) { toast(e.message); }
+};
 async function showLog() {
   const dlg = document.getElementById('logDlg');
+  setLogView(LOGVIEW);
+  if (LOGVIEW === 'audit') {
+    try { await showAudit(); if (!dlg.open) dlg.showModal(); } catch (e) { toast(e.message); }
+    return;
+  }
   try {
     const r = await api('GET', '/api/log?n=400&level=' + document.getElementById('logLevel').value);
-    document.getElementById('logFile').textContent = r.file + ' (Stufe: ' + r.level + ')';
+    document.getElementById('logFile').textContent = 'Datei: ' + r.file + ' (Stufe: ' + r.level + ')';
     const pre = document.getElementById('logText');
     pre.textContent = r.lines.length ? r.lines.join('\n') : '(noch keine Einträge in dieser Stufe)';
     if (!dlg.open) dlg.showModal();
@@ -1906,11 +2000,12 @@ async function loadSettings() {
     <div id="sq-result"></div>`)}
 
   ${sect('agents', 'Coding-Agenten', 'Lokale und über SSH/tmux erreichbare Agenten (Claude Code, Codex, Mistral Vibe, eigener Befehl), die du auf der Karte einem Ticket zuweist und startest. Je Agent legst du den Arbeitsordner fest; darunter liegt je Projekt ein Repository.', `
-    <div class="hint">Cloud-Agenten (Claude, Codex, Vibe) senden Prompt und Code an den Anbieter. Sie starten nur für Projekte, bei denen unter GitLab «Cloud-Agent erlaubt» angekreuzt ist (Standard: aus). tinyops fragt nie nach Passwörtern: SSH läuft mit Schlüsseln, ohne Rückfrage, mit strenger Host-Schlüsselprüfung.</div>
+    <div class="hint">Cloud-Agenten (Claude, Codex, Vibe) senden Prompt und Code an den Anbieter. Für Projekte der Datenklasse «restricted» starten nur lokale Agenten; bei «internal» sehen Cloud-Agenten nur die freigegebenen Pfade. Jede Zuweisung, jeder Start und jede Übernahme steht im Verlauf (Log → Verlauf). tinyops fragt nie nach Passwörtern: SSH läuft mit Schlüsseln, ohne Rückfrage, mit strenger Host-Schlüsselprüfung.</div>
     <h3>Verbindungen</h3>
     <div id="cn-list"></div><div class="row"><button id="cn-add">Verbindung hinzufügen</button><span class="quiet small">«Lokal» (dieser Rechner) gibt es immer.</span></div>
     <h3>Agenten</h3>
     <div id="ag-list"></div><div class="row"><button id="ag-add">Agent hinzufügen</button></div>
+    ${field('ag-days', 'Logs, Prompts und Patches der Läufe aufbewahren (Tage, 0 = nie löschen)', S.agent_log_days ?? 30, { type: 'number', err: 'agent_log_days' })}
     <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
 
   ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist (gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern) und das Monatsbudget von Mistral (per Lesezeichen aus deinem Browser).', `
@@ -2284,7 +2379,7 @@ function collect() {
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
-    projects: P, connections: CN, agents: AGC,
+    projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'),
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
@@ -2589,6 +2684,7 @@ function renderFx() {
     if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
     else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
     if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;
+    if (!c.idea_id) body += `<div><h3>Verlauf <small>Was du entschieden hast</small></h3><ol class="aud short" id="fxHist">${HIST.id === c.id ? audRows(HIST.rows, true) : '<li class="quiet small" style="display:block">lädt …</li>'}</ol></div>`;
     const foot = [];
     if (!c.idea_id) foot.push(state.flow.pinned === c.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(c.id)}">${ic('chevron2')} Als Fokus anheften</button>`);
     if (c.idea_id) foot.push('<button data-fxboard="1">Im Board einplanen</button>');
@@ -2598,6 +2694,20 @@ function renderFx() {
   }
   $('fx').innerHTML = `<div class="fxhead">${head}</div><div class="fxbody">${body}</div>`;
   keep.forEach(k => { const el = $(k.id); if (el) { el.value = k.v; if (k.f) el.focus(); } });
+  if (e.t === 'card' && !e.c.idea_id) loadHist(e.c);
+}
+// Verlauf je Vorhaben: Ticket plus alle Branches der Karte. Bei jedem Neuzeichnen frisch, aber höchstens einmal je Sekunde.
+let HIST = { id: null, rows: [], t: 0, sig: '' };
+async function loadHist(c) {
+  const targets = [c.id, c.key, ...(c.items || []).map(x => x.ref || (x.project_id != null && x.branch ? `${x.project_id}:${x.branch}` : ''))].filter(Boolean);
+  const sig = c.id + '|' + targets.join(',');
+  if (HIST.sig === sig && Date.now() - HIST.t < 1000) return;
+  HIST.sig = sig; HIST.t = Date.now();
+  try {
+    const r = await api('GET', '/api/audit?limit=30&' + [...new Set(targets)].map(t => 'target=' + encodeURIComponent(t)).join('&'));
+    HIST = { ...HIST, id: c.id, rows: r.rows };
+    const el = $('fxHist'); if (el && FXID === c.id) el.innerHTML = audRows(r.rows, true);
+  } catch (e) { const el = $('fxHist'); if (el) el.innerHTML = `<li class="quiet small" style="display:block">${esc(e.message)}</li>`; }
 }
 function reviewChips(x) {
   if (!x.iid || (x.reviewers == null && x.approved == null)) return '';

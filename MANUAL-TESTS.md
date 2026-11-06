@@ -183,6 +183,21 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 13.8 | internal mit Cloud-Pfad `src/…/util`, Claude-Lauf «Unit-Tests schreiben» | Export enthält nur diese Pfade; `git log` dort hat einen Commit; «Übernehmen» legt `agent/<key>-<nr>` an |
 | 13.9 | Agent ändert eine Datei ausserhalb der Pfade | «Übernehmen» lehnt ab und nennt die Datei; nichts im Repo |
 
+## 14. Verlauf und Audit (ab 0.17.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 14.1 | Bei einem Vorhaben «Schritt erledigt», dann das Detail-Panel öffnen | Unter «Verlauf» genau ein Eintrag «Schritt erledigt» mit Zielstation |
+| 14.2 | Abnahme mit Notiz und Umgebung | Eintrag «Abgenommen» mit `ref@sha`, Notiz und Umgebung |
+| 14.3 | Agent zuweisen und starten | Zwei Einträge; beim Start Datenklasse, Ort, Modus und `Prompt: sha256:…`, nicht der Prompt-Text |
+| 14.4 | Claude-Agent auf ein restricted-Projekt zuweisen | Fehler-Eintrag (✕) «Agent zugewiesen» mit «restricted» |
+| 14.5 | Einstellungen mit neuem Token speichern | Eintrag mit geänderten Bereichen und Token-Namen, kein Wert |
+| 14.6 | Ticket in Jira anlegen, dann sofort denselben Titel nochmals | Rückfrage nennt das erste Ticket; «Abbrechen» legt nichts an |
+| 14.7 | Log → Verlauf → «Kette prüfen» | «Kette in Ordnung», Anzahl und letzter Hash |
+| 14.8 | Server stoppen, in `tinyops.db` mit `sqlite3` die Trigger löschen und einen Eintrag ändern, dann `python3 server.py --verify-audit` | «GEBROCHEN bei Eintrag …», Exit-Code 1 |
+| 14.9 | «Export (JSON)» | Datei `tinyops-audit-<Datum>.json` mit allen Einträgen und dem Prüfergebnis |
+| 14.10 | `agent_log_days` auf 1, einen Tag warten (oder Datei-Zeit zurücksetzen und Server neu starten) | Alte Dateien in `~/.tinyops/runs` (SSH-Ziel) und lokal weg, Eintrag «Alte Agenten-Logs gelöscht» |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

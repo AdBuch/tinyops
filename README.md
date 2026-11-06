@@ -392,6 +392,17 @@ Verlangen die Approval-Regeln in GitLab noch Freigaben, zählt ein Daumen nicht.
 Pushen und MR erstellen bleiben bei dir. Ob ein Pfad in die Cloud darf, entscheidet dein DLP- oder Sicherheitsverantwortlicher; tinyops setzt nur durch, was eingetragen ist.
 **Eigener Agent-Benutzer (empfohlen für restricted):** auf dem Zielhost einen Benutzer ohne sudo und ohne Docker-Gruppe anlegen, die Repos dort klonen, in GitLab nur Developer-Rechte und Protected Branches. Der Agenten-Test zeigt Warnungen, wenn das nicht so ist.
 
+## 4u. Verlauf, Doppelt-Schutz und Aufbewahrung (neu in 0.17.0)
+
+**Verlauf:** Was du in tinyops entscheidest, steht im Verlauf: Tickets anlegen, Stationen, «Schritt erledigt», Abnahmen mit Commit, Agenten, Einstellungen und Deploys. Pro Vorhaben siehst du ihn im Detail-Panel, alles zusammen unter **Log → Verlauf**.
+- Die Einträge sind nur anhängend und per SHA-256 verkettet. «Kette prüfen» oder `python3 server.py --verify-audit` meldet, wenn ein Eintrag nachträglich geändert oder gelöscht wurde.
+- Prompts stehen nur als Hash drin (`sha256:…`), Secrets nie.
+- Wer den Verlauf als Beleg braucht, legt den Export (`--export-audit verlauf.json` oder der Knopf) regelmässig dort ab, wo tinyops nicht hinschreibt.
+
+**Doppelt-Schutz:** Legst du in Jira dasselbe Ticket (Titel, Projekt) innerhalb von 10 Minuten nochmals an, fragt tinyops nach und verlinkt das vorhandene.
+
+**Aufbewahrung:** `agent_log_days` (Standard 30) löscht alte Logs, Prompts und Patches der Agentenläufe auf allen Rechnern. `0` heisst «nie löschen».
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
@@ -483,6 +494,9 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     net.py               Netzwerk: TLS, Fehlerarten, keine Weiterleitungen
     tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher
+    audit.py             Verlauf: nur anhängend, Hash-Kette, Prüfen und Export
+    agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
+    flow.py              Ablauf, nächster Schritt, Spielstand
     static/index.html    Oberfläche
     prompts/*.md         Prompt-Vorlagen
     tests/               Unit-Tests und Fake-GitLab/Jira: python3 -m unittest discover -s tests -v

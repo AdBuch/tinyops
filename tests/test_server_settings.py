@@ -107,6 +107,13 @@ class Flow(unittest.TestCase):
                 self.assertNotIn("jtoken", raw)
                 self.assertEqual(stat.S_IMODE(cfgfile.stat().st_mode), 0o600)
                 self.assertEqual(json.loads(raw)["port"], self.port)   # Fremdes bleibt erhalten
+                code, au = self.call("GET", "/api/audit?action=settings.save")      # 0.17: im Verlauf, ohne Werte
+                self.assertEqual(code, 200)
+                self.assertEqual(len(au["rows"]), 1)
+                self.assertIn("gitlab_url", au["rows"][0]["detail"]["sections"])
+                self.assertEqual(sorted(au["rows"][0]["detail"]["stored"]), ["gitlab_token", "jira_token"])
+                self.assertNotIn("jtoken", json.dumps(au))
+                self.assertNotIn('"secret"', json.dumps(au))
 
                 code, ov = self.overview()
                 self.assertTrue(ov["configured"], ov)

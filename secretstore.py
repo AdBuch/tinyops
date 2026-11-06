@@ -9,6 +9,7 @@ Grundregeln:
 import getpass
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,6 +38,16 @@ def scrub(text):
     for v in sorted(_used, key=len, reverse=True):
         s = s.replace(v, "***")
     return s
+
+
+# Bekannte Token-Formen. Beste Mühe: Die Ausgabe eines Agenten kann beliebig sein, sicher ist nur, was gar nicht erst im Log landet.
+TOKEN_RE = re.compile(r"(glpat-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_\-]{20,}|"
+                      r"(?i:bearer)\s+[A-Za-z0-9._~+/=\-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$))")
+
+
+def scrub_all(text):
+    """scrub() plus bekannte Token-Formen, auch wenn tinyops den Wert nicht kennt."""
+    return TOKEN_RE.sub("***", scrub(text))
 
 
 # ------------------------------------------------------------ Orte
