@@ -11,6 +11,35 @@ Statusbegriffe wie in (A) 16.1. **DONE nur mit Test.** Nicht gegen echtes Jira 9
 
 ---
 
+## Nachtrag: Stand nach 0.20.0 (2026-11-06)
+
+Die Releases 0.15 bis 0.20 haben den Plan aus diesem Review abgearbeitet. Der Rest des Dokuments bleibt der Befund zu 0.14.0.
+Auch hier gilt: geprüft mit automatischen Tests gegen Mock-Server, nicht gegen dein Jira, GitLab, GitHub oder deinen MCP.
+
+| Gap | Stand | Release | Beleg (Test) |
+|---|---|---|---|
+| T-1 Abnahme am Commit (F-18, AC-11) | DONE | 0.15, 0.20 | `test_flow` (SHA-Wechsel), `test_v20.Ide.test_open_accept_close` (Abnahme nimmt den Worktree-Commit) |
+| T-4 Unbekannt statt grün | DONE | 0.15 | `test_flow`, `test_github` (Freigabe unbekannt, veraltete Quelle) |
+| T-6 Fokus anheften | DONE | 0.15 | `test_flow` |
+| T-2 / SEC-1 / SEC-2 Agenten isoliert, Datenklassen | DONE (Host-Grenzen bleiben) | 0.16 | `test_agents` (Worktree, Export, restricted nie an Cloud) |
+| T-3 / F-15 / SEC-6 Audit-Trail | DONE | 0.17 | `test_audit` (Kette, Manipulation, keine Secrets) |
+| T-5 / F-09 Rückfragen, Bericht, Belege | DONE | 0.18 | `test_agents.Questions` (fragt, Antwort, Bericht, Belege) |
+| F-20 Zeit und Projectron | DONE gegen Test-MCP | 0.19 | `test_time` (Lücken, Idempotenz, Fehler sichtbar) |
+| F-06 Ideen bewerten | DONE | 0.20 | `test_v20.Ideas` |
+| F-07 Ticket aus Idee | DONE | 0.20 | `test_v20.Ideas`, `test_v20.JiraFromIdea` |
+| F-17 IntelliJ auf dem MR-Commit | DONE | 0.20 | `test_v20.Ide` (echtes git, Fetch der MR-Ref, Aufräumen) |
+| G9 Review-App-Link | DONE (nur GitLab) | 0.20 | `test_v20.ReviewApp` |
+| Dazu: offene Review-Punkte exportieren | DONE | 0.18 | `test_review` |
+| Dazu: Prüfliste und Selbsttest | DONE | 0.19 | `test_qa` |
+
+**Offen:**
+- Abgleich gegen deine echten Systeme mit der Prüfliste (`QA-CHECKLIST.md`, Tab «Prüfen»).
+- Abgleich mit der echten Wrapper-API deines MCP.
+- GitHub-Deployments als Review-App.
+- Die Punkte unter «Nach 0.20» in der Roadmap: zentrale Datenbank, mehrere Instanzen, Zugriff übers Handy per VPN.
+
+---
+
 ## 1. Executive Summary
 
 **Reifegrad (evidenzbasiert):** Die **Sicht-Schicht** ist produktiv nutzbar: Jira-, GitLab- und GitHub-Lesezugriff, ein abgeleiteter Ablauf mit genau einem nächsten Schritt je Vorhaben, Fokus-Ansicht, Review-Queue, Sonar-Gates, Ideen-Inbox, Agentenstatus.

@@ -7,6 +7,7 @@ darauf aufbauen. Secrets werden nie zurückgegeben, nur ob und wo sie gespeicher
 import json
 import os
 import re
+import shlex
 import tempfile
 import time
 import urllib.parse
@@ -999,7 +1000,8 @@ def view(cfg, config_path, features_default=None):
     return {
         "gitlab": {"url": cfg.get("gitlab_url", ""), "ca_bundle": cfg.get("ca_bundle", "")},
         "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", ""),
-                      "agent_dir": p.get("agent_dir", ""), "data_class": agents.data_class(p), "cloud_paths": list(p.get("cloud_paths") or [])}
+                      "agent_dir": p.get("agent_dir", ""), "data_class": agents.data_class(p), "cloud_paths": list(p.get("cloud_paths") or []),
+                      "repo_path": p.get("repo_path", "")}
                      for p in cfg.get("projects", [])],
         "connections": [dict(c) for c in cfg.get("connections") or []],
         "github": {"enabled": bool((cfg.get("github") or {}).get("enabled", False)), "api_url": (cfg.get("github") or {}).get("api_url") or github.API_DEFAULT,
@@ -1007,6 +1009,7 @@ def view(cfg, config_path, features_default=None):
                              for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
         "agent_log_days": int(cfg.get("agent_log_days", 30)),
+        "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
@@ -1064,6 +1067,19 @@ def _clean_class(item, entry, errors, errkey):
         entry.pop("cloud_paths", None)
 
 
+def _clean_repo_path(item, entry, errors, errkey):
+    """Lokaler Checkout für «In IntelliJ öffnen» (0.20). Absolut oder mit ~, ohne Zeilenumbruch."""
+    if "repo_path" not in item:
+        return
+    rp = str(item.get("repo_path") or "").strip()
+    if not rp:
+        entry.pop("repo_path", None)
+    elif len(rp) > 400 or "\n" in rp or not (os.path.isabs(os.path.expanduser(rp))):
+        errors[errkey] = "Der Repo-Pfad «%s» muss absolut sein (oder mit ~ beginnen)." % rp[:60]
+    else:
+        entry["repo_path"] = rp
+
+
 def build_config(current, p):
     """Baut aus der bisherigen Config und den Eingaben eine neue. Gibt (Config, Fehler) zurück. Schreibt nichts."""
     errors = {}
@@ -1104,6 +1120,7 @@ def build_config(current, p):
                 entry["agent_dir"] = ad
             else:
                 entry.pop("agent_dir", None)
+        _clean_repo_path(item, entry, errors, "projects")
         _clean_class(item, entry, errors, "projects")
         if pid not in [x["id"] for x in projects]:
             projects.append(entry)
@@ -1231,6 +1248,7 @@ def build_config(current, p):
                 errors["github.repos"] = "Der Agent-Ordner «%s» ist ungültig." % ad[:40]
             elif ad:
                 e["agent_dir"] = ad
+            _clean_repo_path(x, e, errors, "github.repos")
             _clean_class(x, e, errors, "github.repos")
             repos.append(e)
         if len(repos) > 30:
@@ -1263,6 +1281,18 @@ def build_config(current, p):
                 errors["time.mcp_url"] = "«%s» liegt nicht im eigenen Netz. Nur mit «Externe Adresse erlauben»." % u.hostname
         tc["mcp_url"] = url
         cfg["time"] = tc
+    if "ide_command" in p:
+        cmd = " ".join(str(p.get("ide_command") or "").split())
+        try:
+            parts = shlex.split(cmd)
+        except ValueError:
+            parts = []
+        if not cmd:
+            cfg.pop("ide_command", None)
+        elif not parts or len(cmd) > 300 or "\n" in cmd:
+            errors["ide_command"] = "Befehl unlesbar (Anführungszeichen prüfen)."
+        else:
+            cfg["ide_command"] = cmd
     if "agent_log_days" in p:
         try:
             d = int(p.get("agent_log_days"))

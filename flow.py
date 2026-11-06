@@ -212,6 +212,18 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None
             nxt = _step("do", "retest", "Erneut testen", why, accept=True, url=next((m.get("url", "") for m in mrs if m.get("ref") == a["ref"]), ""))
     elif phase == 5 and nxt["id"] == "test":
         nxt["action"]["accept"] = True
+    # -- Testen (0.20): Review-App aus GitLab und IntelliJ genau auf dem Head-Commit
+    if nxt["id"] in ("test", "retest") and mrs:
+        m = sorted(mrs, key=_mr_rank)[0]
+        if m.get("review_app"):
+            nxt["action"]["review_app"] = m["review_app"]
+        if m.get("ide") and m.get("iid"):
+            nxt["action"]["ide"] = {"host": m.get("host", "gitlab"), "project_id": m.get("project_id"), "iid": m.get("iid")}
+            w = m.get("ide_wt")
+            if w and w.get("stale"):
+                nxt["why"] += " Dein IntelliJ-Worktree liegt auf %s, der MR ist weiter (%s): neu öffnen." % (w["sha"][:8], (m.get("sha") or "?")[:8])
+            elif w:
+                nxt["why"] += " In IntelliJ offen auf %s; die Abnahme nimmt diesen Commit." % w["sha"][:8]
 
     # -- Agenten
     latest = runs[0] if runs else None

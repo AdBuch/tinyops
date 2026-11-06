@@ -440,6 +440,25 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Prüfen (Tab «Prüfen»):** Prüfliste aus `QA-CHECKLIST.md` zum Abhaken (ok, Fehler mit Notiz, übersprungen), «Ergebnis kopieren», Fehler als Aufgabe ins Board. **Selbsttest** (Knopf oder `python3 server.py --selftest`): Vorlagen, Hilfsskripte, Datenbank, Kette des Verlaufs und ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner.
 
+## 4x. Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR, Review-App (neu in 0.20.0)
+
+**Ideen bewerten:** Eine Idee im Board oder unter Listen → «Mit dem lokalen Modell bewerten» (nur Modelle im eigenen Netz) oder «Selbst bewerten». Das Ergebnis wird an der Idee gespeichert und bleibt ein Vorschlag:
+- Empfehlung (jetzt / später / verwerfen), Kategorie, Nutzen 1–3, Aufwand S/M/L mit Begründung
+- Dubletten laut Modell
+- «Ähnlich»: findet tinyops selbst, ohne Modell, über gemeinsame Wörter mit anderen Ideen und laufenden Vorhaben
+
+**Ticket aus Idee:** «Ticket daraus» öffnet den Ticket-Dialog mit Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten und offenen Fragen (Vorlage oder lokales Modell).
+- **In Jira anlegen** (nur mit `allow_create`, Rückfrage, Doppelt-Schutz, Verlauf) oder **Als tiny-Ticket** in einer Kategorie.
+- Die Akzeptanzkriterien werden auf Wunsch Teilschritte. Die Idee gilt danach als erledigt und kennt ihr Ticket.
+
+**IntelliJ auf dem MR-Commit:** Einstellungen → IntelliJ: Pfad zum lokalen Checkout je Projekt und der Befehl (Standard `idea {path}`). Beim Testen öffnet «In IntelliJ öffnen»:
+- Fehlt der Commit, holt tinyops ihn mit `git fetch origin refs/merge-requests/<iid>/head` (GitHub `refs/pull/<n>/head`), nur lesend.
+- Dann `git worktree add --detach ../.tinyops-wt/<repo>-mr<iid>-<sha8> <sha>` und der IDE-Befehl. Dein Checkout bleibt unberührt.
+- «Getestet» bindet die Abnahme an den Commit im Worktree, nicht an einen inzwischen neueren Push.
+- Beim «Fertig» räumt tinyops saubere Worktrees weg. Geänderte bleiben, × am Chip fragt nach.
+
+**Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.

@@ -14,6 +14,7 @@ import http.client
 import json
 import os
 import re
+import shlex
 import sqlite3
 import ssl
 import subprocess
@@ -48,7 +49,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.19.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.20.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -459,6 +460,10 @@ class Ideas:
                 "id integer primary key autoincrement, text text not null,"
                 "status text not null default 'neu', created text not null)"
             )
+            have = {r[1] for r in c.execute("pragma table_info(ideas)")}
+            for col in ("assessment", "ticket", "draft"):            # 0.20: Bewertung, Ticket aus der Idee
+                if col not in have:
+                    c.execute("alter table ideas add column %s text not null default ''" % col)
 
     @contextmanager
     def _conn(self):
@@ -476,7 +481,26 @@ class Ideas:
         for r in rows:
             r["age_days"] = age_days(r["created"])
             r["expired"] = r["status"] == "neu" and r["age_days"] >= self.expire_days
+            try:
+                r["assessment"] = json.loads(r.get("assessment") or "null")
+            except ValueError:
+                r["assessment"] = None
+            try:
+                r["draft"] = json.loads(r.get("draft") or "null")
+            except ValueError:
+                r["draft"] = None
         return rows
+
+    def get(self, idea_id):
+        return next((i for i in self.list() if i["id"] == int(idea_id)), None)
+
+    def set_field(self, idea_id, **kw):
+        bad = set(kw) - {"assessment", "ticket", "draft", "status"}
+        if bad:
+            raise UserError("Unbekannte Felder.")
+        vals = [json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else ("" if v is None else str(v)) for v in kw.values()]
+        with self._conn() as c:
+            c.execute("update ideas set %s where id=?" % ", ".join("%s=?" % k for k in kw), vals + [int(idea_id)])
 
     def open_count(self):
         return sum(1 for r in self.list() if r["status"] in ("neu", "geparkt") and not r["expired"])
@@ -505,7 +529,37 @@ class Ideas:
             c.execute("delete from ideas where id=?", (idea_id,))
 
 
+STOPWORDS = set("und oder der die das ein eine einen dem den des mit für von zu im in am an auf aus bei ist sind wird werden nicht noch auch nur als wie "
+                "mehr neue neuer neues soll sollte kann können machen einbauen bauen the and for with".split())
+
+
+def _words(t):
+    return {w for w in re.findall(r"[a-zäöüß0-9]{3,}", (t or "").lower()) if w not in STOPWORDS}
+
+
+def similar(text, candidates, threshold=0.34, limit=5):
+    """Ähnliche Ideen oder Vorhaben, ohne Modell: Anteil gemeinsamer Wörter (Jaccard). candidates: [(id, text)]."""
+    a = _words(text)
+    out = []
+    if not a:
+        return out
+    for cid, t in candidates:
+        b = _words(t)
+        if not b:
+            continue
+        score = len(a & b) / float(len(a | b))
+        if score >= threshold:
+            out.append({"id": cid, "label": " ".join(str(t).split())[:120], "score": round(score, 2)})
+    return sorted(out, key=lambda x: -x["score"])[:limit]
+
+
 # ---------------------------------------------------------------- GitLab
+def ref_slug(branch):
+    """Wie CI_COMMIT_REF_SLUG: klein, alles ausser a-z0-9 wird «-», höchstens 63 Zeichen, ohne «-» am Rand."""
+    s_ = re.sub(r"[^a-z0-9]", "-", (branch or "").lower())[:63]
+    return s_.strip("-")
+
+
 def derive_state(item):
     if item["kind"] == "branch":
         return "kein-mr"
@@ -578,6 +632,7 @@ class GitLabClient:
         pipeline, purl = "none", ""
         if pid in self.proj_cfg:
             pipeline, purl = self._pipeline(pid, mr["source_branch"])
+        app_url, app_env = self._review_app(pid, mr["source_branch"]) if pid in self.proj_cfg else ("", "")
         item = {
             "kind": kind, "project_id": pid,
             "project": project_name, "title": mr["title"],
@@ -591,12 +646,35 @@ class GitLabClient:
             "reviewers": [r.get("username", "") for r in (mr.get("reviewers") or [])] if "reviewers" in mr else None,
             "upvotes": int(mr.get("upvotes") or 0), "host": "gitlab",
             "approved": None, "approved_by": [], "approvals_left": None,
+            "target_branch": mr.get("target_branch", ""), "review_app": app_url, "review_env": app_env,
         }
         if kind == "mr":
             self._approvals(item)
         item["age_days"] = age_days(item["updated_at"])
         item["state"] = derive_state(item) if kind == "mr" else "review"
         return item
+
+    def _review_app(self, pid, branch):
+        """URL der Review-App zum Branch aus den GitLab-Environments (ein GET je Projekt und Minute, nur lesend).
+        Erkannt wird ein Environment, dessen letzte Bereitstellung diesen Branch hat oder dessen Name auf den Branch-Slug endet
+        (übliche Benennung review/$CI_COMMIT_REF_SLUG)."""
+        cache = self.__dict__.setdefault("_env_cache", {})
+        hit = cache.get(pid)
+        if not hit or time.time() - hit[0] > 60:
+            try:
+                envs = self.http.get("/projects/%s/environments" % pid, {"states": "available", "per_page": 100}) or []
+            except UserError as e:
+                glog.debug("Environments von %s nicht lesbar: %s", pid, e)
+                envs = []
+            hit = cache[pid] = (time.time(), envs)
+        slug = ref_slug(branch)
+        for e in hit[1]:
+            if not e.get("external_url"):
+                continue
+            last = (e.get("last_deployment") or {})
+            if last.get("ref") == branch or (e.get("name") or "").rsplit("/", 1)[-1] == slug:
+                return e["external_url"], e.get("name", "")
+        return "", ""
 
     def _approvals(self, item):
         """Freigaben eines eigenen MR (ein GET je MR). Fehlt das Recht oder die Funktion, bleibt es «unbekannt»."""
@@ -972,7 +1050,8 @@ class DemoClient:
             self._item("mr", 29, "Labelo: Graph-Client Refactoring", "feature/DLP-103-labelo-client", 9, "success", draft=True),
         ]
         for m, rv, up, by in ((mine[0], ["kollege"], 0, []), (mine[1], ["kollege"], 1, ["kollege"]), (mine[2], [], 0, []), (mine[3], [], 0, [])):
-            m.update(reviewers=rv, upvotes=up, approved=bool(by), approved_by=by, host="gitlab", merge_status="mergeable" if by else "")
+            m.update(reviewers=rv, upvotes=up, approved=bool(by), approved_by=by, host="gitlab", merge_status="mergeable" if by else "", target_branch="main")
+        mine[1]["review_app"], mine[1]["review_env"] = "https://review-dlp-102-helm-limits.apps.example", "review/feature-dlp-102-helm-limits"
         for name, days, ahead, by_me, by_agent in (
                 ("feature/proxo-mapping", 14, 5, True, False),
                 ("idea/ui-prototype", 22, 2, True, True),
@@ -1605,7 +1684,9 @@ class App:
                  "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
                  "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
                  "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab"), "sha": it.get("sha", ""),
-                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated"))}
+                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated")),
+                 "review_app": it.get("review_app", ""), "review_env": it.get("review_env", ""), "target_branch": it.get("target_branch", ""),
+                 "ide": bool(it.get("ide")), "ide_wt": it.get("ide_wt")}
                 for it in items if key in it.get("keys", [])]
 
     def _board(self, data):
@@ -1695,7 +1776,9 @@ class App:
                  "ahead": it.get("ahead", 0), "age_days": it.get("age_days", 0), "title": it.get("title", ""), "by_agent": bool(it.get("by_agent")),
                  "reviewers": it.get("reviewers"), "upvotes": it.get("upvotes", 0), "approved": it.get("approved"), "approved_by": it.get("approved_by") or [],
                  "approvals_left": it.get("approvals_left"), "host": it.get("host", "gitlab"), "sha": it.get("sha", ""),
-                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated"))}
+                 "approval_unknown": bool(it.get("approval_unknown")), "outdated": bool(it.get("outdated")),
+                 "review_app": it.get("review_app", ""), "review_env": it.get("review_env", ""), "target_branch": it.get("target_branch", ""),
+                 "ide": bool(it.get("ide")), "ide_wt": it.get("ide_wt")}
 
     def board_action(self, action, body):
         tgt = str(body.get("key") or body.get("ref") or ("idea:%s" % body["id"] if action == "plan_idea" and body.get("id") else "") or "")
@@ -1717,6 +1800,8 @@ class App:
             key = self._local(st.stage_set, key, body.get("stage"))
             if body.get("stage") in ("tested", "done"):
                 self._accept(key, body.get("note"), body.get("env"))
+            if body.get("stage") == "done":
+                self._ide_cleanup(key)
             return {"key": key}
         if action == "add":
             title = str(body.get("title") or "").strip()
@@ -2133,6 +2218,8 @@ class App:
         return self._types_cache[project_key] or [self.jc.get("create_type") or "Story"]
 
     def ticket_draft(self, body):
+        if body.get("idea_id") not in (None, ""):
+            return self._idea_draft(body)
         if not self.client:
             raise UserError("GitLab ist nicht verbunden.")
         try:
@@ -2203,7 +2290,216 @@ class App:
         self.audit("jira.create", res["key"], project=project, summary=summary, issue_type=itype, description_chars=len(description), forced=bool(body.get("force")))
         jlog.info("Ticket %s angelegt (%s, %d Zeichen Beschreibung)", res["key"], itype, len(description))
         self.cache_t = 0.0   # beim nächsten Abruf neu lesen
+        if body.get("idea_id") not in (None, ""):
+            res["checks"] = self._idea_done(body, res["key"], summary, description)
         return res
+
+    # -- Ideen (0.20): bewerten, als Ticket ausformulieren
+    def _idea(self, iid):
+        if not (self.ideas and self.has("ideas")):
+            raise UserError("Die Ideenbox ist ausgeschaltet.")
+        try:
+            idea = self.ideas.get(int(iid))
+        except (TypeError, ValueError):
+            idea = None
+        if not idea:
+            raise UserError("Diese Idee gibt es nicht (mehr).")
+        return idea
+
+    def idea_assess(self, iid, b):
+        """Bewertung an der Idee speichern: vom lokalen Modell oder von dir. Ähnliche Ideen und Vorhaben findet tinyops selbst (ohne Modell)."""
+        idea = self._idea(iid)
+        others = [i for i in self.ideas.list() if i["id"] != idea["id"] and i["status"] in ("neu", "geparkt") and not i["expired"]]
+        tasks = [(cid, c.get("title") or "") for cid, c in (self._cards or {}).items() if not c.get("idea_id")]
+        sim = similar(idea["text"], [("#%d" % o["id"], o["text"]) for o in others] + tasks)
+        if b.get("manual"):
+            a = {"category": b.get("category") if b.get("category") in llm.CATEGORIES else "",
+                 "benefit": int(b.get("benefit")) if str(b.get("benefit")) in ("1", "2", "3") else 0,
+                 "effort": b.get("effort") if b.get("effort") in llm.EFFORTS else "",
+                 "effort_why": str(b.get("effort_why") or "")[:300], "duplicates": [],
+                 "recommendation": b.get("recommendation") if b.get("recommendation") in llm.RECOMMEND else "", "why": str(b.get("why") or "")[:500]}
+            if not a["recommendation"]:
+                raise UserError("Empfehlung fehlt (jetzt, später oder verwerfen).")
+            a["source"] = "du"
+        else:
+            if not llm.ready(self.lc):
+                raise UserError("Die KI ist nicht eingerichtet (Einstellungen → KI-Entwurf). Du kannst die Idee auch selbst bewerten.")
+            try:
+                a = llm.assess_idea(self.lc, self.llm_key, idea, others, [t for _, t in tasks], self.ssl_ctx)
+            except llm.LlmError as e:
+                self.audit("idea.assess", "idea:%d" % idea["id"], ok=False, error=str(e)[:300])
+                raise UserError("Bewertung fehlgeschlagen: %s" % e)
+            a["source"] = "modell"
+            a["model"] = self.lc.get("model") or self.lc.get("provider")
+        a["similar"] = sim
+        a["ts"] = time.time()
+        self.ideas.set_field(idea["id"], assessment=a)
+        self.audit("idea.assess", "idea:%d" % idea["id"], source=a["source"], recommendation=a["recommendation"], benefit=a["benefit"],
+                   effort=a["effort"], category=a["category"], similar=[x["id"] for x in sim][:5])
+        return a
+
+    def _idea_draft(self, body):
+        idea = self._idea(body.get("idea_id"))
+        meta = self.ticket_meta()
+        project = str(body.get("project") or (meta["projects"][0] if meta["projects"] else "")).upper()
+        types = self._types(project) if project and self.jira else [meta["default_type"]]
+        ctx = {"idea_id": idea["id"], "idea_text": idea["text"], "assessment": idea.get("assessment"), "issue_types": types}
+        out = {"meta": meta, "project": project, "issue_types": types, "source": "vorlage", "warning": "", "draft": llm.template_from_idea(ctx),
+               "idea": {"id": idea["id"], "text": idea["text"]}}
+        if body.get("use_llm"):
+            if not llm.ready(self.lc):
+                raise UserError("Die KI ist nicht eingerichtet (Einstellungen → KI-Entwurf).")
+            try:
+                out["draft"] = llm.draft_from_idea(self.lc, self.llm_key, ctx, str(body.get("hint") or ""), self.ssl_ctx)
+                out["source"] = "ki"
+            except llm.LlmError as e:
+                out["warning"] = "Die KI hat nicht geliefert (%s). Hier die Vorlage." % e
+        if not out["draft"]["issue_type"] or out["draft"]["issue_type"] not in types:
+            dt = meta["default_type"]
+            out["draft"]["issue_type"] = dt if dt in types else types[0]
+        out["acceptance"] = llm.acceptance_items(out["draft"]["description"])
+        return out
+
+    def _idea_done(self, body, key, summary, description):
+        """Idee erledigt, Ticket an der Idee vermerken, auf Wunsch Akzeptanzkriterien als Teilschritte."""
+        iid = int(body.get("idea_id"))
+        self.ideas.set_field(iid, status="erledigt", ticket=key, draft={"summary": summary, "description": description[:30000]})
+        n = 0
+        if body.get("checklist", True):
+            for t in llm.acceptance_items(description):
+                try:
+                    self.store.check_add(key, t)
+                    n += 1
+                except links.LinkError:
+                    break
+        self.audit("idea.ticket", "idea:%d" % iid, ticket=key, checks=n, kind="tiny" if links.is_local_key(key) else "jira")
+        return n
+
+    def idea_tiny(self, iid, b):
+        """tiny-Ticket aus der Idee: lokale Aufgabe mit dem Titel des Entwurfs; Akzeptanzkriterien werden Teilschritte."""
+        idea = self._idea(iid)
+        summary = " ".join(str(b.get("summary") or idea["text"].splitlines()[0]).split())[:200]
+        pool = self._pool_id(b.get("pool_id"))
+        key = self.board_action("add", {"title": summary, "stage": "planned" if pool else "idea", "pool_id": pool})["key"]
+        n = self._idea_done(dict(b, idea_id=idea["id"]), key, summary, str(b.get("description") or ""))
+        self.cache_t = 0.0
+        return {"key": key, "checks": n}
+
+    # -- IntelliJ auf dem MR-Commit (0.20)
+    def _repo_of(self, host, pid):
+        if host == "github":
+            r = next((x for x in (self.ghc.get("repos") or []) if github.pid_of(x.get("id") or 0) == pid), None)
+        else:
+            r = self.proj_cfg.get(pid)
+        path = (r or {}).get("repo_path") or ""
+        return str(Path(path).expanduser()) if path else ""
+
+    def _git(self, repo, *args, timeout=60):
+        try:
+            r = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True, timeout=timeout)
+        except FileNotFoundError:
+            raise UserError("git ist auf diesem Rechner nicht installiert.")
+        except subprocess.TimeoutExpired:
+            raise UserError("git %s dauert zu lange (über %d s)." % (args[0], timeout))
+        return r.returncode, r.stdout.strip(), scrub(r.stderr.strip())
+
+    def ide_open(self, b):
+        """Detached Worktree genau auf dem Head-Commit des MR und `idea <pfad>`. Nur lesend gegenüber GitLab (fetch, kein push)."""
+        host = "github" if b.get("host") == "github" else "gitlab"
+        try:
+            pid, iid = int(b.get("project_id")), int(b.get("iid"))
+        except (TypeError, ValueError):
+            raise UserError("project_id und iid müssen Zahlen sein.")
+        it = self._find_mr(host, pid, iid)
+        if not it or not it.get("sha"):
+            raise UserError("Diesen MR (mit Commit) kenne ich nicht (mehr). Einmal «Neu laden».")
+        sha = it["sha"]
+        repo = self._repo_of(host, pid)
+        if self.demo and not repo:          # Demo: nichts anlegen, nur zeigen, wie es aussähe
+            path = "/home/demo/work/.tinyops-wt/%s-mr%d-%s" % (it.get("project", "repo"), iid, sha[:8])
+            ref_key = it.get("ref") or links.ref_of(pid, it.get("branch", ""))
+            self.store.ide_set(ref_key, host, pid, iid, sha, path, "/home/demo/work/%s" % it.get("project", "repo"))
+            self.audit("ide.open", ref_key, sha=sha[:12], path=path, launched=False, demo=True)
+            return {"path": path, "sha": sha, "launched": False, "hint": "Demo: Worktree und IntelliJ nur angedeutet. Pfad kopiert."}
+        if not repo:
+            raise UserError("Für %s fehlt der lokale Checkout (Einstellungen → IntelliJ → Pfad zum Repository)." % it.get("project", pid))
+        rc, _, err = self._git(repo, "rev-parse", "--git-dir")
+        if rc:
+            raise UserError("%s ist kein Git-Repository: %s" % (repo, err[:200]))
+        ref = ("refs/pull/%d/head" % iid) if host == "github" else ("refs/merge-requests/%d/head" % iid)
+        rc, _, _ = self._git(repo, "cat-file", "-e", sha + "^{commit}")
+        if rc:
+            rc2, remotes, _ = self._git(repo, "remote")
+            remote = "origin" if "origin" in remotes.split() else (remotes.split() or ["origin"])[0]
+            rc, _, err = self._git(repo, "fetch", "--no-tags", remote, ref, timeout=180)
+            if rc:
+                raise UserError("Holen von %s fehlgeschlagen: %s" % (ref, err[:300]))
+            rc, _, _ = self._git(repo, "cat-file", "-e", sha + "^{commit}")
+            if rc:
+                raise UserError("Commit %s ist nach dem Holen nicht da (MR inzwischen neu gepusht? Einmal «Neu laden»)." % sha[:10])
+        path = str(Path(repo).parent / ".tinyops-wt" / ("%s-%s%d-%s" % (Path(repo).name, "pr" if host == "github" else "mr", iid, sha[:8])))
+        if not Path(path).exists():
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            rc, _, err = self._git(repo, "worktree", "add", "--detach", path, sha, timeout=180)
+            if rc:
+                raise UserError("Worktree nicht angelegt: %s" % err[:300])
+        ref_key = it.get("ref") or links.ref_of(pid, it.get("branch", ""))
+        self.store.ide_set(ref_key, host, pid, iid, sha, path, repo)
+        launched, hint = self._launch_ide(path)
+        self.audit("ide.open", ref_key, sha=sha[:12], path=path, launched=launched)
+        return {"path": path, "sha": sha, "launched": launched, "hint": hint}
+
+    def _launch_ide(self, path):
+        cmd = self.cfg.get("ide_command") or "idea {path}"
+        try:
+            argv = [a.replace("{path}", path) for a in shlex.split(cmd)]
+        except ValueError:
+            return False, "ide_command lässt sich nicht lesen."
+        if "{path}" not in cmd:
+            argv.append(path)
+        if self.demo:
+            return False, "Demo: IntelliJ wird nicht gestartet. Befehl wäre: %s" % " ".join(shlex.quote(a) for a in argv)
+        kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
+        if os.name == "nt":
+            kw["creationflags"] = 0x00000008 | 0x00000200
+        else:
+            kw["start_new_session"] = True
+        try:
+            subprocess.Popen(argv, **kw)
+            return True, ""
+        except OSError as e:
+            return False, "«%s» liess sich nicht starten (%s). In IntelliJ «File → Open» mit dem Pfad, oder unter Einstellungen → IntelliJ den Befehl anpassen (z. B. den Launcher aus «Tools → Create Command-line Launcher»)." % (argv[0], e.strerror or e)
+
+    def ide_close(self, b, force=False):
+        w = self.store.ide_get(str(b.get("ref") or ""))
+        if not w:
+            raise UserError("Kein IntelliJ-Worktree für diesen MR.")
+        p = Path(w["path"])
+        if p.parent.name != ".tinyops-wt":
+            raise UserError("Unerwarteter Pfad, nichts gelöscht: %s" % w["path"])
+        if p.exists():
+            rc, out, _ = self._git(str(p), "status", "--porcelain")
+            if out and not (force or b.get("force")):
+                err = UserError("Im Worktree gibt es %d geänderte Dateien (vom Testen?). Trotzdem entfernen?" % len(out.splitlines()))
+                err.data = {"dirty": len(out.splitlines())}
+                raise err
+            rc, _, e = self._git(w["repo"], "worktree", "remove", "--force", str(p))
+            if rc:
+                raise UserError("Worktree nicht entfernt: %s" % e[:300])
+        self.store.ide_delete(w["ref"])
+        self.audit("ide.close", w["ref"], sha=w["sha"][:12], forced=bool(force or b.get("force")))
+        return {"ok": True}
+
+    def _ide_cleanup(self, card_key):
+        """Beim Abschliessen: saubere IntelliJ-Worktrees der Karte entfernen, geänderte stehen lassen."""
+        card = self._cards.get(card_key) or {}
+        for x in card.get("items") or []:
+            ref = x.get("ref") or (links.ref_of(x["project_id"], x["branch"]) if x.get("project_id") is not None and x.get("branch") else "")
+            if ref and self.store.ide_get(ref):
+                try:
+                    self.ide_close({"ref": ref})
+                except UserError as e:
+                    log.info("IntelliJ-Worktree %s bleibt: %s", ref, e)
 
     # -- Übersicht
     def overview(self, wait=True):
@@ -2229,8 +2525,13 @@ class App:
         data["board"] = None
         data["sync"] = self.sync_view()
         stale = self.cfg["stale_days"]
+        wts = self.store.ide_all()
         for it in data["mine"] + data["review"] + data["assigned"]:
             it["stale"] = it["age_days"] >= stale
+            if it.get("iid"):
+                it["ide"] = bool(self._repo_of(it.get("host") or "gitlab", it["project_id"])) or self.demo
+                w = wts.get(it.get("ref") or links.ref_of(it["project_id"], it.get("branch", "")))
+                it["ide_wt"] = {"sha": w["sha"], "path": w["path"], "stale": bool(it.get("sha") and w["sha"] != it["sha"])} if w else None
         data["board"] = self._board(data)
         self._cards = {c["id"]: c for c in data["board"]["cards"]}
         agents_v = self.agents_view()
@@ -2349,8 +2650,12 @@ class App:
     def _accept(self, cid, note="", env=""):
         """Abnahme an die aktuellen Head-Commits aller offenen MRs/PRs der Karte binden."""
         card = self._cards.get(cid) or {}
-        refs = [(x.get("ref") or links.ref_of(x["project_id"], x["branch"]), x.get("sha") or "") for x in card.get("items") or []
-                if x.get("kind") in ("mr", "assigned") and x.get("iid")]
+        refs = []
+        for x in card.get("items") or []:
+            if x.get("kind") in ("mr", "assigned") and x.get("iid"):
+                ref = x.get("ref") or links.ref_of(x["project_id"], x["branch"])
+                w = self.store.ide_get(ref)
+                refs.append((ref, w["sha"] if w else x.get("sha") or ""))    # getestet wurde, was im IntelliJ-Worktree lag
         if refs:
             self.store.accept_set(cid, refs, note, env)
             self.audit_note(accepted=["%s@%s" % (r, (sh or "?")[:12]) for r, sh in refs])
@@ -3112,6 +3417,10 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "POST" and path == "/api/ide/open":
+                    return self._send(200, app.ide_open(self._body()))
+                if method == "POST" and path == "/api/ide/close":
+                    return self._send(200, app.ide_close(self._body()))
                 if method == "GET" and path == "/api/qa":
                     return self._send(200, app.qa_view())
                 if method == "POST" and path.startswith("/api/qa/"):
@@ -3198,6 +3507,10 @@ def make_handler(app):
                 if m and method == "DELETE":
                     app.ideas.delete(int(m.group(1)))
                     return self._send(200, {"ok": True})
+                m2 = re.fullmatch(r"/api/ideas/(\d+)/(assess|tiny)", path)
+                if m2 and method == "POST":
+                    fn = app.idea_assess if m2.group(2) == "assess" else app.idea_tiny
+                    return self._send(200, fn(int(m2.group(1)), self._body()))
                 if method == "GET" and path == "/api/ideas/triage-prompt":
                     return self._send(200, {"prompt": app.triage_prompt()})
                 if method == "POST" and path == "/api/prompt":
@@ -3494,6 +3807,12 @@ def run_selftest(cfg):
         rv = a.review_topics({"host": "gitlab", "project_id": 1, "iid": 41})
         md = a.review_export({"host": "gitlab", "project_id": 1, "iid": 41})["text"]
         step("review", "Offene Review-Punkte", "ok" if len(rv["topics"]) == 3 and "### Punkt 3" in md else "fail", "%d Punkte, Prompt %d Zeichen" % (len(rv["topics"]), len(md)))
+        a.ideas.add("Selbsttest: Export als CSV")
+        iid = a.ideas.list()[0]["id"]
+        ra = a.idea_assess(iid, {"manual": True, "recommendation": "später", "benefit": "2", "effort": "S", "category": "Feature"})
+        td = a.ticket_draft({"idea_id": iid})
+        ok = ra["recommendation"] == "später" and "h3. Akzeptanzkriterien" in td["draft"]["description"]
+        step("idea", "Idee bewerten und Ticket-Entwurf", "ok" if ok else "fail", "Bewertung gespeichert, Entwurf mit Story und Akzeptanzkriterien")
         q = a.qa_view()
         step("qa", "Prüfliste lesen", "ok" if q["sections"] else "warn", "%d Abschnitte" % len(q["sections"]))
     except Exception as e:      # der Selbsttest meldet, statt abzustürzen

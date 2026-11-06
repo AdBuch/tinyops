@@ -25,7 +25,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.17.0** ✓ | Audit und Verlauf (geliefert 2026-11-06) | T-3, SEC-6, F-15 | M |
 | **0.18.0** ✓ | Rückfragen und Ergebnisse von Agenten, offene Review-Punkte exportieren (geliefert 2026-11-06) | T-5, F-09 | M |
 | **0.19.0** ✓ | Fokus-Zeit und Zeitentwürfe für Projectron, Prüfliste und Selbsttest (geliefert 2026-11-06) | F-20 | M |
-| **0.20.0** | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit | F-06, F-07, F-17, G9 | M–L |
+| **0.20.0** ✓ | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit (geliefert 2026-11-06) | F-06, F-07, F-17, G9 | M–L |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.
@@ -153,7 +153,7 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 - **Selbsttest** `--selftest`.
 - **Regel ab jetzt:** Jedes Release ergänzt die Prüfliste um einen eigenen Abschnitt (ein Test erzwingt das).
 
-## 0.20.0 — Vom Einfall zum Test
+## 0.20.0 — Vom Einfall zum Test ✓
 
 **Ziel:** Die Enden der Strecke schliessen, vorne Ideen, hinten der manuelle Test.
 
@@ -168,6 +168,12 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 **Abnahme:**
 - Eine Idee wird bewertet und als Ticket angelegt; beides steht im Audit.
 - «In IntelliJ öffnen» checkt genau den angezeigten SHA aus.
+
+**Umgesetzt (2026-11-06):**
+- wie geplant; «Ähnlich» ohne Modell als Ergänzung zur Dubletten-Erkennung des Modells
+- Akzeptanzkriterien werden Teilschritte
+- der Worktree liegt neben dem Checkout statt darin, damit `git status` sauber bleibt
+- Review-App über GitLab-Environments, für GitHub noch nicht
 
 ## Nicht im Plan (bewusst)
 

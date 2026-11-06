@@ -264,6 +264,136 @@ def draft_ticket(cfg, key, ctx, hint="", ssl_ctx=None):
         raise
 
 
+# ------------------------------------------------------------ Ideen (0.20): bewerten und als Ticket ausformulieren
+CATEGORIES = ("Bugfix", "Feature", "Betrieb", "Doku", "Forschung")
+EFFORTS = ("S", "M", "L")
+RECOMMEND = ("jetzt", "später", "verwerfen")
+
+SYSTEM_ASSESS = (
+    "Du hilfst einem Entwickler, seine Ideenbox zu sortieren. Er neigt dazu, zu viel gleichzeitig anzufangen: Sei streng. "
+    "Bewerte genau EINE Idee. Erfinde keine Fakten. Antworte ausschliesslich mit einem JSON-Objekt mit den Feldern: "
+    '"category" (Bugfix, Feature, Betrieb, Doku oder Forschung), "benefit" (1, 2 oder 3; 3 = grosser Nutzen), '
+    '"effort" (S, M oder L), "effort_why" (ein Satz), "duplicates" (Liste der Nummern ähnlicher Ideen aus der Liste, sonst leer), '
+    '"recommendation" (jetzt, später oder verwerfen), "why" (höchstens zwei Sätze).'
+)
+
+
+def assess_prompt(idea, others, tasks=()):
+    lines = ["Zu bewertende Idee (#%d, %d Tage alt):" % (idea["id"], idea.get("age_days", 0)), idea["text"][:2000], ""]
+    if others:
+        lines.append("Andere offene Ideen (für Dubletten):")
+        lines += ["- #%d %s" % (o["id"], o["text"].replace("\n", " ")[:200]) for o in others[:30]]
+    if tasks:
+        lines.append("Laufende Vorhaben (Titel):")
+        lines += ["- %s" % t[:120] for t in list(tasks)[:30]]
+    return "\n".join(lines)
+
+
+def parse_assessment(text, valid_ids=()):
+    m = re.search(r"\{.*\}", text or "", re.S)
+    if not m:
+        raise LlmError("Das Modell hat kein JSON geliefert. Antwort: %s" % (text or "")[:200])
+    try:
+        d = json.loads(m.group(0))
+    except ValueError:
+        raise LlmError("Das Modell hat ungültiges JSON geliefert.")
+    pick = lambda v, allowed: next((a for a in allowed if str(v or "").strip().lower() == a.lower()), "")
+    try:
+        benefit = int(d.get("benefit"))
+    except (TypeError, ValueError):
+        benefit = 0
+    dups = []
+    for x in d.get("duplicates") or []:
+        try:
+            n = int(str(x).lstrip("#"))
+        except ValueError:
+            continue
+        if n in set(valid_ids):
+            dups.append(n)
+    out = {"category": pick(d.get("category"), CATEGORIES), "benefit": benefit if benefit in (1, 2, 3) else 0,
+           "effort": pick(d.get("effort"), EFFORTS), "effort_why": str(d.get("effort_why") or "")[:300],
+           "duplicates": sorted(set(dups)), "recommendation": pick(d.get("recommendation"), RECOMMEND), "why": str(d.get("why") or "")[:500]}
+    if not out["recommendation"]:
+        raise LlmError("Das Modell hat keine Empfehlung (jetzt, später, verwerfen) geliefert.")
+    return out
+
+
+def _ask(cfg, key, system, prompt, ssl_ctx=None, what="Anfrage"):
+    url = check_url(cfg)
+    c = dict(cfg, url=url)
+    host = urllib.parse.urlparse(url).netloc
+    log.info("%s an %s (%s, Modell %s): %d Zeichen", what, host, c.get("provider"), c.get("model") or "-", len(prompt))
+    log.debug("Prompt:\n%s", prompt)
+    t0 = time.time()
+    text, first = provider_for(c).chat(c, key, system, prompt, ssl_ctx)
+    log.info("Antwort von %s nach %.1f s, %d Zeichen", host, time.time() - t0, len(text))
+    return text
+
+
+def assess_idea(cfg, key, idea, others, tasks=(), ssl_ctx=None):
+    text = _ask(cfg, key, SYSTEM_ASSESS, assess_prompt(idea, others, tasks), ssl_ctx, "Ideen-Bewertung")
+    return parse_assessment(text, [o["id"] for o in others])
+
+
+SYSTEM_IDEA = (
+    "Du hilfst einem Entwickler, aus einer Idee ein Jira-Ticket zu machen. Schreibe auf Deutsch, sachlich und knapp. "
+    "Erfinde nichts: Was nicht in der Idee steht, gehört als Frage unter «Offene Fragen». "
+    "Antworte ausschliesslich mit einem JSON-Objekt mit den Feldern: "
+    '"summary" (Titel, höchstens 100 Zeichen), '
+    '"description" (Jira-Wiki-Markup mit genau diesen Abschnitten: h3. Story (Als … möchte ich …, damit …), '
+    'h3. Akzeptanzkriterien (Liste mit "* "), h3. Risiken, h3. Tests, h3. Abhängigkeiten, h3. Offene Fragen), '
+    '"issue_type" (einer der erlaubten Typen).'
+)
+
+
+def idea_prompt(ctx, hint=""):
+    lines = ["Idee (#%s):" % ctx.get("idea_id"), (ctx.get("idea_text") or "")[:2000]]
+    a = ctx.get("assessment") or {}
+    if a:
+        lines.append("Bewertung: Kategorie %s, Nutzen %s, Aufwand %s. %s" % (a.get("category") or "?", a.get("benefit") or "?", a.get("effort") or "?", a.get("why") or ""))
+    lines.append("Erlaubte Vorgangstypen: %s" % ", ".join(ctx.get("issue_types") or ["Story"]))
+    if hint.strip():
+        lines.append("Hinweis des Entwicklers: %s" % hint.strip()[:500])
+    return "\n".join(lines)
+
+
+def draft_from_idea(cfg, key, ctx, hint="", ssl_ctx=None):
+    text = _ask(cfg, key, SYSTEM_IDEA, idea_prompt(ctx, hint), ssl_ctx, "Ticket aus Idee")
+    return parse_draft(text, ctx.get("issue_types"))
+
+
+def template_from_idea(ctx):
+    """Ohne Modell: die Idee in die Abschnitte einsortiert, Lücken als Platzhalter."""
+    text = (ctx.get("idea_text") or "").strip()
+    first = text.splitlines()[0] if text else "Idee"
+    rest = "\n".join(text.splitlines()[1:]).strip()
+    a = ctx.get("assessment") or {}
+    parts = ["h3. Story", "Als (Rolle) möchte ich %s, damit (Nutzen)." % first.rstrip(".")]
+    if rest:
+        parts += ["", rest[:2000]]
+    if a.get("why"):
+        parts += ["", "Bewertung: %s" % a["why"]]
+    parts += ["", "h3. Akzeptanzkriterien", "* (noch auszufüllen)", "", "h3. Risiken", "* (noch auszufüllen)", "", "h3. Tests",
+              "* (noch auszufüllen)", "", "h3. Abhängigkeiten", "* keine bekannt", "", "h3. Offene Fragen", "* (noch auszufüllen)", "",
+              "Aus Idee #%s." % ctx.get("idea_id")]
+    return {"summary": first[:255], "description": "\n".join(parts), "issue_type": ""}
+
+
+def acceptance_items(description):
+    """Die Punkte unter «h3. Akzeptanzkriterien» (für Teilschritte). Platzhalter zählen nicht."""
+    out, on = [], False
+    for ln in (description or "").splitlines():
+        s = ln.strip()
+        if s.lower().startswith("h3."):
+            on = "akzeptanz" in s.lower()
+            continue
+        if on and s.startswith(("* ", "- ", "# ")):
+            t = s[2:].strip()
+            if t and not t.startswith("(noch"):
+                out.append(t[:200])
+    return out[:20]
+
+
 def template_draft(ctx):
     """Entwurf ohne Modell: nur Umformen dessen, was schon da ist. Läuft immer."""
     title = re.sub(r"^(wip|draft)[:\s]+", "", (ctx.get("title") or ""), flags=re.I).strip()

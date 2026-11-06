@@ -5,6 +5,36 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.20.0]
+
+### Neu
+- **Ideen bewerten:** «Mit dem lokalen Modell bewerten» oder «Selbst bewerten». Die Bewertung wird an der Idee gespeichert: Empfehlung (jetzt/später/verwerfen), Kategorie, Nutzen 1–3, Aufwand S/M/L mit Begründung, Dubletten.
+  - «Ähnlich» findet tinyops ohne Modell, über gemeinsame Wörter mit anderen offenen Ideen und laufenden Vorhaben.
+  - Das Modell bekommt den Text der Idee, die anderen offenen Ideen und die Titel der laufenden Vorhaben, und nur Modelle im eigenen Netz.
+  - Die Antwort wird geprüft (erlaubte Werte, Dubletten nur aus der Liste). Jede Bewertung steht im Verlauf, auch fehlgeschlagene.
+  - Sichtbar im Detail-Panel der Idee und als Kurzzeile unter Listen → Ideen.
+- **Ticket aus Idee:** «Ticket daraus» nutzt den Ticket-Dialog. Vorlage oder lokales Modell, mit den Abschnitten Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten, offene Fragen.
+  - «In Jira anlegen» wie bisher (nur mit `allow_create`, Rückfrage, Doppelt-Schutz) oder «Als tiny-Ticket» mit Kategorie.
+  - Die Akzeptanzkriterien werden auf Wunsch Teilschritte; Platzhalter zählen nicht.
+  - Die Idee wird erledigt und merkt sich Ticket und Entwurf. Verlauf: «Ticket aus Idee».
+- **IntelliJ auf dem MR-Commit:** Bei jedem MR mit eingetragenem lokalem Checkout gibt es «IntelliJ», beim Testen auch im Fokus.
+  - Fehlt der Commit, holt tinyops die MR-Ref (`git fetch`, nie push). Dann ein detached Worktree neben dem Checkout (`../.tinyops-wt/<repo>-mr<iid>-<sha8>`) und der IDE-Befehl.
+  - Der Befehl ist einstellbar, Standard `idea {path}`. Startet er nicht, kopiert tinyops den Pfad und sagt, wie es weitergeht.
+  - «Getestet» bindet die Abnahme an den Commit im Worktree.
+  - Ist der MR weiter, zeigt der Chip «veraltet», und der nächste Schritt sagt «neu öffnen».
+  - Beim «Fertig» räumt tinyops saubere Worktrees weg. Geänderte bleiben stehen; entfernen nur nach Rückfrage.
+  - Neuer Abschnitt Einstellungen → IntelliJ mit Befehl und Pfad je GitLab-Projekt und GitHub-Repo (`repo_path`).
+- **Review-App-Link:** Die URL des GitLab-Environments zum MR steht im Panel und beim Testen als «Review-App».
+  - Erkannt über den Namen (`…/<branch-slug>`) oder die letzte Bereitstellung.
+  - Ein GET je Projekt und Minute, nur lesend.
+- Der Selbsttest prüft zusätzlich «Idee bewerten und Ticket-Entwurf». Die Prüfliste hat den Abschnitt 0.20.0 mit 13 Aufgaben.
+
+### Grenzen
+- Review-Apps nur für GitLab. GitHub-Deployments sind noch nicht drin.
+- Der Fetch der MR-Ref braucht Lesezugriff deines lokalen git auf das Repo (deine üblichen Zugangsdaten). tinyops gibt dafür kein Token weiter.
+- `idea` muss im PATH sein (IntelliJ → Tools → Create Command-line Launcher). Den echten Start von IntelliJ unter macOS und Windows habe ich nicht getestet, nur einen Ersatzbefehl.
+- Die Ähnlichkeitssuche ist einfach (gemeinsame Wörter). Umformulierte Dubletten findet eher das Modell.
+
 ## [0.19.0]
 
 ### Neu

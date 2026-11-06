@@ -452,7 +452,33 @@ class _PinMixin:
                 c.execute("delete from pin where id=1")
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin):
+class _IdeMixin:
+    """IntelliJ-Worktrees auf dem Head-Commit eines MR (0.20). Je MR höchstens einer."""
+    def ide_set(self, ref, host, project_id, iid, sha, path, repo):
+        with self._conn(True) as c:
+            c.execute("insert into ide_wt(ref, host, project_id, iid, sha, path, repo, ts) values(?,?,?,?,?,?,?,?) on conflict(ref) do update set "
+                      "host=excluded.host, project_id=excluded.project_id, iid=excluded.iid, sha=excluded.sha, path=excluded.path, repo=excluded.repo, ts=excluded.ts",
+                      (ref, host, int(project_id), int(iid), sha, path, repo, time.time()))
+
+    def ide_get(self, ref):
+        with self._conn() as c:
+            if c is None:
+                return None
+            r = c.execute("select * from ide_wt where ref=?", (ref,)).fetchone()
+            return dict(r) if r else None
+
+    def ide_all(self):
+        with self._conn() as c:
+            if c is None:
+                return {}
+            return {r["ref"]: dict(r) for r in c.execute("select * from ide_wt")}
+
+    def ide_delete(self, ref):
+        with self._conn(True) as c:
+            c.execute("delete from ide_wt where ref=?", (ref,))
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -493,6 +519,8 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 conn.execute("create table if not exists acceptance(key text not null, ref text not null, sha text not null, ts real not null,"
                              " note text not null default '', env text not null default '', primary key(key, ref))")
                 conn.execute("create table if not exists pin(id integer primary key check (id = 1), key text not null, ts real not null)")
+                conn.execute("create table if not exists ide_wt(ref text primary key, host text not null, project_id integer not null, iid integer not null,"
+                             " sha text not null, path text not null, repo text not null, ts real not null)")
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
                              " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
                 yield conn

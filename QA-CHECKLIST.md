@@ -82,3 +82,19 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r19-11` Denselben Entwurf zweimal senden lassen (MCP-Log ansehen) → gleicher Idempotency-Key, eine Buchung
 - [ ] `r19-12` Dein MCP holt `GET /api/time/export` ab und meldet `POST /api/time/result` → Entwurf «gebucht»
 - [ ] `r19-13` Tab «Prüfen»: Selbsttest ausführen, einen Punkt als Fehler mit Notiz markieren, «Ergebnis kopieren» → Selbsttest grün, das Markdown enthält den Fehler mit Notiz
+
+## 0.20.0
+
+- [ ] `r20-01` Idee festhalten, im Board öffnen, «Mit dem lokalen Modell bewerten» → Empfehlung, Kategorie, Nutzen, Aufwand; bei einer ähnlichen Idee erscheint «Ähnlich»
+- [ ] `r20-02` «Selbst bewerten» und speichern → Bewertung «von dir», auch ohne Modell
+- [ ] `r20-03` «Ticket daraus» → Entwurf mit Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten
+- [ ] `r20-04` «Entwurf mit KI» im selben Dialog → Text vom Modell, die Idee ist die Quelle
+- [ ] `r20-05` «Als tiny-Ticket» mit Kategorie → LOC-Aufgabe in «Geplant», Akzeptanzkriterien als Teilschritte, Idee erledigt
+- [ ] `r20-06` Mit `allow_create`: «In Jira anlegen» aus einer Idee → Jira-Ticket, Teilschritte am Ticket, Verlauf «Ticket aus Idee»
+- [ ] `r20-07` Einstellungen → IntelliJ: Pfad zum lokalen Checkout eintragen, Befehl prüfen → gespeichert
+- [ ] `r20-08` MR bei «Testen» → «In IntelliJ öffnen» → IntelliJ startet mit `../.tinyops-wt/<repo>-mr<nr>-<sha>` auf genau dem Commit des MR (`git log -1`)
+- [ ] `r20-09` Danach «Getestet» → Abnahme zeigt den SHA des Worktrees
+- [ ] `r20-10` Neuen Commit auf den MR pushen, neu laden → Chip «IntelliJ … (veraltet)», nächster Schritt sagt «neu öffnen»
+- [ ] `r20-11` Im Worktree eine Datei ändern, × am Chip → Rückfrage wegen geänderter Dateien
+- [ ] `r20-12` Vorhaben auf «Fertig» → saubere Worktrees sind weg (`git worktree list`)
+- [ ] `r20-13` MR mit Review-App (Environment `review/<branch-slug>`) → «Review-App» im Panel und beim Testen öffnet die URL

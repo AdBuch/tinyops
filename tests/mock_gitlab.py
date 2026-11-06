@@ -56,6 +56,12 @@ ROUTES = {
         {"id": "t6", "notes": [{"id": 17, "body": "alter Stand", "author": {"username": "kollege"}, "created_at": OLD, "system": False, "resolvable": True, "resolved": False,
                                 "position": {"new_path": "src/b/Old.java", "old_path": "src/b/Old.java", "old_line": 5, "head_sha": "0000000000000000"}}]},
     ],
+    # 0.20: Review-Apps (Environments), eine passt über den Namen, eine über die letzte Bereitstellung, eine ohne URL
+    "/api/v4/projects/1/environments": [
+        {"id": 1, "name": "review/feature-dlp-101-a", "external_url": "https://review-dlp-101.apps.x", "state": "available"},
+        {"id": 2, "name": "staging", "external_url": "https://staging.x", "state": "available", "last_deployment": {"ref": "main"}},
+        {"id": 3, "name": "review/feature-b", "external_url": "", "state": "available"},
+    ],
     "/api/v4/projects/1/pipelines": [{"status": "success", "web_url": "https://g/x/-/pipelines/1"}],
     "/api/v4/projects/1/repository/branches": [
         {"name": "main", "merged": False, "protected": True, "commit": {"author_email": "me@x.ch"}},

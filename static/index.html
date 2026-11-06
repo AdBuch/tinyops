@@ -178,6 +178,12 @@
   .badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--raised); color: var(--quiet); }
   .badge.success { background: var(--ok-bg); color: var(--ok); } .badge.failed { background: var(--bad-bg); color: var(--bad); } .badge.running { background: var(--focus-bg); color: var(--focus); }
   textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+  .ideaas { display: grid; gap: 6px; }
+  .ideaas .rec { font-weight: 650; }
+  .ideaas .rec.jetzt { color: var(--ok); } .ideaas .rec.verwerfen { color: var(--bad, #b42318); }
+  .ideaas .grid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ideaform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  .ideaform textarea { grid-column: 1 / -1; height: 54px; }
   .htime { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--quiet); }
   .htime b { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 650; }
   .htime .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok, #1f8a4c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #1f8a4c) 20%, transparent); }
@@ -1113,8 +1119,9 @@ function renderIdeas() {
   document.getElementById('ideas').innerHTML = list.length ? list.map(i => `
     <div class="idea ${i.expired ? 'expired' : ''}" data-id="${i.id}">
       <div>${esc(i.text)}</div>
-      <div class="meta">${i.expired ? 'verfallen · ' : ''}${esc(i.status)} · ${i.age_days} Tage</div>
+      <div class="meta">${i.expired ? 'verfallen · ' : ''}${esc(i.status)} · ${i.age_days} Tage${i.assessment ? ' · ' + esc(assessLine(i.assessment)) : ''}</div>
       <div class="row" style="margin-top:4px">
+        <button data-iassess="${i.id}" title="Kategorie, Nutzen, Aufwand, Dubletten">${i.assessment ? 'Neu bewerten' : 'Bewerten'}</button><button data-iticket="${i.id}">Ticket daraus</button>
         ${i.status === 'neu' && !i.expired ? '<button data-ia="park">Parken</button>' : ''}
         <button data-ia="done">Erledigt</button>
         <button data-ia="drop">Verwerfen</button>
@@ -1239,9 +1246,9 @@ let TK = null;   // {item, meta, project, types}
 function tkMsg(html, cls) { $('tkMsg').innerHTML = html ? `<div class="banner ${cls || 'warn'}" style="margin:10px 0 0">${html}</div>` : ''; }
 function tkTypes(types, sel) { return types.map(t => `<option ${t === sel ? 'selected' : ''}>${esc(t)}</option>`).join(''); }
 
-async function openTicket(btn) {
-  const item = { project_id: +btn.dataset.p, iid: btn.dataset.i ? +btn.dataset.i : null, branch: btn.dataset.b, create_url: btn.dataset.cu };
-  $('tkSrc').innerHTML = `<span class="src gl">${item.iid ? 'MR !' + item.iid : 'Branch'}</span> <code>${esc(item.branch)}</code>`;
+async function openTicket(btn, ideaId) {
+  const item = ideaId ? { idea_id: ideaId } : { project_id: +btn.dataset.p, iid: btn.dataset.i ? +btn.dataset.i : null, branch: btn.dataset.b, create_url: btn.dataset.cu };
+  $('tkSrc').innerHTML = ideaId ? `<span class="src tiny">Idee #${ideaId}</span>` : `<span class="src gl">${item.iid ? 'MR !' + item.iid : 'Branch'}</span> <code>${esc(item.branch)}</code>`;
   $('tkBody').innerHTML = '<div class="quiet">Lade Entwurf …</div>';
   if (!$('tkDlg').open) $('tkDlg').showModal();
   try {
@@ -1262,13 +1269,15 @@ function renderTicket(r) {
     <div class="field"><label for="tk-sum">Titel</label><input type="text" id="tk-sum" value="${esc(d.summary)}" maxlength="255"></div>
     <div class="field"><label for="tk-desc">Beschreibung <span class="quiet small" style="font-weight:400">(Jira-Wiki-Format)</span></label>
       <textarea class="full" id="tk-desc" rows="12" spellcheck="false">${esc(d.description)}</textarea></div>
-    <div class="small quiet" id="tkSource">Entwurf: ${r.source === 'ki' ? 'vom lokalen Modell, bitte prüfen' : 'Vorlage aus Branch, MR und Commit-Titeln'}</div>
+    <div class="small quiet" id="tkSource">Entwurf: ${r.source === 'ki' ? 'vom lokalen Modell, bitte prüfen' : TK.item.idea_id ? 'Vorlage aus der Idee (Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten)' : 'Vorlage aus Branch, MR und Commit-Titeln'}</div>
+    ${TK.item.idea_id ? `<label class="check" style="margin-top:8px"><input type="checkbox" id="tk-cl" checked><span>Akzeptanzkriterien als Teilschritte übernehmen</span></label>` : ''}
     <div id="tkMsg">${r.warning ? `<div class="banner warn" style="margin:10px 0 0">${esc(r.warning)}</div>` : ''}</div>
     ${m.llm ? `<div class="row" style="margin-top:10px"><input type="text" id="tk-hint" style="flex:1;min-width:200px" placeholder="Hinweis an das Modell (optional), z. B. «Fokus auf Tests»">
-      <button id="tk-ai">Entwurf mit KI</button></div><div class="quiet small">Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel an ${esc(m.llm_label || 'das lokale Modell')}. Keine Diffs, kein Code.</div>` : ''}
+      <button id="tk-ai">Entwurf mit KI</button></div><div class="quiet small">${TK.item.idea_id ? `Gesendet wird der Text der Idee und ihre Bewertung an ${esc(m.llm_label || 'das lokale Modell')}.` : `Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel an ${esc(m.llm_label || 'das lokale Modell')}. Keine Diffs, kein Code.`}</div>` : ''}
     <div class="row" style="margin-top:14px">
       ${m.can_create ? '<button class="primary" id="tk-create">In Jira anlegen</button>'
-        : `<a class="btn" id="tk-open" href="${esc(TK.item.create_url || '#')}" target="_blank" rel="noopener">In Jira öffnen</a>`}
+        : TK.item.idea_id ? '' : `<a class="btn" id="tk-open" href="${esc(TK.item.create_url || '#')}" target="_blank" rel="noopener">In Jira öffnen</a>`}
+      ${TK.item.idea_id ? `<select id="tk-pool" aria-label="Kategorie">${poolOptions(null, true)}</select><button id="tk-tiny" ${m.can_create ? '' : 'class="primary"'} title="Lokale Aufgabe in tinyops statt Jira">Als tiny-Ticket</button>` : ''}
       <button id="tk-copy">Text kopieren</button>
     </div>
     ${m.can_create ? '' : '<div class="quiet small" style="margin-top:6px">Direktes Anlegen ist aus. Einschalten: Einstellungen → Jira → «Tickets aus dem Panel anlegen». Bis dahin: Text kopieren und in Jira einfügen.</div>'}`;
@@ -1279,6 +1288,15 @@ function renderTicket(r) {
     } catch (e) { tkMsg(esc(e.message), 'bad'); }
   };
   $('tk-copy').onclick = () => copyText(`${$('tk-sum').value}\n\n${$('tk-desc').value}`, 'Ticket-Text');
+  if ($('tk-tiny')) $('tk-tiny').onclick = () => busy($('tk-tiny'), 'Lege an …', async () => {
+    try {
+      const pool = $('tk-pool').value;
+      const x = await post(`/api/ideas/${TK.item.idea_id}/tiny`, { summary: $('tk-sum').value, description: $('tk-desc').value, pool_id: pool ? +pool : null, checklist: $('tk-cl').checked });
+      $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> ${esc(x.key)}${x.checks ? ` mit ${x.checks} Teilschritten` : ''}${pool ? '' : ' (im Ideenpool, bis du eine Kategorie wählst)'}</div><div class="row" style="margin-top:10px"><button class="primary" id="tk-done">Fertig</button></div>`;
+      $('tk-done').onclick = () => $('tkDlg').close();
+      load();
+    } catch (e) { tkMsg(esc(e.message), 'bad'); }
+  });
   if ($('tk-ai')) $('tk-ai').onclick = () => busy($('tk-ai'), 'Das Modell schreibt …', async () => {
     try {
       const x = await api('POST', '/api/ticket/draft', { ...TK.item, project: $('tk-proj').value, use_llm: true, hint: $('tk-hint').value });
@@ -1290,6 +1308,7 @@ function renderTicket(r) {
   });
   if ($('tk-create')) $('tk-create').onclick = async () => {
     const body = { project: $('tk-proj').value, issue_type: $('tk-type').value, summary: $('tk-sum').value, description: $('tk-desc').value };
+    if (TK.item.idea_id) { body.idea_id = TK.item.idea_id; body.checklist = $('tk-cl').checked; }
     if (!body.summary.trim()) { tkMsg('Der Titel fehlt.', 'bad'); return; }
     if (!confirm(`In Jira ${body.project} als «${body.issue_type}» anlegen?\n\n${body.summary}`)) return;
     await busy($('tk-create'), 'Lege an …', async () => {
@@ -1306,7 +1325,7 @@ function renderTicket(r) {
         }
         try { x = await api('POST', '/api/ticket/create', { ...body, force: true }); } catch (e2) { tkMsg(esc(e2.message), 'bad'); return; }
       }
-      $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a></div>
+      $('tkBody').innerHTML = `<div class="banner" style="background:var(--ok-bg);color:var(--ok)"><strong>Angelegt:</strong> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a>${x.checks ? ` mit ${x.checks} Teilschritten` : ''}</div>
         <div class="small" style="margin:10px 0">Nimm den Key in den Branch-Namen auf (zum Beispiel <code>feature/${esc(x.key)}-…</code>), dann verknüpft das Panel Ticket und Branch von selbst.</div>
         <div class="row"><button id="tk-ck">Key kopieren</button><button class="primary" id="tk-done">Fertig</button></div>`;
       $('tk-ck').onclick = () => copyText(x.key, 'Ticket-Key');
@@ -1613,6 +1632,70 @@ function agReportHtml(r) {
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
   return `<div class="agrep">${parts.join('')}</div>`;
 }
+
+// ------------------------------------------------ Ideen bewerten und als Ticket ausformulieren (0.20)
+const REC_T = { jetzt: 'Jetzt angehen', 'später': 'Später', verwerfen: 'Verwerfen' };
+function assessLine(a) {
+  return [a.recommendation ? REC_T[a.recommendation] : '', a.category, a.benefit ? 'Nutzen ' + a.benefit : '', a.effort ? 'Aufwand ' + a.effort : ''].filter(Boolean).join(' · ');
+}
+function ideaHtml(id) {
+  const i = (state.ideas || []).find(x => x.id === id);
+  if (!i) return '';
+  const a = i.assessment;
+  const sim = a && a.similar && a.similar.length ? `<div class="small">Ähnlich: ${a.similar.map(x => `<span class="chip" title="Übereinstimmung ${Math.round(x.score * 100)} %">${esc(x.id)} ${esc(x.label.slice(0, 60))}</span>`).join(' ')}</div>` : '';
+  const dups = a && a.duplicates && a.duplicates.length ? `<div class="small">Dubletten laut Modell: ${a.duplicates.map(n => '#' + n).join(', ')}</div>` : '';
+  const llmOk = state.ticket && state.ticket.llm;
+  return `<div><h3>Bewertung <small>${a ? (a.source === 'modell' ? 'Vorschlag des lokalen Modells' + (a.model ? ' (' + esc(a.model) + ')' : '') : 'von dir') : 'noch keine'}</small></h3>
+    <div class="ideaas">${a ? `<div><span class="rec ${esc(a.recommendation)}">${esc(REC_T[a.recommendation] || a.recommendation)}</span> · ${esc([a.category, a.benefit ? 'Nutzen ' + a.benefit + '/3' : '', a.effort ? 'Aufwand ' + a.effort : ''].filter(Boolean).join(' · '))}</div>
+      ${a.why ? `<div class="small">${esc(a.why)}</div>` : ''}${a.effort_why ? `<div class="small quiet">Aufwand: ${esc(a.effort_why)}</div>` : ''}${dups}${sim}` : '<div class="small quiet">Kategorie, Nutzen, Aufwand und Dubletten. Die Bewertung bleibt ein Vorschlag; entscheiden tust du.</div>'}
+      <div class="grid"><button data-iassess="${i.id}" ${llmOk ? '' : 'disabled title="Lokales Modell nicht eingerichtet (Einstellungen → KI-Entwurf)"'}>${ic('bulb')} ${a ? 'Neu bewerten' : 'Mit dem lokalen Modell bewerten'}</button><button data-iself="${i.id}">Selbst bewerten</button><button class="primary" data-iticket="${i.id}">${ic('ticket')} Ticket daraus</button></div>
+      <div id="ideaForm${i.id}"></div></div></div>
+    ${i.text.includes('\n') ? `<div><h3>Idee</h3><div class="small" style="white-space:pre-wrap">${esc(i.text)}</div></div>` : ''}`;
+}
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest && ev.target.closest('[data-iassess],[data-iself],[data-iticket],[data-isave],[data-ide],[data-ideclose]');
+  if (!t) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if (t.dataset.iassess) {
+    await busy(t, 'Das Modell bewertet …', async () => {
+      try { const a = await post(`/api/ideas/${t.dataset.iassess}/assess`, {}); toast(`Bewertet: ${assessLine(a)}`); await load(); } catch (e) { toast(e.message); }
+    });
+    return;
+  }
+  if (t.dataset.iself) {
+    const id = t.dataset.iself, box = $('ideaForm' + id), a = ((state.ideas || []).find(x => x.id === +id) || {}).assessment || {};
+    const sel = (k, opts) => `<select data-if="${k}" aria-label="${k}"><option value="">${{ recommendation: 'Empfehlung', category: 'Kategorie', benefit: 'Nutzen', effort: 'Aufwand' }[k]} …</option>${opts.map(o => `<option ${String(a[k]) === String(o) ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+    if (box) box.innerHTML = `<div class="ideaform">${sel('recommendation', ['jetzt', 'später', 'verwerfen'])}${sel('category', ['Bugfix', 'Feature', 'Betrieb', 'Doku', 'Forschung'])}${sel('benefit', [1, 2, 3])}${sel('effort', ['S', 'M', 'L'])}
+      <textarea data-if="why" placeholder="Warum? (optional)">${esc(a.why || '')}</textarea><div><button class="primary" data-isave="${id}">Bewertung speichern</button></div></div>`;
+    return;
+  }
+  if (t.dataset.isave) {
+    const id = t.dataset.isave, box = $('ideaForm' + id), b = { manual: true };
+    box.querySelectorAll('[data-if]').forEach(x => { b[x.dataset.if] = x.value; });
+    try { await post(`/api/ideas/${id}/assess`, b); toast('Bewertung gespeichert'); await load(); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (t.dataset.iticket) return openTicket(null, +t.dataset.iticket);
+  if (t.dataset.ide) {
+    await busy(t, 'Öffne …', async () => {
+      try {
+        const r = await post('/api/ide/open', JSON.parse(t.dataset.ide));
+        if (r.launched) toast(`IntelliJ öffnet ${r.sha.slice(0, 8)}. Die Abnahme nimmt diesen Commit.`);
+        else { await copyText(r.path, 'Pfad des Worktrees'); toast(r.hint || 'Pfad kopiert'); }
+        await load();
+      } catch (e) { toast(e.message); }
+    });
+    return;
+  }
+  if (t.dataset.ideclose) {
+    try { await post('/api/ide/close', { ref: t.dataset.ideclose }); toast('Worktree entfernt'); }
+    catch (e) {
+      if (e.data && e.data.dirty && confirm(e.message)) { try { await post('/api/ide/close', { ref: t.dataset.ideclose, force: true }); toast('Worktree entfernt'); } catch (e2) { toast(e2.message); } }
+      else toast(e.message);
+    }
+    await load();
+  }
+});
 
 // ------------------------------------------------ Fokus-Zeit (0.19): läuft nur für den angehefteten Fokus, Lücken statt stiller Pausen
 const hm = secs => { const m = Math.max(0, Math.round(secs / 60)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
@@ -2227,7 +2310,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -2336,6 +2419,11 @@ async function loadSettings() {
     <div id="ag-list"></div><div class="row"><button id="ag-add">Agent hinzufügen</button></div>
     ${field('ag-days', 'Logs, Prompts und Patches der Läufe aufbewahren (Tage, 0 = nie löschen)', S.agent_log_days ?? 30, { type: 'number', err: 'agent_log_days' })}
     <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
+
+  ${sect('ide', 'IntelliJ', 'Für «In IntelliJ öffnen» beim Testen: tinyops legt neben deinem Checkout einen Worktree genau auf dem Commit des MR an (<code>../.tinyops-wt/</code>) und startet die IDE damit. Geholt wird mit <code>git fetch</code>, gepusht wird nie. Beim Abschliessen räumt tinyops saubere Worktrees wieder weg.', `
+    ${field('ide-cmd', 'Befehl zum Öffnen', S.ide_command, { ph: 'idea {path}', err: 'ide_command', help: '<code>{path}</code> wird durch den Worktree ersetzt. macOS ohne Launcher: <code>open -na "IntelliJ IDEA.app" --args {path}</code>. Windows: Pfad zu <code>idea64.exe</code>.' })}
+    <div id="ide-list"></div>
+    <div class="ferr" data-err="projects"></div><div class="ferr" data-err="github.repos"></div>`)}
 
   ${sect('time', 'Zeiterfassung', 'Zeit läuft, solange ein Vorhaben als Fokus angeheftet ist und du das Panel benutzt. Daraus entstehen Entwürfe je Ticket. Gebucht wird erst nach «Bestätigen», über die Wrapper-API deines MCP (Projectron).', `
     <label class="check"><input type="checkbox" id="tm-on" ${S.time.enabled ? 'checked' : ''}><span><strong>Fokus-Zeit erfassen</strong></span></label>
@@ -2530,6 +2618,21 @@ $('viewSettings').addEventListener('click', ev => {
   if (t) $('ji-types').value = uniq(split(val('ji-types')).concat(t.dataset.addtype)).join(', ');
 });
 
+// Lokale Checkouts für IntelliJ (0.20)
+function renderIdeRepos() {
+  const box = $('ide-list'); if (!box) return;
+  const rows = P.map((p, i) => ({ k: 'p', i, name: p.name || '#' + p.id, v: p.repo_path || '', src: 'GitLab' }))
+    .concat((typeof GH !== 'undefined' ? GH : []).map((r, i) => ({ k: 'g', i, name: r.full, v: r.repo_path || '', src: 'GitHub' })));
+  box.innerHTML = rows.length ? `<div class="ptab" role="table" aria-label="Lokale Checkouts"><div class="ph" role="row" style="grid-template-columns:200px 80px minmax(0,1fr)"><span>Projekt</span><span>Quelle</span><span>Pfad zum lokalen Checkout</span></div>` +
+    rows.map(r => `<div class="pr" role="row" style="grid-template-columns:200px 80px minmax(0,1fr)"><span>${esc(r.name)}</span><span class="quiet">${r.src}</span><input type="text" data-rp="${r.k}${r.i}" value="${esc(r.v)}" placeholder="~/work/${esc(String(r.name).split('/').pop())}" aria-label="Pfad zum Checkout von ${esc(r.name)}"></div>`).join('') + '</div>'
+    : '<div class="empty">Erst Projekte unter GitLab oder GitHub wählen.</div>';
+}
+$('viewSettings').addEventListener('input', ev => {
+  const k = ev.target.dataset.rp; if (k === undefined) return;
+  const list = k[0] === 'p' ? P : GH, i = +k.slice(1);
+  if (list[i]) list[i].repo_path = ev.target.value;
+});
+
 // Projekte
 function renderProjects() {
   $('pj-list').innerHTML = P.length ? `<div class="ptab" role="table" aria-label="Projekte"><div class="ph" role="row"><span>ID</span><span>Anzeigename</span><span>Sonar-Schlüssel</span><span title="Ordner des Repositories unter dem Arbeitsordner eines Agenten (leer = Anzeigename)">Agent-Ordner</span><span title="restricted: nur lokale Agenten · internal: Cloud-Agenten erlaubt, optional nur freigegebene Pfade · public: ohne Einschränkung">Datenklasse</span><span title="Nur bei internal: Cloud-Agenten bekommen einen Export nur dieser Pfade (kommagetrennt). Leer = ganzes Repo">Cloud-Pfade</span><span></span></div>` +
@@ -2541,6 +2644,7 @@ function renderProjects() {
     <input type="text" data-pcp="${i}" value="${esc(pathsStr(p.cloud_paths))}" placeholder="${p.data_class === 'internal' ? 'ganzes Repo' : '—'}" ${p.data_class === 'internal' ? '' : 'disabled'} aria-label="Freigegebene Pfade für Cloud-Agenten">
     <button class="quiet-btn" data-pdel="${i}" title="Projekt entfernen" aria-label="Projekt entfernen">×</button></div>`).join('') + '</div>'
     : '<div class="empty">Noch kein Projekt.</div>';
+  renderIdeRepos();
 }
 $('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; const a = ev.target.dataset.pa; if (a !== undefined) P[+a].agent_dir = ev.target.value; });
 const pathsStr = x => Array.isArray(x) ? x.join(', ') : (x || '');
@@ -2617,6 +2721,7 @@ function renderGhRepos() {
       ${classSel('ghcl', i, r.data_class)}
       <input type="text" data-ghcp="${i}" value="${esc(pathsStr(r.cloud_paths))}" placeholder="${r.data_class === 'internal' ? 'ganzes Repo' : '—'}" ${r.data_class === 'internal' ? '' : 'disabled'} aria-label="Freigegebene Pfade">
       <button class="quiet-btn" data-ghdel="${i}" aria-label="Repo entfernen" title="Repo entfernen">×</button></div>`).join('') + '</div>' : '<div class="empty">Noch kein Repo.</div>';
+  renderIdeRepos();
 }
 $('viewSettings').addEventListener('input', ev => { const a = ev.target.dataset.gha; if (a !== undefined) GH[+a].agent_dir = ev.target.value; });
 
@@ -2727,7 +2832,7 @@ function collect() {
   if ($('tm-secret') && $('tm-secret').value.trim()) secrets.mcp_token = $('tm-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
-    projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'),
+    projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), ide_command: val('ide-cmd'),
     time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), mcp_url: val('tm-url'),
       send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked },
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
@@ -2773,6 +2878,9 @@ const ICONS = {
   ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   chat: '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
   down: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
+  ide: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16.5h5M7.5 7.5l3 3-3 3"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   play: '<path d="M8 5.5v13l10.5-6.5z"/>',
@@ -2865,6 +2973,13 @@ function goBtn(e, cls) {
   if (items.length && items.every(x => x.host === 'github')) l = l.replace('MR', 'PR');
   return `<button class="${cls || 'fgo'} ${n.kind === 'wait' && !cls ? 'ghost' : ''}" data-fgo="${esc(e.id)}" title="${esc(l)}">${ic(i)}<span>${esc(l)}</span></button>`;
 }
+function testBtns(e, cls) {   // Testen: Review-App und IntelliJ auf dem Head-Commit (0.20)
+  const a = (e.d.next || {}).action || {};
+  const out = [];
+  if (a.ide) out.push(`<button class="${cls || ''}" data-ide="${esc(JSON.stringify(a.ide))}" title="Worktree genau auf dem Commit des MR anlegen und in IntelliJ öffnen">${ic('ide')}<span>In IntelliJ öffnen</span></button>`);
+  if (a.review_app) out.push(`<a class="btn ${cls || ''}" href="${esc(a.review_app)}" target="_blank" rel="noopener" title="Review-App aus GitLab">${ic('globe')}<span>Review-App</span></a>`);
+  return out.join('');
+}
 function doneBtn(e, big) {
   const to = e.t === 'card' && e.d.complete_to;
   if (!to) return '';
@@ -2890,7 +3005,7 @@ function heroHtml(e, g) {
     ${trackHtml(e.d, true)}
     ${pin ? timeChip(e) : ''}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
-      <div class="hbtns">${goBtn(e, 'primary big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
+      <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
   </section>`;
 }
@@ -3023,7 +3138,7 @@ function renderFx() {
   const keep = ['fxCkNew', 'fxNote', 'fxEnv'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
   const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
-    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${doneBtn(e, true)}</div>
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
       ${(n.action || {}).accept ? `<div class="fxacc"><input id="fxNote" maxlength="500" placeholder="Was hast du getestet? (optional)" autocomplete="off"><input id="fxEnv" maxlength="120" placeholder="Umgebung (optional)" autocomplete="off"></div>` : ''}</div>
     ${accHtml(e.d.acceptance || [])}`;
   if (e.t === 'review') {
@@ -3037,6 +3152,7 @@ function renderFx() {
     if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
     else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
     if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;
+    if (c.idea_id) body += ideaHtml(c.idea_id);
     if (!c.idea_id) body += `<div><h3>Verlauf <small>Was du entschieden hast</small></h3><ol class="aud short" id="fxHist">${HIST.id === c.id ? audRows(HIST.rows, true) : '<li class="quiet small" style="display:block">lädt …</li>'}</ol></div>`;
     const foot = [];
     if (!c.idea_id) foot.push(state.flow.pinned === c.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(c.id)}">${ic('chevron2')} Als Fokus anheften</button>`);
@@ -3087,6 +3203,8 @@ function fxItem(c, x) {
   const b = [`<a class="ibtn" href="${esc(x.url)}" target="_blank" rel="noopener" title="In ${x.host === 'github' ? 'GitHub' : 'GitLab'} öffnen">${ic('ext')} ${x.iid ? (x.host === 'github' ? 'PR' : 'MR') : 'Branch'}</a>`];
   if (x.pipeline_url) b.push(`<a class="ibtn" href="${esc(x.pipeline_url)}" target="_blank" rel="noopener">${ic('gear')} Pipeline</a>`);
   if (SQ_HAS[x.sonar]) b.push(`<button class="ibtn" ${sqRepAttrs(x)} title="Findings als Markdown in die Zwischenablage (Pfade und Meldungen, kein Quelltext)">${ic('copy')} Report</button>`);
+  if (x.review_app) b.push(`<a class="ibtn" href="${esc(x.review_app)}" target="_blank" rel="noopener" title="${esc(x.review_env || 'Review-App')}">${ic('globe')} Review-App</a>`);
+  if (x.iid && x.ide) b.push(`<button class="ibtn" data-ide="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" title="Worktree genau auf ${esc((x.sha || '').slice(0, 8))} und IntelliJ öffnen">${ic('ide')} IntelliJ</button>`);
   if (x.iid) b.push(`<button class="ibtn" data-topics="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" data-tcard="${esc(c.id)}" title="Offene Review-Kommentare ansehen, als Prompt oder JSON exportieren, einem Agenten geben">${ic('chat')} Offene Punkte</button>`);
   if (!x.iid && x.create_mr_url) b.push(`<a class="ibtn" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener">${ic('mr')} ${x.host === 'github' ? 'PR' : 'MR'} erstellen</a>`);
   if (!c.key && state.jira && state.jira.ok) {
@@ -3095,7 +3213,7 @@ function fxItem(c, x) {
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   if (F().testenv && x.iid) b.push(`<button class="ibtn" data-fxdeploy="${x.project_id}:${x.iid}">${ic('flask')} Testumgebung</button>`);
   return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : ic('branch')}
-    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
 }
 function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); }
