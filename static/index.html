@@ -184,6 +184,9 @@
   .ideaas .grid { display: flex; gap: 8px; flex-wrap: wrap; }
   .ideaform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
   .ideaform textarea { grid-column: 1 / -1; height: 54px; }
+  #updBanner { padding: 10px 20px 0; }
+  #updBanner .banner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0; white-space: pre-wrap; }
+  #updBanner .x { margin-left: auto; }
   .htime { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--quiet); }
   .htime b { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 650; }
   .htime .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok, #1f8a4c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #1f8a4c) 20%, transparent); }
@@ -698,6 +701,7 @@
   <button id="refresh" title="GitLab, Jira und Sonar jetzt abgleichen">Neu laden</button>
 </header>
 
+<div id="updBanner" hidden></div>
 <div id="viewFocus">
   <section id="fMain">
     <div id="fAlerts"></div>
@@ -1162,6 +1166,12 @@ function renderHeader() {
   else { ji.innerHTML = dot('off', 'Jira'); ji.title = 'Nicht eingerichtet'; }
   $('demo').style.display = state.demo ? '' : 'none';
   $('ver').textContent = state.version ? 'v' + state.version : '';
+  const u = state.update;    // Hinweis vom Starter (start.py): einmal zeigen
+  const ub = $('updBanner');
+  ub.hidden = !u;
+  if (u) ub.innerHTML = `<div class="banner ${u.ok ? '' : 'warn'} upd">${u.ok
+      ? `<b>Aktualisiert auf ${esc(u.to)}</b> <span class="quiet">(vorher ${esc(u.from)})</span>${u.qa_new ? ` · ${u.qa_new === 1 ? '1 neuer Prüfpunkt' : u.qa_new + ' neue Prüfpunkte'}` : ''} <button class="quiet-btn" data-upd="qa">${u.qa_new ? 'Jetzt prüfen' : 'Prüfliste'}</button><button class="quiet-btn" data-upd="log">Was ist neu?</button>`
+      : `<b>Update nicht übernommen.</b> ${esc(u.message)}`}<button class="x" data-upd="seen" aria-label="Hinweis schliessen">×</button></div>`;
   const syncing = state.sync && state.sync.running;
   $('fetched').textContent = syncing ? 'synchronisiert …' : 'Stand ' + new Date(state.fetched * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
   $('refresh').disabled = !!syncing;
@@ -1695,6 +1705,16 @@ document.addEventListener('click', async ev => {
     }
     await load();
   }
+});
+
+// ------------------------------------------------ Hinweis nach einem Update durch den Starter
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest && ev.target.closest('[data-upd]');
+  if (!b) return;
+  const what = b.dataset.upd;
+  if (what === 'qa') setView('qa');
+  if (what === 'log') { try { const r = await api('GET', '/api/update/news'); $('logDlg').showModal(); setLogView('log'); $('logFile').textContent = 'CHANGELOG.md'; $('logText').textContent = r.text || 'Keine Einträge.'; } catch (e) { toast(e.message); } return; }
+  try { await post('/api/update/seen', {}); state.update = null; renderHeader(); } catch (e) { toast(e.message); }
 });
 
 // ------------------------------------------------ Fokus-Zeit (0.19): läuft nur für den angehefteten Fokus, Lücken statt stiller Pausen

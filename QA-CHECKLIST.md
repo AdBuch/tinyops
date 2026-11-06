@@ -98,3 +98,13 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r20-11` Im Worktree eine Datei ändern, × am Chip → Rückfrage wegen geänderter Dateien
 - [ ] `r20-12` Vorhaben auf «Fertig» → saubere Worktrees sind weg (`git worktree list`)
 - [ ] `r20-13` MR mit Review-App (Environment `review/<branch-slug>`) → «Review-App» im Panel und beim Testen öffnet die URL
+
+## 0.21.0
+
+- [ ] `r21-01` Remote auf das Repo umstellen (`git remote set-url origin …`), `git checkout --detach v0.20.0`, dann `python3 start.py` → «Aktualisiert: v0.20.0 → v0.21.0», Selbsttest läuft, tinyops startet
+- [ ] `r21-02` Im Panel → Hinweis «Aktualisiert auf v0.21.0» mit neuen Prüfpunkten, «Was ist neu?» zeigt den CHANGELOG, × blendet ihn aus
+- [ ] `r21-03` Nochmals `python3 start.py --check` → «Auf dem neuesten Stand»
+- [ ] `r21-04` Eine Datei im Checkout ändern, `python3 start.py` → «Geänderte Dateien … kein Update», tinyops startet trotzdem
+- [ ] `r21-05` VPN/Netz aus, `python3 start.py` → «Nicht erreichbar … Start mit dem, was da ist»
+- [ ] `r21-06` Windows (falls genutzt): Doppelklick auf `start.cmd` → wie unter Linux
+

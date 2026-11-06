@@ -49,7 +49,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.20.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.21.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -2557,6 +2557,7 @@ class App:
             "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
             "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
             "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "usage_providers": self.usage_providers(), "problems": list(self.problems),
+            "update": self.update_note(),
             "features": {k: self.has(k) for k in settings.CONFIG_KEYS_FEATURES},
             "ignore_patterns": list(branch_cfg(self.cfg).get("ignore_branches") or []),
             "ticket": self.ticket_meta(),
@@ -3041,6 +3042,44 @@ class App:
         self.audit("time.result", dr["ticket"], ok=new == "gebucht", actor="mcp", draft=dr["id"], state=new, reference=str(b.get("reference") or "")[:200])
         return {"state": new}
 
+    # -- Hinweis vom Starter (0.21): «Aktualisiert auf …» einmal im Panel zeigen
+    def update_note(self):
+        f = store.home_dir() / "last-update.json"
+        try:
+            n = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if n.get("seen") or time.time() - float(n.get("ts") or 0) > 7 * 86400:
+            return None
+        return {k: n.get(k) for k in ("from", "to", "ok", "qa_new", "message")}
+
+    def update_seen(self):
+        f = store.home_dir() / "last-update.json"
+        try:
+            n = json.loads(f.read_text(encoding="utf-8"))
+            n["seen"] = True
+            f.write_text(json.dumps(n, ensure_ascii=False), encoding="utf-8")
+        except (OSError, ValueError):
+            pass
+        return {"ok": True}
+
+    def update_news(self):
+        n = self.update_note() or {}
+        try:
+            text = (BASE / "CHANGELOG.md").read_text(encoding="utf-8")
+        except OSError:
+            return {"text": ""}
+        m = re.match(r"v?(\d+\.\d+\.\d+)$", str(n.get("from") or ""))
+        old = tuple(int(x) for x in m.group(1).split(".")) if m else None
+        out, take = [], False
+        for ln in text.splitlines():
+            h = re.match(r"^## \[(\d+\.\d+\.\d+)\]", ln)
+            if h:
+                take = old is None and not out or (old is not None and tuple(int(x) for x in h.group(1).split(".")) > old)
+            if take:
+                out.append(ln)
+        return {"text": "\n".join(out).strip()}
+
     # -- Qualität (0.19): Prüfliste und Selbsttest
     def _checklist(self):
         try:
@@ -3421,6 +3460,10 @@ def make_handler(app):
                     return self._send(200, app.ide_open(self._body()))
                 if method == "POST" and path == "/api/ide/close":
                     return self._send(200, app.ide_close(self._body()))
+                if method == "POST" and path == "/api/update/seen":
+                    return self._send(200, app.update_seen())
+                if method == "GET" and path == "/api/update/news":
+                    return self._send(200, app.update_news())
                 if method == "GET" and path == "/api/qa":
                     return self._send(200, app.qa_view())
                 if method == "POST" and path.startswith("/api/qa/"):

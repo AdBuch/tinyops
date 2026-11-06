@@ -55,7 +55,7 @@ Von Hand:
 
 1. `cp config.example.json config.json` und anpassen (URLs, Projekt-IDs, `jira.project_keys`, `kube_context`).
 2. Zugangsdaten sicher speichern (Abschnitt 3). **Nie in die config.json schreiben**, das Panel verweigert dann den Start.
-3. Starten: `./run.sh`
+3. Starten: `./run.sh`, oder mit Update vorher: `python3 start.py` (siehe 4y)
 
 Tokens besorgen:
 - **GitLab:** Profil → Access Tokens, Scope **`read_api`** reicht.
@@ -459,6 +459,27 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4y. Starter mit Update (neu in 0.21.0)
+
+`python3 start.py` (Windows: `start.cmd`) holt vor dem Start die neueste Version aus dem Repo, prüft sie und startet tinyops. Woher er holt, bestimmt die Git-Remote `origin` (GitHub oder euer GitLab); eine andere Remote setzt du mit `git config tinyops.remote <name>`.
+
+    python3 start.py              # neuestes Release holen, Selbsttest, starten
+    python3 start.py --demo       # Optionen für server.py einfach anhängen
+    python3 start.py --check      # nur nachsehen, ob es etwas Neues gibt
+    python3 start.py --no-update  # ohne Netz starten
+
+- **Releases:** Der Starter wechselt auf das neueste Tag `vX.Y.Z` (detached).
+- **Selbsttest:** Danach läuft `server.py --selftest`. Schlägt er fehl, geht es zurück auf die alte Version, und der Grund steht in der Konsole und im Panel.
+- **Was neu ist:** Die Konsole zeigt die CHANGELOG-Abschnitte. Das Panel zeigt einmal «Aktualisiert auf …» mit der Zahl der neuen Prüfpunkte und «Jetzt prüfen».
+- **Gefahrlos:** Bei geänderten Dateien im Checkout, auf einem Branch oder ohne Netz startet tinyops unverändert, mit Hinweis. Einstellungen, Zugangsdaten und Datenbank liegen ausserhalb des Repos und bleiben, wie sie sind.
+- `--channel main` folgt dem Branch `main` (nur vorspulen). `--verify` übernimmt nur signierte Tags.
+
+**Einmalig umstellen** (bisher aus einem Bundle geklont):
+
+    git remote set-url origin <URL des Repos>     # z. B. git@github.com:AdBuch/tinyops.git oder eure GitLab-URL
+    git fetch --tags && git checkout --detach v0.21.0
+    python3 start.py
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
@@ -555,6 +576,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe, Vertrag mit dem MCP
     qa.py                Prüfliste und Selbsttest
     QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt
+    start.py, start.cmd  Starter: neueste Version holen, prüfen, starten
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
     flow.py              Ablauf, nächster Schritt, Spielstand
     static/index.html    Oberfläche

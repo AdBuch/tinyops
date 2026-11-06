@@ -5,6 +5,24 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.21.0]
+
+### Neu
+- **Starter mit Update:** `python3 start.py` (Windows `start.cmd`). Der Starter holt die Tags von der Remote (`origin` oder `git config tinyops.remote`) und wechselt auf das neueste Release `vX.Y.Z`. Dann prüft er es mit `server.py --selftest` und startet tinyops; Optionen gehen an `server.py` durch.
+  - Schlägt der Selbsttest fehl, geht es automatisch zurück auf die vorige Version, mit den fehlgeschlagenen Prüfungen in der Konsole.
+  - Kein Update bei geänderten Dateien im Checkout, auf einem Branch (dort wird entwickelt), ohne Release-Tags oder ohne Netz. In jedem Fall startet die vorhandene Version, mit einem Hinweis, warum.
+  - Ignorierte Dateien wie `config.json` stören nicht.
+  - `--check` zeigt nur, ob es Neues gibt. `--no-update` startet ohne Netz. `--channel main` spult `main` vor (für Entwicklung). `--verify` verlangt signierte Tags.
+  - Nur Standardbibliothek, ohne Import aus tinyops, damit ein kaputtes Update den Starter nicht trifft. Nimmt `.venv`, wenn vorhanden.
+- **Hinweis im Panel nach einem Update:** einmal «Aktualisiert auf vX.Y.Z (vorher …) · N neue Prüfpunkte», mit «Jetzt prüfen» (Tab «Prüfen») und «Was ist neu?» (CHANGELOG seit der alten Version).
+  - Ein fehlgeschlagenes Update steht dort mit dem Grund.
+  - Der Hinweis verschwindet nach «×» oder nach 7 Tagen.
+
+### Grenzen
+- Der Starter aktualisiert nur beim Start. Ein laufendes tinyops merkt nichts von neuen Releases.
+- Die Datenbank wird nur erweitert (neue Spalten und Tabellen). Ein Zurück auf eine ältere Version funktioniert deshalb, neue Daten bleiben dabei ungenutzt.
+- Ohne `--verify` vertraut der Starter jedem Tag in der Remote. Wer dort pushen darf, bestimmt, was bei dir läuft.
+
 ## [0.20.0]
 
 ### Neu
