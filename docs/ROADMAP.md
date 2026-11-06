@@ -23,7 +23,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.15.0** ✓ | Ehrlich und an den Commit gebunden (geliefert 2026-11-05) | T-1, T-4, T-6, Zeitlimit aus T-2 | M |
 | **0.16.0** ✓ | Agenten isoliert, Datenklassen (geliefert 2026-11-05; Export statt Sparse-Checkout, siehe unten) | T-2, SEC-1, SEC-2, F-10, F-14 | L |
 | **0.17.0** ✓ | Audit und Verlauf (geliefert 2026-11-06) | T-3, SEC-6, F-15 | M |
-| **0.18.0** | Rückfragen und Ergebnisse von Agenten | T-5, F-09 | M |
+| **0.18.0** ✓ | Rückfragen und Ergebnisse von Agenten, offene Review-Punkte exportieren (geliefert 2026-11-06) | T-5, F-09 | M |
 | **0.19.0** | Fokus-Zeit und Zeitentwürfe für Projectron | F-20 | M |
 | **0.20.0** | Vom Einfall zum Test: Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR-Commit | F-06, F-07, F-17, G9 | M–L |
 
@@ -95,7 +95,7 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 
 **Umgesetzt (2026-11-06):** wie geplant, dazu `--export-audit`, Instanz-Kennung je Eintrag, Erkennung fehlender letzter Einträge, Audit von Deploy/Teardown, Kategorien und Agent-Ende. Teilschritte bleiben ausserhalb des Audits (nur Spielstand).
 
-## 0.18.0 — Rückfragen und Ergebnisse von Agenten
+## 0.18.0 — Rückfragen und Ergebnisse von Agenten ✓
 
 **Ziel:** Agenten fragen statt raten, und das Ergebnis ist ohne Log-Lesen klar.
 
@@ -105,6 +105,15 @@ Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 
 3. **Ergebnisbericht:** `$R/<nr>.summary.md` (was geändert, was getestet, was offen) wird im Panel gezeigt. Exit-Codes von Tests, die der Agent über `tinyops-check <befehl>` laufen lässt, gelten als Beleg; Behauptungen ohne Exit-Code nicht (F-11).
 
 **Abnahme:** Ein Skript-Agent fragt, bekommt die Antwort und läuft weiter. Eine Frage erscheint genau einmal. Der Bericht erscheint im Panel.
+
+**Umgesetzt (2026-11-06):**
+- wie geplant, Hilfsskripte `tinyops-ask`, `tinyops-check` und `tinyops-report` in reinem `sh` für alle Agenten
+- `tinyops-ask` mit Zeitlimit und `--wait`, damit Werkzeug-Timeouts der CLIs nicht neue Fragen erzeugen
+- «Ergebnis prüfen» auch nach dem MR, bis der Lauf geöffnet wurde
+
+**Dazu, auf Wunsch:** Offene Review-Punkte eines MR/PR mit Zielangaben (Datei, Zeile, Commit, Branch, Zielbranch) als Prompt (Markdown) oder JSON exportieren oder direkt einem Agenten geben.
+- GitLab-Threads per GET; GitHub-Kommentare per REST (Erledigt-Status dort unbekannt).
+- Im Export-Modus nur Punkte innerhalb der Cloud-Pfade. Jeder Export steht im Verlauf.
 
 ## 0.19.0 — Fokus-Zeit und Zeitentwürfe für Projectron
 

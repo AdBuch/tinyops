@@ -30,6 +30,7 @@ from pathlib import Path
 
 import agents
 import audit
+import review
 import fnmatch
 import flow
 import github
@@ -45,7 +46,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.17.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.18.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -617,6 +618,17 @@ class GitLabClient:
             self._bcache[key] = info
         return info
 
+    def review_threads(self, project_id, iid):
+        """MR (Zielbranch, aktueller Commit) und seine Diskussionen, höchstens 500. Nur GET."""
+        mr = self.http.get("/projects/%s/merge_requests/%s" % (project_id, iid))
+        out = []
+        for page in range(1, 6):
+            res = self.http.get("/projects/%s/merge_requests/%s/discussions" % (project_id, iid), {"per_page": 100, "page": page}) or []
+            out.extend(res)
+            if len(res) < 100:
+                break
+        return mr, out
+
     def ticket_context(self, project_id, iid, branch):
         """Das, was ein Ticket-Entwurf braucht: Titel, MR-Beschreibung, Commit-Titel. Keine Diffs, keine Dateiinhalte."""
         ctx = {"project_id": project_id, "iid": iid, "branch": branch, "project": self._pname(project_id),
@@ -980,6 +992,24 @@ class DemoClient:
         pause("gl-assigned", "Mir zugeteilte MRs", "%d MR" % len(assigned))
         return sink
 
+    def review_threads(self, project_id, iid):
+        sha = "a1b2c3d4e5f60718"
+        pos = lambda f, line, head=sha: {"new_path": f, "old_path": f, "new_line": line, "head_sha": head, "position_type": "text"}
+        note = lambda nid, who, body, **kw: dict({"id": nid, "body": body, "author": {"username": who}, "created_at": "2026-11-04T09:12:00Z",
+                                                  "system": False, "resolvable": True, "resolved": False}, **kw)
+        disc = [
+            {"id": "d1", "notes": [note(901, "kollege", "Hier fehlt das Backoff: bei 429 sofort erneut zu senden verschärft das Rate-Limit. Bitte exponentiell mit Obergrenze.",
+                                        position=pos("src/main/java/ch/dlp/vendex/VendexClient.java", 88)),
+                                   note(902, "demo", "Guter Punkt, mache ich mit max. 3 Versuchen.")]},
+            {"id": "d2", "notes": [note(903, "kollege", "Der Test deckt nur den Erfolgsfall ab. Bitte auch 429 und 503 prüfen.",
+                                        position=pos("src/test/java/ch/dlp/vendex/VendexClientTest.java", 41, "0f9e8d7c6b5a4321"))]},
+            {"id": "d3", "notes": [note(904, "kollege", "Magic Number 30000 bitte als Konstante mit Einheit.", position=pos("src/main/java/ch/dlp/vendex/VendexClient.java", 23),
+                                        resolved=True)]},
+            {"id": "d4", "notes": [note(905, "kollege", "Ist das mit dem Helm-Chart abgestimmt? Die Timeouts müssen zusammenpassen.")]},
+            {"id": "d5", "notes": [note(906, "gitlab", "added 1 commit", system=True, resolvable=False)]},
+        ]
+        return {"target_branch": "main", "sha": sha, "web_url": "https://gitlab.example/demo/-/merge_requests/%s" % iid}, disc
+
     def mr(self, project_id, iid):
         return {"title": "Demo-MR %s" % iid, "branch": "feature/DLP-101-demo-%s" % iid,
                 "sha": "a1b2c3d4e5f60718", "url": "https://gitlab.example/demo/%s" % iid}
@@ -1200,6 +1230,7 @@ class App:
         self.audit_log = audit.AuditLog(data_dir(cfg) / "tinyops.db")
         if not hasattr(self, "_audit_ctx"):
             self._audit_ctx = threading.local()
+        self._rv_cache = {}
         self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
         self.agents.audit = self.audit
         if self.demo and not self.store.flow_stats()["total_xp"]:
@@ -2357,6 +2388,24 @@ class App:
         svc = self.agents
         try:
             if action == "prompt":
+                if isinstance(b.get("review"), dict):      # Agent soll offene Review-Punkte bearbeiten
+                    aid, rv = str(b.get("agent") or ""), dict(b["review"])
+                    res, topics = self._review_pick(rv)
+                    skipped = []
+                    p = svc.project(res["mr"]["project_id"])
+                    if p and svc.mode(svc.agent(aid), res["mr"]["project_id"]) == "export":
+                        # Export: nur Punkte zu Dateien in den freigegebenen Pfaden; allgemeine Punkte können alles betreffen
+                        paths = p.get("cloud_paths") or []
+                        keep = [t for t in topics if t["file"] and agents.path_allowed(t["file"], paths)]
+                        skipped = [review.where(t) for t in topics if t not in keep]
+                        if not keep:
+                            raise UserError("Keiner der Punkte liegt in den freigegebenen Pfaden (%s). Einen lokalen Agenten nehmen." % ", ".join(paths))
+                        rv["ids"] = [t["id"] for t in keep]
+                    extra, mr = self.review_prompt_extra(rv)
+                    info = svc.prompt_info(aid, b.get("ticket"), mr["project_id"], mr["branch"],
+                                           b.get("title") or "", b.get("key") or "", mr["url"], template="review-topics", extra=extra)
+                    info["review_skipped"] = skipped
+                    return info
                 return svc.prompt_info(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
                                        b.get("title") or "", b.get("key") or "", b.get("url") or "")
             if action == "assign":
@@ -2380,6 +2429,17 @@ class App:
                 return svc.view()
             if action == "tail":
                 return {"text": svc.tail(self._rid(b), int(b.get("lines") or 80))}
+            if action == "answer":
+                return svc.answer(self._rid(b), b.get("qid"), b.get("text"))
+            if action == "report":           # Bericht und Belege neu einlesen
+                r = svc.store.agent_run(self._rid(b))
+                if not r:
+                    raise UserError("Diesen Lauf gibt es nicht (mehr).")
+                svc.collect(r)
+                return svc.run_view(svc.store.agent_run(r["id"]))
+            if action == "ack":
+                svc.ack(self._rid(b))
+                return {"ok": True}
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
@@ -2399,6 +2459,94 @@ class App:
             return int(b.get("run"))
         except (TypeError, ValueError):
             raise UserError("Lauf-Nummer fehlt.")
+
+    # -- Offene Review-Punkte (0.18): lesen, exportieren, als Agenten-Auftrag
+    def _find_mr(self, host, pid, iid):
+        with self.cache_lock:
+            data = self.cache or {}
+        for it in (data.get("mine") or []) + (data.get("review") or []) + (data.get("assigned") or []):
+            if it.get("iid") == iid and it.get("project_id") == pid and (it.get("host") or "gitlab") == host:
+                return it
+        return None
+
+    def _data_class(self, pid):
+        p = self.agents.project(pid)
+        return agents.data_class(p) if p else "restricted"
+
+    def review_topics(self, b):
+        host = "github" if b.get("host") == "github" else "gitlab"
+        try:
+            pid, iid = int(b.get("project_id")), int(b.get("iid"))
+        except (TypeError, ValueError):
+            raise UserError("project_id und iid müssen Zahlen sein.")
+        it = self._find_mr(host, pid, iid)
+        if not it:
+            raise UserError("Diesen %s kenne ich nicht (mehr). Einmal «Neu laden»." % ("PR" if host == "github" else "MR"))
+        key = (host, pid, iid)
+        hit = self._rv_cache.get(key)
+        if hit and time.time() - hit[0] < 60 and not b.get("fresh"):
+            return hit[1]
+        mr = {"host": host, "project_id": pid, "iid": iid, "title": it.get("title", ""), "project": it.get("project", ""), "branch": it.get("branch", ""),
+              "url": it.get("url", ""), "sha": it.get("sha", ""), "target_branch": "", "kind": it.get("kind", "")}
+        note = ""
+        try:
+            if host == "gitlab" or self.demo:
+                if not self.client:
+                    raise UserError("GitLab ist nicht verbunden.")
+                m, disc = self.client.review_threads(pid, iid)
+                mr.update(target_branch=m.get("target_branch") or "", sha=m.get("sha") or mr["sha"], url=m.get("web_url") or mr["url"])
+                topics = review.gitlab_topics(disc, mr["sha"])
+                for t in topics:
+                    t["url"] = "%s#note_%s" % (mr["url"], t["note_id"]) if mr["url"] and t.get("note_id") else ""
+            else:
+                if not self.github:
+                    raise UserError("GitHub ist nicht verbunden.")
+                pr, comments, revs = self.github.review_threads(it.get("project", ""), iid)
+                mr.update(target_branch=(pr.get("base") or {}).get("ref") or "", sha=(pr.get("head") or {}).get("sha") or mr["sha"])
+                topics = review.github_topics(comments, revs, mr["sha"])
+                note = "GitHub zeigt über die REST-API nicht, ob ein Thread erledigt ist. Alle Threads sind dabei; wähle ab, was schon erledigt ist."
+        except github.GitHubError as e:
+            raise UserError(str(e))
+        res = {"mr": mr, "topics": topics, "data_class": self._data_class(pid), "configured": self.agents.project(pid) is not None,
+               "note": note, "fetched": time.time()}
+        self._rv_cache[key] = (time.time(), res)
+        log.info("Review-Punkte %s %s!%s: %d offen", host, pid, iid, len(topics))
+        return res
+
+    def _review_pick(self, b):
+        res = self.review_topics(b)
+        ids = b.get("ids")
+        topics = [t for t in res["topics"] if ids is None or t["id"] in set(ids)]
+        if not topics:
+            raise UserError("Keine Punkte ausgewählt.")
+        return res, topics
+
+    def _review_template(self):
+        try:
+            return (BASE / "prompts" / "review-topics.md").read_text(encoding="utf-8")
+        except OSError:
+            return "Offene Review-Punkte zu {mr_ref}: {title}\n{workspace_line}\n{topics}\n"
+
+    def review_export(self, b):
+        """Markdown (als Prompt zum Kopieren) oder JSON (mit allen Zielangaben). Schreibt einen Eintrag in den Verlauf."""
+        fmt = "json" if b.get("format") == "json" else "md"
+        res, topics = self._review_pick(b)
+        mr = res["mr"]
+        if fmt == "json":
+            text = review.dumps(review.to_json(mr, topics, res["data_class"]))
+        else:
+            text = review.to_markdown(mr, topics, self._review_template(), {"workspace_line": "", "ask_hint": "", "report_hint": ""})
+        self.audit("review.export", "%s%s%s" % (mr["project_id"], "#" if mr["host"] == "github" else "!", mr["iid"]), format=fmt,
+                   topics=len(topics), data_class=res["data_class"], branch=mr["branch"])
+        name = "review-%s-%s.%s" % (review.context(mr)["mr_ref"].replace(" ", "").replace("!", "").replace("#", ""), time.strftime("%Y%m%d-%H%M"), fmt)
+        return {"text": text, "format": fmt, "filename": name.lower(), "count": len(topics), "data_class": res["data_class"]}
+
+    def review_prompt_extra(self, rv):
+        """Platzhalter für prompts/review-topics.md, wenn ein Agent die Punkte bearbeitet."""
+        res, topics = self._review_pick(rv)
+        mr = res["mr"]
+        ctx = review.context(mr)
+        return dict(ctx, count=len(topics), topics=review.topics_block(mr, topics), ask_hint=" mit `tinyops-ask`", report_hint=", als Bericht mit `tinyops-report`"), mr
 
     # -- Prompts
     def prompt_names(self):
@@ -2646,6 +2794,10 @@ def make_handler(app):
                     return self._send(200, app.pool_action(path.rsplit("/", 1)[1] if path != "/api/pools" else "create", self._body()))
                 if method == "POST" and path.startswith("/api/board/"):
                     return self._send(200, app.board_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "POST" and path == "/api/review/topics":
+                    return self._send(200, app.review_topics(self._body()))
+                if method == "POST" and path == "/api/review/export":
+                    return self._send(200, app.review_export(self._body()))
                 if method == "GET" and path == "/api/audit":
                     ql = urllib.parse.parse_qs(parsed.query)
                     q = {k: v[0] for k, v in ql.items()}

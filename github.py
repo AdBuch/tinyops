@@ -155,6 +155,18 @@ class Client:
                 last[login] = r["state"]
         return sorted(k for k, v in last.items() if v == "APPROVED"), sorted(k for k, v in last.items() if v == "CHANGES_REQUESTED")
 
+    def review_threads(self, full, number):
+        """PR, Review-Kommentare (höchstens 500) und Reviews. Nur GET; ob ein Thread erledigt ist, liefert REST nicht."""
+        pr = self.get("/repos/%s/pulls/%s" % (full, number))
+        comments = []
+        for page in range(1, 6):
+            res = self.get("/repos/%s/pulls/%s/comments" % (full, number), {"per_page": 100, "page": page}) or []
+            comments.extend(res)
+            if len(res) < 100:
+                break
+        reviews = self.get("/repos/%s/pulls/%s/reviews" % (full, number), {"per_page": 100}) or []
+        return pr, comments, reviews
+
     def thumbs(self, full, number):
         try:
             return len(self.get("/repos/%s/issues/%s/reactions" % (full, number), {"content": "+1", "per_page": 100}))

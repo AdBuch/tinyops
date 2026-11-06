@@ -5,6 +5,40 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.18.0]
+
+### Neu
+- **Agenten fragen statt raten:** Jeder Lauf hat drei Hilfsskripte im PATH (reines `sh`, lokal und auf SSH-Zielen):
+  - `tinyops-ask "Frage" "Option A" "Option B"` schreibt `<nr>.question.json` und wartet auf die Antwort.
+    - Nach `-t` Sekunden (Standard 100) endet es mit Exit 3 und dem Hinweis `tinyops-ask --wait <nr>`. So reisst das Werkzeug-Zeitlimit von Claude Code oder Codex nichts ab, und es entsteht keine neue Frage.
+    - `-n` fragt, ohne zu warten.
+  - `tinyops-check <Befehl>` führt Tests oder Builds aus und hält Befehl, Exit-Code und Dauer in `<nr>.checks` fest.
+  - `tinyops-report` speichert den Ergebnisbericht als `<nr>.summary.md`.
+  - Die Prompt-Vorlagen erklären die drei Werkzeuge (`prompts/agent-tools.md` wird an jeden Agenten-Prompt angehängt).
+- **«Agent fragt»** steht als nächster Schritt unter «Du bist dran», genau einmal je Frage.
+  - Antworten geht im Lauf-Dialog über die Optionen als Knöpfe oder per Freitext (Ctrl+Enter).
+  - Die Antwort landet als `<nr>.answer.<id>` beim Agenten. Frage und Antwort stehen im Verlauf.
+  - Ohne Antwort greift das Zeitlimit des Agenten: Der Lauf wird «abgelaufen» mit dem Hinweis «Eine Frage war noch offen».
+- **Ergebnis ohne Log-Lesen:** Nach dem Ende liest tinyops Bericht und Belege ein (lokal oder per SSH) und zeigt sie im Lauf-Dialog.
+  - **Belege** sind die Befehle, die über `tinyops-check` liefen, mit Exit-Code. Der **Bericht** ist ausdrücklich «seine Angaben, nicht geprüft».
+  - Der nächste Schritt sagt zum Beispiel «2 Belege, 1 mit Fehler. Bericht liegt vor».
+  - «Ergebnis prüfen» erscheint jetzt auch bei MRs (früher nur vor dem MR), bis du den Lauf einmal geöffnet hast.
+- **Offene Review-Punkte exportieren:** «Offene Punkte» bei jedem MR/PR im Detail-Panel, bei Reviews anderer und als Aktion von «Kommentare klären».
+  - GitLab: offene, auflösbare Threads aus `/merge_requests/:iid/discussions`, nur GET. Systemnotizen, erledigte Threads und reine Kommentare zählen nicht.
+  - GitHub: Review-Kommentare als Threads samt Antworten, dazu «Änderungen angefordert» mit Text. Ob ein Thread erledigt ist, liefert die REST-API nicht; tinyops zeigt dort «Status?» und alles zum Abwählen.
+  - Jeder Punkt hat sein Ziel: Datei, Zeile oder Bereich, alte oder neue Fassung, Commit des Kommentars, Hinweis «älterer Stand», Link zum Kommentar. Für den MR: Branch, Zielbranch, aktueller Commit, Datenklasse.
+  - **Als Prompt kopieren:** Markdown aus `prompts/review-topics.md`. Kommentare stehen als Zitat und gelten ausdrücklich als Daten, nicht als Anweisungen.
+  - **JSON** (`tinyops.review-topics/1`) mit allen Zielangaben, zum Weiterverarbeiten.
+  - **Agent beauftragen:** Der Agent bekommt die gewählten Punkte als Prompt, mit Rückfrage- und Berichtsweg, und arbeitet im Worktree des MR-Branches.
+  - Export-Modus (internal mit Cloud-Pfaden): Punkte zu Dateien ausserhalb der Pfade und allgemeine Punkte gehen nicht an den Cloud-Agenten. Der Dialog nennt, was weggelassen wurde.
+  - Kein Code aus dem Diff im Export (GitHubs `diff_hunk` bleibt draussen). Den Code liest der Agent im Repository.
+  - Jeder Export steht im Verlauf (Format, Anzahl, Datenklasse).
+
+### Grenzen
+- `tinyops-check` ist eine Konvention. Ein Agent kann die Datei `<nr>.checks` auch selbst schreiben. Gegen einen böswilligen Agenten schützt das nicht, gegen «hab getestet» ohne Test schon.
+- Ob ein Cloud-Agent die Hilfsskripte aufrufen darf, entscheidet dessen eigene Freigabe für Shell-Befehle (z. B. `--allowedTools` bei Claude Code). Lokal unter Windows laufen die `sh`-Skripte nur mit Git for Windows.
+- Die Aufrufe gegen die echten GitLab-19.2- und GitHub-APIs sind aus der Doku gebaut und gegen Mocks getestet, nicht gegen deine Instanzen.
+
 ## [0.17.0]
 
 ### Neu

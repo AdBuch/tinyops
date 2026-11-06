@@ -198,6 +198,22 @@ Timeout/DNS (Egress-Regeln oder interne Namen; `deploy/k8s/networkpolicy.optiona
 | 14.9 | «Export (JSON)» | Datei `tinyops-audit-<Datum>.json` mit allen Einträgen und dem Prüfergebnis |
 | 14.10 | `agent_log_days` auf 1, einen Tag warten (oder Datei-Zeit zurücksetzen und Server neu starten) | Alte Dateien in `~/.tinyops/runs` (SSH-Ziel) und lokal weg, Eintrag «Alte Agenten-Logs gelöscht» |
 
+## 15. Rückfragen, Bericht, Review-Punkte (ab 0.18.0)
+
+| # | Prüfen | Erwartet |
+|---|--------|----------|
+| 15.1 | Eigener Befehl: `ans=$(tinyops-ask "Weiter?" ja nein); echo $ans` | «Agent fragt» unter «Du bist dran»; nach «ja» steht `ja` im Log, der Lauf endet «fertig» |
+| 15.2 | Claude Code oder Codex mit dem Standard-Prompt auf einer unklaren Aufgabe | Der Agent ruft `tinyops-ask` auf (oder nicht: zurückmelden). Bei Exit 3 ruft er `--wait` auf, statt neu zu fragen |
+| 15.3 | Goose mit Ollama: Aufgabe mit Tests | Im Ergebnis stehen Belege von `tinyops-check` und ein Bericht |
+| 15.4 | Frage offen lassen bis zum Zeitlimit | Status «abgelaufen», Hinweis «Eine Frage war noch offen» |
+| 15.5 | Eigener MR mit offenen Threads, «Offene Punkte» | Nur offene, auflösbare Threads; Datei:Zeile stimmen mit GitLab überein; erledigte fehlen |
+| 15.6 | Thread auf einem älteren Commit (nach neuem Push) | Chip «älterer Stand» |
+| 15.7 | «Als Prompt kopieren» und in einen Chat einfügen | Markdown mit Zielangaben, Kommentare als Zitat |
+| 15.8 | «JSON» | Datei `review-mr<nr>-<datum>.json`, Schema `tinyops.review-topics/1` |
+| 15.9 | internal-Projekt mit Cloud-Pfaden, Claude beauftragen | Punkte ausserhalb der Pfade fehlen im Prompt, der Dialog nennt sie |
+| 15.10 | GitHub-PR mit Review-Kommentaren | Threads mit Antworten, «Status?», kein Code aus dem Diff im JSON |
+| 15.11 | Log → Verlauf | Einträge «Review-Punkte exportiert», «Agent fragt», «Agent geantwortet» |
+
 ## Rückmeldung
 
 Pro Zeile reicht: **ok**, **Abweichung** (was du gesehen hast) oder **nicht getestet**. Bei Abweichungen zusätzlich die

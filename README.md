@@ -403,6 +403,23 @@ Pushen und MR erstellen bleiben bei dir. Ob ein Pfad in die Cloud darf, entschei
 
 **Aufbewahrung:** `agent_log_days` (Standard 30) löscht alte Logs, Prompts und Patches der Agentenläufe auf allen Rechnern. `0` heisst «nie löschen».
 
+## 4v. Rückfragen, Bericht und offene Review-Punkte (neu in 0.18.0)
+
+**Rückfragen:** Im Lauf eines Agenten stehen `tinyops-ask`, `tinyops-check` und `tinyops-report` im PATH. Fragt der Agent, steht «Agent fragt» unter «Du bist dran». Du antwortest im Lauf-Dialog, und der Agent arbeitet weiter.
+
+    tinyops-ask "Retry exponentiell oder fix?" "exponentiell" "fix"   # wartet, Antwort auf stdout; Exit 3 = weiter warten mit --wait 1
+    tinyops-check mvn -q test                                        # Beleg: Befehl + Exit-Code
+    tinyops-report < bericht.md                                      # Bericht für das Panel
+
+Für eigene Befehle (LangGraph usw.) gilt dieselbe Konvention: `$TINYOPS_RUN_DIR/$TINYOPS_RUN_ID.question.json` schreiben, auf `….answer.<id>` warten.
+
+**Offene Review-Punkte:** «Offene Punkte» bei einem MR/PR zeigt die offenen Threads mit Datei, Zeile und Commit. Auswählen, dann:
+- **Als Prompt kopieren**, etwa für einen Chat oder ein IDE-Werkzeug
+- **JSON** mit allen Zielangaben
+- **Agent beauftragen**, der die Punkte im Worktree des MR-Branches bearbeitet
+
+Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Kundendaten enthalten können.
+
 ## 12. Kubernetes und IntelliJ (neu in 2.6)
 
 Ausführliche Testliste: `MANUAL-TESTS.md`.
@@ -495,6 +512,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher
     audit.py             Verlauf: nur anhängend, Hash-Kette, Prüfen und Export
+    review.py            Offene Review-Punkte: lesen, Prompt und JSON
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
     flow.py              Ablauf, nächster Schritt, Spielstand
     static/index.html    Oberfläche

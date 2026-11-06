@@ -31,7 +31,8 @@ LABELS = {
     "flow.accept": "Abgenommen", "flow.complete": "Schritt erledigt", "flow.tiny": "tiny-Ticket angelegt", "flow.pin": "Fokus geändert",
     "agent.assign": "Agent zugewiesen", "agent.start": "Agent gestartet", "agent.stop": "Agent gestoppt",
     "agent.expire": "Agent nach Zeitlimit beendet", "agent.finish": "Agent fertig", "agent.remove": "Agentenlauf entfernt",
-    "agent.takeover": "Agenten-Ergebnis übernommen", "agent.retention": "Alte Agenten-Logs gelöscht",
+    "agent.question": "Agent fragt", "agent.answer": "Agent geantwortet", "review.export": "Review-Punkte exportiert",
+        "agent.takeover": "Agenten-Ergebnis übernommen", "agent.retention": "Alte Agenten-Logs gelöscht",
     "settings.save": "Einstellungen gespeichert", "testenv.deploy": "Testumgebung deployt", "testenv.teardown": "Testumgebung abgebaut",
 }
 

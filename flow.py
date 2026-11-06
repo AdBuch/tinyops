@@ -137,7 +137,8 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None
             nxt = _step("wait", "ci", "Pipeline läuft", "Warten auf die CI von %s." % label, owner="ci", url=m.get("pipeline_url") or url)
         elif ms == "discussions_not_resolved":
             data = 4
-            nxt = _step("do", "threads", "Kommentare klären", "Im %s sind Diskussionen offen." % label, url=url)
+            nxt = _step("do", "threads", "Kommentare klären", "Im %s sind Diskussionen offen. Offene Punkte ansehen, exportieren oder einem Agenten geben." % label,
+                        url=url, topics={"host": m.get("host", "gitlab"), "project_id": m.get("project_id"), "iid": m.get("iid")})
         elif ap == "unknown":
             data = 4
             nxt = _step("do", "check_approval", "Freigabe prüfen", "Freigaben von %s sind nicht lesbar (Recht fehlt?). Im %s nachsehen, dann «Schritt erledigt»." % (label, what),
@@ -215,14 +216,20 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None
     # -- Agenten
     latest = runs[0] if runs else None
     if latest and phase < 7:
-        if latest["status"] == "läuft":
+        q = latest.get("question") if latest["status"] == "läuft" else None
+        if q:
+            opts = q.get("options") or []
+            nxt = _step("do", "agent_question", "Agent fragt", "%s: %s%s" % (latest.get("agent_name", "Agent"), q.get("question", ""),
+                        (" (%s)" % " / ".join(opts)) if opts else "") + ("" if q.get("blocking", True) else " Der Agent arbeitet weiter."),
+                        run=latest["id"], qid=q.get("id"))
+        elif latest["status"] == "läuft":
             nxt = _step("wait", "agent", "Agent arbeitet", "%s seit %s." % (latest.get("agent_name", "Agent"), _dur(now - (latest.get("started") or now))),
                         owner="agent", run=latest["id"])
         elif latest["status"] in ("fehlgeschlagen", "verloren", "abgelaufen") and nxt["kind"] != "blocked":
             nxt = _step("blocked", "agent_failed", "Agent-Lauf prüfen", "%s: %s." % (latest.get("agent_name", "Agent"), latest["status"]), run=latest["id"])
-        elif latest["status"] == "fertig" and phase <= 2:
-            nxt = _step("do", "agent_result", "Ergebnis des Agenten prüfen", "%s ist fertig. Log ansehen, dann MR erstellen." % latest.get("agent_name", "Agent"),
-                        run=latest["id"])
+        elif latest["status"] == "fertig" and (phase <= 2 or not latest.get("ack")) and nxt["kind"] != "blocked":
+            nxt = _step("do", "agent_result", "Ergebnis des Agenten prüfen", "%s ist fertig. %s%s" % (
+                latest.get("agent_name", "Agent"), report_line(latest), "Bericht lesen, dann MR erstellen." if phase <= 2 else "Bericht lesen."), run=latest["id"])
         elif latest["status"] == "zugewiesen" and phase <= 2 and nxt["kind"] == "do":
             nxt = _step("do", "agent_start", "Agent starten", "%s ist zugewiesen, aber noch nicht gestartet." % latest.get("agent_name", "Agent"), run=latest["id"])
 
@@ -262,6 +269,17 @@ def priority(card, d):
     return base + d["phase"] * 10
 
 
+def report_line(run):
+    """Kurz: was belegt ist (tinyops-check) und ob es einen Bericht gibt. Behauptungen im Bericht zählen nicht als Beleg."""
+    checks = run.get("checks") or []
+    bad = [c for c in checks if c.get("exit") != 0]
+    if checks:
+        out = "%d Beleg%s, %s. " % (len(checks), "" if len(checks) == 1 else "e", "alle Exit 0" if not bad else "%d mit Fehler" % len(bad))
+    else:
+        out = "Keine Belege (tinyops-check nicht benutzt). "
+    return out + ("Bericht liegt vor. " if run.get("summary") else "Kein Bericht. ")
+
+
 def review_view(data):
     """MRs anderer, die auf dich warten (Review angefragt oder dir zugeteilt)."""
     out = []
@@ -270,6 +288,7 @@ def review_view(data):
         out.append({"id": it.get("ref") or "%s:%s" % (it.get("project_id"), it.get("branch")), "title": it.get("title", ""), "project": it.get("project", ""),
                     "iid": it.get("iid"), "url": it.get("url", ""), "author": it.get("author", ""), "age_days": it.get("age_days", 0),
                     "pipeline": it.get("pipeline", "none"), "keys": it.get("keys") or [], "host": it.get("host", "gitlab"),
+                    "project_id": it.get("project_id"),
                     "next": _step("do", "do_review" if rev else "assigned", "Review machen" if rev else "Zugeteilten MR ansehen",
                                   "%s wartet seit %d Tag%s auf dich." % (it.get("author") or "Jemand", it.get("age_days", 0), "" if it.get("age_days", 0) == 1 else "en"),
                                   url=it.get("url", ""))})

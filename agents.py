@@ -61,8 +61,107 @@ ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 RUNNER = '''R="$HOME/.tinyops/runs"
 ID="$1"
 export R ID
-{ "${SHELL:-/bin/sh}" -l -c 'exec sh "$R/$ID.cmd"'; echo $? > "$R/$ID.exit.tmp"; mv "$R/$ID.exit.tmp" "$R/$ID.exit"; } 2>&1 | tee "$R/$ID.log"
+{ "${SHELL:-/bin/sh}" -l -c 'PATH="$R/bin:$PATH"; TINYOPS_RUN_DIR="$R"; TINYOPS_RUN_ID="$ID"; export PATH TINYOPS_RUN_DIR TINYOPS_RUN_ID; exec sh "$R/$ID.cmd"'; echo $? > "$R/$ID.exit.tmp"; mv "$R/$ID.exit.tmp" "$R/$ID.exit"; } 2>&1 | tee "$R/$ID.log"
 '''
+
+# ------------------------------------------------------------------ Hilfsskripte für den Agenten (0.18): fragen, belegen, berichten
+# Sie liegen in $R/bin und stehen im PATH des Laufs. Reines POSIX-sh, ohne Python, damit sie auf jedem Zielhost laufen.
+_HELPER_HEAD = r'''#!/bin/sh
+R="${TINYOPS_RUN_DIR:-$HOME/.tinyops/runs}"; N="${TINYOPS_RUN_ID:-}"
+case "$N" in ""|*[!0-9]*) echo "tinyops: TINYOPS_RUN_ID fehlt, das geht nur in einem Lauf aus tinyops." >&2; exit 2;; esac
+j() { printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+'''
+HELPERS = {
+    "tinyops-ask": _HELPER_HEAD + r'''# tinyops-ask [-n] [-t SEK] "Frage" ["Option" ...]   fragt den Menschen in tinyops und gibt die Antwort aus
+# tinyops-ask --wait NR [-t SEK]                     wartet weiter auf die Antwort zu Frage NR
+# Exit 3: noch keine Antwort nach SEK Sekunden (Standard 100). Dann mit --wait NR weiter warten, nicht neu fragen.
+wait=1; to="${TINYOPS_ASK_TIMEOUT:-100}"; K=""
+while [ $# -gt 0 ]; do case "$1" in -n) wait=0; shift;; -t) to="$2"; shift 2;; --wait) K="$2"; shift 2;; *) break;; esac; done
+case "$to" in ""|*[!0-9]*) to=100;; esac
+if [ -z "$K" ]; then
+  [ -n "$1" ] || { echo 'Aufruf: tinyops-ask [-n] [-t SEK] "Frage" ["Option" ...]' >&2; exit 2; }
+  K=$(( $(cat "$R/$N.qn" 2>/dev/null || echo 0) + 1 )); echo "$K" > "$R/$N.qn"
+  Q=$(j "$1"); shift; O=""
+  for o in "$@"; do O="$O${O:+, }\"$(j "$o")\""; done
+  b=true; [ "$wait" = 1 ] || b=false
+  printf '{"id": %d, "question": "%s", "options": [%s], "blocking": %s, "ts": %s}\n' "$K" "$Q" "$O" "$b" "$(date +%s)" > "$R/$N.question.tmp" && mv "$R/$N.question.tmp" "$R/$N.question.json"
+  [ "$wait" = 1 ] || { echo "$K"; exit 0; }
+  echo "[tinyops] Frage $K gestellt. Warte auf die Antwort in tinyops ..." >&2
+fi
+case "$K" in ""|*[!0-9]*) echo "tinyops-ask: Fragenummer fehlt" >&2; exit 2;; esac
+t=0
+while [ ! -f "$R/$N.answer.$K" ]; do
+  if [ "$to" -gt 0 ] && [ "$t" -ge "$to" ]; then echo "[tinyops] Noch keine Antwort auf Frage $K. Weiter warten mit: tinyops-ask --wait $K" >&2; exit 3; fi
+  sleep 2; t=$((t + 2))
+done
+cat "$R/$N.answer.$K"
+''',
+    "tinyops-check": _HELPER_HEAD + r'''# tinyops-check BEFEHL [ARG ...]   führt den Befehl aus und hält Befehl, Exit-Code und Dauer als Beleg fest
+[ $# -gt 0 ] || { echo "Aufruf: tinyops-check BEFEHL [ARG ...]" >&2; exit 2; }
+t0=$(date +%s); "$@"; rc=$?; t1=$(date +%s)
+printf '{"cmd": "%s", "exit": %d, "secs": %d, "ts": %d}\n' "$(j "$*")" "$rc" $((t1 - t0)) "$t1" >> "$R/$N.checks"
+echo "[tinyops-check] Exit $rc nach $((t1 - t0)) s: $*" >&2
+exit $rc
+''',
+    "tinyops-report": _HELPER_HEAD + r'''# tinyops-report < bericht.md   oder   tinyops-report "Text"   speichert den Ergebnisbericht (Markdown, höchstens 20 KB)
+if [ $# -gt 0 ]; then printf '%s\n' "$*"; else cat; fi | head -c 20000 > "$R/$N.summary.md.tmp" && mv "$R/$N.summary.md.tmp" "$R/$N.summary.md"
+echo "[tinyops] Bericht gespeichert." >&2
+''',
+}
+
+
+def helpers_script():
+    """Shell, die die Hilfsskripte nach $R/bin schreibt (Teil des Startskripts auf dem Zielhost)."""
+    out = ['mkdir -p "$R/bin"']
+    for name, body in HELPERS.items():
+        d = _delim(body)
+        out.append("cat > \"$R/bin/%s\" <<'%s'\n%s%s\nchmod 755 \"$R/bin/%s\"" % (name, d, body, d, name))
+    return "\n".join(out) + "\n"
+
+
+def write_helpers(run_dir):
+    b = Path(run_dir) / "bin"
+    b.mkdir(parents=True, exist_ok=True)
+    for name, body in HELPERS.items():
+        f = b / name
+        f.write_text(body, encoding="utf-8", newline="\n")
+        try:
+            f.chmod(0o755)
+        except OSError:
+            pass
+    return b
+
+
+def parse_question(text):
+    """Frage aus <nr>.question.json. Ungültiges JSON zählt als Frage im Klartext (Nr 0 wird nie beantwortet erwartet)."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        q = json.loads(text)
+        if not isinstance(q, dict):
+            raise ValueError
+    except ValueError:
+        return {"id": 1, "question": clean_text(text, 1000), "options": [], "blocking": True, "raw": True}
+    try:
+        qid = int(q.get("id") or 1)
+    except (TypeError, ValueError):
+        qid = 1
+    opts = [clean_text(str(o), 200).strip() for o in (q.get("options") or []) if str(o).strip()][:8] if isinstance(q.get("options"), list) else []
+    return {"id": qid, "question": clean_text(str(q.get("question") or ""), 1000).strip() or "(leere Frage)", "options": opts,
+            "blocking": q.get("blocking") is not False}
+
+
+def parse_checks(text):
+    out = []
+    for line in (text or "").splitlines()[-50:]:
+        try:
+            c = json.loads(line)
+            out.append({"cmd": clean_text(str(c.get("cmd") or ""), 300).strip(), "exit": int(c.get("exit")), "secs": int(c.get("secs") or 0),
+                        "ts": int(c.get("ts") or 0)})
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return out
 
 
 class AgentError(Exception):
@@ -344,11 +443,12 @@ cat > "$R/{rid}.cmd" <<'{d2}'
 cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
 {runner}TINYOPS_RUNNER_EOF
 command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-ID={rid}
+rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.summary.md" "$R/{rid}.answer."*
+{helpers}ID={rid}
 {prep}echo "$WD" > "$R/{rid}.wd"
 tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
 echo "started $WD"
-""".format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, prep=prep if prep is not None else 'REPO=%s\n[ -d "$REPO" ] || {{ echo "Arbeitsverzeichnis fehlt" >&2; exit 41; }}\nWD="$REPO"\n'.replace("{{", "{").replace("}}", "}") % wd)
+""".format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, helpers=helpers_script(), prep=prep if prep is not None else 'REPO=%s\n[ -d "$REPO" ] || {{ echo "Arbeitsverzeichnis fehlt" >&2; exit 41; }}\nWD="$REPO"\n'.replace("{{", "{").replace("}}", "}") % wd)
 
 
 def remote_kill_script(rid):
@@ -363,7 +463,21 @@ def remote_status_script(ids):
             'if [ -f "$R/$i.exit" ]; then echo "$i exit $(cat "$R/$i.exit")"; '
             'elif tmux has-session -t tinyops-$i 2>/dev/null; then echo "$i running"; '
             'elif [ -f "$R/$i.exit" ]; then echo "$i exit $(cat "$R/$i.exit")"; '
-            'else echo "$i gone"; fi; done') % " ".join(str(int(i)) for i in ids)
+            'else echo "$i gone"; fi; '
+            'if [ -f "$R/$i.question.json" ]; then printf "%%s q " "$i"; head -c 4000 "$R/$i.question.json" | tr "\\n\\r" "  "; echo; fi; done') % " ".join(str(int(i)) for i in ids)
+
+
+def remote_report_script(rid):
+    return ('R="$HOME/.tinyops/runs"; echo "@@SUMMARY"; head -c 20000 "$R/%d.summary.md" 2>/dev/null; echo; echo "@@CHECKS"; '
+            'tail -n 50 "$R/%d.checks" 2>/dev/null; true') % (int(rid), int(rid))
+
+
+def answer_script(rid, qid, text):
+    d = _delim(text)
+    return ('R="$HOME/.tinyops/runs"; [ -d "$R" ] || exit 4\n'
+            'cat > "$R/{rid}.answer.{q}.tmp" <<\'{d}\'\n{text}\n{d}\n'
+            'mv "$R/{rid}.answer.{q}.tmp" "$R/{rid}.answer.{q}"\n'
+            'grep -q \'"id": {q},\' "$R/{rid}.question.json" 2>/dev/null && rm -f "$R/{rid}.question.json"\necho ok\n').format(rid=int(rid), q=int(qid), d=d, text=text)
 
 
 # ------------------------------------------------------------------ SSH
@@ -582,21 +696,29 @@ class Service:
         "shared": "Arbeite im aktuellen Repository. Lege den Branch an, falls er fehlt (vom Hauptbranch aus), und arbeite nur dort.",
     }
 
-    def default_prompt(self, title, key, project, branch, url="", mode="shared", paths=()):
-        f = self.base / "prompts" / "agent-task.md"
+    def default_prompt(self, title, key, project, branch, url="", mode="shared", paths=(), template="agent-task", extra=None):
+        """Prompt aus prompts/<template>.md plus die Werkzeug-Hinweise aus prompts/agent-tools.md."""
+        f = self.base / "prompts" / ("%s.md" % template)
         try:
             tpl = f.read_text(encoding="utf-8")
         except OSError:
             tpl = "Aufgabe {key}: {title}\nProjekt: {project}\nBranch: {branch}\n{url_line}"
+        try:
+            tools = (self.base / "prompts" / "agent-tools.md").read_text(encoding="utf-8").strip()
+        except OSError:
+            tools = ""
 
         class D(dict):
             def __missing__(self, k):
                 return ""
         ws = self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
-        return tpl.format_map(D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
-                                url_line=("Link: %s\n" % url) if url else "", workspace_line=ws)).strip() + "\n"
+        vals = D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
+                 url_line=("Link: %s\n" % url) if url else "", workspace_line=ws)
+        vals.update(extra or {})
+        out = re.sub(r"\n{3,}", "\n\n", tpl.format_map(vals)).strip() + "\n"
+        return out + ("\n" + tools + "\n" if tools else "")
 
-    def prompt_info(self, aid, ticket, pid, branch, title, key, url=""):
+    def prompt_info(self, aid, ticket, pid, branch, title, key, url="", template="agent-task", extra=None):
         a = self.agent(aid)
         conn = self.conn_of(a)
         ok, why = self.allowed(a, pid)
@@ -606,7 +728,7 @@ class Service:
             wd, ok, why = "", False, str(e)
         p = self.project(pid) or {}
         mode = self.mode(a, pid) if p else "shared"
-        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or []), "workdir": wd,
+        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or [], template, extra), "workdir": wd,
                 "where": "lokal auf diesem Rechner" if conn is None else "%s (%s)" % (conn["name"], ("%s@%s" % (conn["user"], conn["host"])) if conn["user"] else conn["host"]),
                 "cloud": bool(a.get("cloud", True)), "provider": KINDS[a["kind"]]["provider"], "kind": KINDS[a["kind"]]["label"],
                 "allowed": ok, "reason": why, "data_class": data_class(p), "mode": self.mode(a, pid) if p else "",
@@ -623,6 +745,13 @@ class Service:
         end = r["finished"] or time.time()
         v = dict(r)
         v["prompt_text"] = v.pop("prompt", "")
+        for k, empty in (("question", None), ("qa", []), ("checks", [])):
+            try:
+                v[k] = json.loads(r[k]) if r.get(k) else empty
+            except ValueError:
+                v[k] = empty
+        v["ack"] = bool(r.get("ack"))
+        v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
                  where=("lokal" if a and a["connection"] == "local" else conn["name"] if conn else "?"),
                  active=r["status"] in STATUS_ACTIVE, secs=int(end - r["started"]) if r["started"] else 0,
@@ -727,9 +856,17 @@ class Service:
                 (d / ("%d.%s" % (rid, ext))).unlink()
             except OSError:
                 pass
+        for f in list(d.glob("%d.answer.*" % rid)) + [d / ("%d.%s" % (rid, x)) for x in ("question.json", "qn", "checks", "summary.md")]:
+            try:
+                f.unlink()
+            except OSError:
+                pass
         pf = d / ("%d.prompt" % rid)
         pf.write_text(prompt, encoding="utf-8")
         spec = local_spec(a, prompt, pf, wd)
+        hb = write_helpers(d)
+        spec["env"] = dict(spec.get("env") or {}, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID=str(rid),
+                           PATH=str(hb) + os.pathsep + os.environ.get("PATH", ""))
         (d / ("%d.spec.json" % rid)).write_text(json.dumps(spec), encoding="utf-8")
         kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "cwd": str(d), "close_fds": True}
         if os.name == "nt":
@@ -756,6 +893,90 @@ class Service:
             age = time.time() - (r["started"] or time.time())
         return ("running", 0) if age < 30 else ("gone", 0)
 
+    def _local_question(self, r):
+        try:
+            return (self.run_dir / ("%d.question.json" % r["id"])).read_text(encoding="utf-8", errors="replace")[:4000]
+        except OSError:
+            return ""
+
+    # -- Rückfragen (0.18)
+    def _note_question(self, r, raw):
+        """Neue Frage merken (genau einmal je Nummer), beantwortete oder verschwundene vergessen."""
+        q = parse_question(raw) if raw else None
+        answered = int(r.get("answered") or 0)
+        cur = json.loads(r["question"]) if r.get("question") else None
+        if q and q["id"] > answered:
+            if not cur or cur.get("id") != q["id"]:
+                q["ts"] = time.time()
+                self.store.agent_run_update(r["id"], question=json.dumps(q, ensure_ascii=False))
+                self._ev("agent.question", r, actor="agent", question=q["question"][:300], options=q["options"], blocking=q["blocking"], qid=q["id"])
+                log.info("Lauf %d fragt (%d): %s", r["id"], q["id"], q["question"][:120])
+        elif cur:
+            self.store.agent_run_update(r["id"], question="")
+
+    def answer(self, run_id, qid, text):
+        text = str(text or "").replace("\r\n", "\n").strip()
+        if not text or len(text) > 4000 or "\0" in text:
+            raise AgentError("Die Antwort fehlt oder ist länger als 4000 Zeichen.")
+        with self.lock:
+            r = self.store.agent_run(run_id)
+            if not r or r["status"] != "läuft":
+                raise AgentError("Der Lauf läuft nicht mehr; die Antwort kommt nicht mehr an.")
+            cur = json.loads(r["question"]) if r.get("question") else None
+            try:
+                qid = int(qid)
+            except (TypeError, ValueError):
+                raise AgentError("Fragenummer fehlt.")
+            if not cur or cur.get("id") != qid:
+                raise AgentError("Diese Frage ist nicht (mehr) offen.")
+            a = self.agent(r["agent"])
+            conn = self.conn_of(a)
+            if conn is None:
+                d = self.run_dir
+                tmp = d / ("%d.answer.%d.tmp" % (run_id, qid))
+                tmp.write_text(text + "\n", encoding="utf-8")
+                os.replace(tmp, d / ("%d.answer.%d" % (run_id, qid)))
+                try:
+                    (d / ("%d.question.json" % run_id)).unlink()
+                except OSError:
+                    pass
+            else:
+                rc, out, err = run_remote(conn, answer_script(run_id, qid, text), timeout=20)
+                if rc != 0 or "ok" not in out:
+                    raise AgentError("Antwort nicht zugestellt (Exit %d): %s" % (rc, clean_text(err or out, 200).strip()))
+            qa = json.loads(r["qa"]) if r.get("qa") else []
+            qa.append({"id": qid, "q": cur.get("question", ""), "options": cur.get("options") or [], "a": text[:2000], "ts_q": cur.get("ts"), "ts_a": time.time()})
+            self.store.agent_run_update(run_id, question="", answered=str(qid), qa=json.dumps(qa[-20:], ensure_ascii=False))
+            self._ev("agent.answer", r, qid=qid, question=cur.get("question", "")[:300], answer=text[:300])
+            return {"ok": True}
+
+    # -- Ergebnisbericht und Belege (0.18)
+    def collect(self, r):
+        """Bericht (<nr>.summary.md) und Belege (<nr>.checks) einsammeln. Fehler sind still: Der Bericht ist eine Zugabe."""
+        try:
+            a = self.agent(r["agent"])
+            conn = self.conn_of(a)
+            if conn is None:
+                d = self.run_dir
+                rd = lambda ext: (d / ("%d.%s" % (r["id"], ext))).read_text(encoding="utf-8", errors="replace") if (d / ("%d.%s" % (r["id"], ext))).exists() else ""
+                summary, checks = rd("summary.md")[:20000], rd("checks")
+            else:
+                rc, out, _ = run_remote(conn, remote_report_script(r["id"]), timeout=20)
+                if rc != 0 or "@@CHECKS" not in out:
+                    return False
+                head, _, checks = out.partition("@@CHECKS")
+                summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
+            self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False))
+            return True
+        except (AgentError, OSError) as e:
+            log.debug("Bericht von Lauf %s nicht lesbar: %s", r.get("id"), e)
+            return False
+
+    def ack(self, run_id):
+        r = self.store.agent_run(run_id)
+        if r and r["status"] not in ("zugewiesen", "läuft"):
+            self.store.agent_run_update(run_id, ack="1")
+
     def poll(self, force=False):
         """Stand aller laufenden Läufe ablesen (ein SSH-Aufruf je Zielhost). Fehler bei der Abfrage lassen den Lauf auf «läuft» und stehen im Hinweis."""
         with self.lock:
@@ -776,8 +997,10 @@ class Service:
                 except AgentError:
                     self.store.agent_run_update(r["id"], status="verloren", note="Der Agent wurde aus der Konfiguration entfernt.", finished=time.time())
             for cid, runs in by_conn.items():
+                qs = {}
                 if cid == "local":
                     res = {r["id"]: self._local_status(r) for r in runs}
+                    qs = {r["id"]: self._local_question(r) for r in runs}
                 else:
                     conn = self.conns().get(cid)
                     if not conn:
@@ -793,6 +1016,9 @@ class Service:
                     res = {}
                     for line in out.splitlines():
                         p = line.split()
+                        if len(p) >= 2 and p[0].isdigit() and p[1] == "q":
+                            qs[int(p[0])] = line.split(" q ", 1)[1] if " q " in line else ""
+                            continue
                         if len(p) >= 2 and p[0].isdigit():
                             res[int(p[0])] = ("exit", int(p[2]) if len(p) > 2 and p[2].lstrip("-").isdigit() else 1) if p[1] == "exit" else (p[1], 0)
                 for r in runs:
@@ -800,16 +1026,20 @@ class Service:
                     if st is None:
                         continue
                     if st[0] == "exit":
-                        self.store.agent_run_update(r["id"], status="fertig" if st[1] == 0 else "fehlgeschlagen", exit_code=st[1], finished=time.time(), note="")
+                        self.store.agent_run_update(r["id"], status="fertig" if st[1] == 0 else "fehlgeschlagen", exit_code=st[1], finished=time.time(), note="",
+                                                    question="")
+                        self.collect(r)
                         self._ev("agent.finish", r, ok=st[1] == 0, actor="agent", status="fertig" if st[1] == 0 else "fehlgeschlagen", exit_code=st[1],
                                  minutes=int((time.time() - (r["started"] or time.time())) // 60))
                     elif st[0] == "gone":
-                        self.store.agent_run_update(r["id"], status="verloren", finished=time.time(),
+                        self.store.agent_run_update(r["id"], status="verloren", finished=time.time(), question="",
                                                     note="Weder Exit-Datei noch Sitzung gefunden (Zielhost neu gestartet, tmux beendet?).")
+                        self.collect(r)
                         self._ev("agent.finish", r, ok=False, actor="agent", status="verloren")
                     else:
                         if r["note"]:
                             self.store.agent_run_update(r["id"], note="")
+                        self._note_question(self.store.agent_run(r["id"]), qs.get(r["id"], ""))
 
     def _expire(self, r):
         """Zeitlimit des Agenten überschritten? Dann beenden und als «abgelaufen» markieren. Gibt True zurück, wenn beendet."""
@@ -832,7 +1062,9 @@ class Service:
             if "Beenden fehlgeschlagen" not in (r.get("note") or ""):
                 self._ev("agent.expire", r, ok=False, actor="watchdog", max_minutes=mx, error=str(e)[:200])
             return False
-        self.store.agent_run_update(r["id"], status="abgelaufen", finished=time.time(), note="Zeitlimit von %d min erreicht und beendet." % mx)
+        self.store.agent_run_update(r["id"], status="abgelaufen", finished=time.time(), question="",
+                                    note="Zeitlimit von %d min erreicht und beendet." % mx + (" Eine Frage war noch offen." if r.get("question") else ""))
+        self.collect(r)
         self._ev("agent.expire", r, actor="watchdog", max_minutes=mx)
         log.warning("Lauf %d (%s, Ticket %s) nach %d min beendet (Zeitlimit)", r["id"], a["id"], r["ticket"], mx)
         return True
@@ -848,7 +1080,8 @@ class Service:
                 self._local_kill(r)
             else:
                 run_remote(conn, remote_kill_script(run_id), timeout=20)
-            self.store.agent_run_update(run_id, status="abgebrochen", finished=time.time(), note="Von dir gestoppt.")
+            self.store.agent_run_update(run_id, status="abgebrochen", finished=time.time(), note="Von dir gestoppt.", question="")
+            self.collect(r)
             self._ev("agent.stop", r, minutes=int((time.time() - (r["started"] or time.time())) // 60))
 
     def _local_kill(self, r):
@@ -929,9 +1162,9 @@ class Service:
                     repo, _root = self._paths(a, r["project_id"])
                     self._sh(a, conn, cleanup_script(r["mode"], self._q(a, repo), r["wt"], run_id), run_id)
                 if conn is None:
-                    for ext in ("exit", "exit.tmp", "log", "hb", "pid", "prompt", "spec.json", "base", "init", "patch", "wd"):
+                    for f in self.run_dir.glob("%d.*" % run_id) if self.run_dir.is_dir() else []:
                         try:
-                            (self.run_dir / ("%d.%s" % (run_id, ext))).unlink()
+                            f.unlink()
                         except OSError:
                             pass
                 elif r["status"] != "zugewiesen":

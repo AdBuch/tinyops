@@ -618,3 +618,93 @@ class Config(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ASK_CMD = ('ans=$(tinyops-ask -t 30 "Retry mit Backoff oder fix?" "Backoff" "fix"); echo "got:$ans"; '
+           'tinyops-check sh -c "exit 0"; tinyops-check sh -c "exit 4"; echo "# Bericht\\n- Backoff eingebaut" | tinyops-report')
+
+
+class Questions(unittest.TestCase):
+    """0.18: Der Agent fragt (tinyops-ask), bekommt die Antwort, läuft weiter; Bericht und Belege landen im Lauf."""
+
+    def run_case(self, conn):
+        env = Env(self)
+        c = cfg(env, command=ASK_CMD, conn=conn)
+        if conn == "local":
+            ws = env.d / "lws"
+            git_repo(ws / "repo")
+            c["agents"][0]["workspace_root"] = str(ws)
+        svc = service(env, c)
+        events = []
+        svc.audit = lambda action, target="", ok=True, actor="du", **d: events.append((action, actor, d))
+        rid = svc.assign("a1", "DLP-1", 7, "", "t")
+        svc.start(rid, "Mach es")
+        q = wait_for(lambda: (svc.poll(force=True), svc.run_view(svc.store.agent_run(rid))["question"])[1])
+        self.assertTrue(q, svc.tail(rid))
+        self.assertEqual((q["id"], q["question"], q["options"], q["blocking"]), (1, "Retry mit Backoff oder fix?", ["Backoff", "fix"], True))
+        for _ in range(3):                                  # mehrmals abfragen: die Frage zählt einmal
+            svc.poll(force=True)
+        self.assertEqual([e[0] for e in events].count("agent.question"), 1)
+        # Ablauf: «Agent fragt» steht als nächster Schritt da
+        import flow
+        d = flow.derive({"id": "DLP-1", "key": "DLP-1", "items": [], "stage": "impl"}, [svc.run_view(svc.store.agent_run(rid))])
+        self.assertEqual((d["next"]["id"], d["next"]["kind"], d["next"]["action"]["qid"]), ("agent_question", "do", 1))
+        with self.assertRaises(agents.AgentError):
+            svc.answer(rid, 2, "falsche Nummer")
+        svc.answer(rid, 1, "Backoff")
+        self.assertIsNone(svc.run_view(svc.store.agent_run(rid))["question"])
+        with self.assertRaises(agents.AgentError):
+            svc.answer(rid, 1, "doppelt")
+        self.assertTrue(wait_for(lambda: (svc.poll(force=True), svc.store.agent_run(rid)["status"] != "läuft")[1]))
+        v = svc.run_view(svc.store.agent_run(rid))
+        self.assertEqual(v["status"], "fertig", svc.tail(rid))
+        self.assertIn("got:Backoff", svc.tail(rid))
+        self.assertEqual([x["exit"] for x in v["checks"]], [0, 4])
+        self.assertFalse(v["checks_ok"])
+        self.assertIn("Backoff eingebaut", v["summary"])
+        self.assertEqual(v["qa"][0]["a"], "Backoff")
+        self.assertEqual([e[0] for e in events], ["agent.assign", "agent.start", "agent.question", "agent.answer", "agent.finish"])
+        self.assertEqual(events[2][1], "agent")
+        d = flow.derive({"id": "DLP-1", "key": "DLP-1", "items": [], "stage": "impl"}, [v])
+        self.assertEqual(d["next"]["id"], "agent_result")
+        self.assertIn("2 Belege, 1 mit Fehler", d["next"]["why"])
+        svc.ack(rid)
+        self.assertTrue(svc.run_view(svc.store.agent_run(rid))["ack"])
+        return svc, rid
+
+    @unittest.skipUnless(HAVE_TMUX, "tmux nicht installiert")
+    def test_remote_question_answer_report(self):
+        self.run_case("box")
+
+    def test_local_question_answer_report(self):
+        svc, rid = self.run_case("local")
+        self.assertTrue((svc.run_dir / "bin" / "tinyops-ask").exists())
+
+    def test_ask_timeout_and_rewait(self):
+        d = Path(tempfile.mkdtemp())
+        agents.write_helpers(d)
+        env = dict(os.environ, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID="9", PATH=str(d / "bin") + os.pathsep + os.environ["PATH"])
+        r = subprocess.run(["tinyops-ask", "-t", "2", "Frage?"], env=env, capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 3)
+        self.assertIn("--wait 1", r.stderr)
+        (d / "9.answer.1").write_text("ja\n")
+        r = subprocess.run(["tinyops-ask", "--wait", "1", "-t", "2"], env=env, capture_output=True, text=True, timeout=20)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "ja"))
+        self.assertEqual(json.loads((d / "9.question.json").read_text())["id"], 1)
+        r = subprocess.run(["tinyops-ask", "x"], env=dict(env, TINYOPS_RUN_ID=""), capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
+    def test_parse_question_and_checks(self):
+        self.assertEqual(agents.parse_question("kein json")["question"], "kein json")
+        self.assertIsNone(agents.parse_question(" "))
+        q = agents.parse_question('{"id": 3, "question": "x", "options": ["a", "", "b"], "blocking": false}')
+        self.assertEqual((q["id"], q["options"], q["blocking"]), (3, ["a", "b"], False))
+        c = agents.parse_checks('{"cmd": "mvn test", "exit": 0, "secs": 3, "ts": 1}\nmüll\n{"cmd": "x"}')
+        self.assertEqual(c, [{"cmd": "mvn test", "exit": 0, "secs": 3, "ts": 1}])
+
+    def test_prompt_mentions_tools(self):
+        env = Env(self)
+        svc = service(env, cfg(env, command="true"))
+        p = svc.prompt_info("a1", "DLP-1", 7, "b", "T", "DLP-1")["prompt"]
+        for w in ("tinyops-ask", "tinyops-check", "tinyops-report"):
+            self.assertIn(w, p)

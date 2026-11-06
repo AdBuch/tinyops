@@ -83,7 +83,20 @@ class H(BaseHTTPRequestHandler):
             x = next((x for x in PULLS[full] if str(x["number"]) == rest[1]), None)
             return self._json(200, dict(x, mergeable_state="clean")) if x else self._json(404, {})
         if rest[0] == "pulls" and rest[2:] == ["reviews"]:
+            if rest[1] == "3":
+                return self._json(200, [{"id": 31, "user": {"login": "carol"}, "state": "CHANGES_REQUESTED", "body": "Bitte Tests ergänzen.", "commit_id": "s3",
+                                         "html_url": HOST + "/web/pr/3#r31"}])
             return self._json(200, [{"user": {"login": "octocat"}, "state": "COMMENTED"}, {"user": {"login": "octocat"}, "state": "APPROVED"}] if rest[1] == "7" else [])
+        if rest[0] == "pulls" and rest[2:] == ["comments"]:
+            if rest[1] != "7" or q.get("page", "1") != "1":
+                return self._json(200, [])
+            return self._json(200, [
+                {"id": 701, "path": "hooks/recv.py", "line": 20, "start_line": 18, "side": "RIGHT", "commit_id": "s7", "position": 4, "body": "Signatur prüfen",
+                 "user": {"login": "octocat"}, "created_at": "2026-11-01T10:00:00Z", "html_url": HOST + "/web/pr/7#c701", "diff_hunk": "@@ GEHEIMER CODE"},
+                {"id": 702, "path": "hooks/recv.py", "line": 21, "side": "RIGHT", "commit_id": "s7", "position": 5, "body": "erledigt?", "in_reply_to_id": 701,
+                 "user": {"login": "adrian"}, "created_at": "2026-11-01T11:00:00Z"},
+                {"id": 703, "path": "hooks/old.py", "original_line": 3, "side": "LEFT", "commit_id": "s6", "position": None, "body": "veraltet",
+                 "user": {"login": "octocat"}, "created_at": "2026-10-30T10:00:00Z"}])
         if rest[0] == "issues" and rest[2:] == ["reactions"]:
             return self._json(200, [{"content": "+1"}] if rest[1] == "7" else [])
         if rest[0] == "commits" and rest[2:] == ["check-runs"]:

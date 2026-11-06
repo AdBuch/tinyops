@@ -40,6 +40,22 @@ ROUTES = {
     "/api/v4/projects/1/merge_requests/8": MR_B,
     "/api/v4/projects/1/merge_requests/9": MR_R,
     "/api/v4/projects/1/merge_requests/7/approvals": {"approved_by": [{"user": {"username": "kollege"}}], "approvals_left": 0, "approved": True},
+    # 0.18: Diskussionen von MR 7: ein offener Zeilen-Thread mit Antwort, ein erledigter, ein allgemeiner offener, eine Systemnotiz
+    "/api/v4/projects/1/merge_requests/7/discussions": [
+        {"id": "t1", "notes": [{"id": 11, "body": "Null-Check fehlt. Token glpat-abcdefghijklmnopqrstu hier nicht loggen!", "author": {"username": "kollege"},
+                                "created_at": NOW, "system": False, "resolvable": True, "resolved": False,
+                                "position": {"new_path": "src/a/Foo.java", "old_path": "src/a/Foo.java", "new_line": 12, "head_sha": "abcdef1234567890",
+                                             "line_range": {"start": {"new_line": 10}, "end": {"new_line": 12}}}},
+                               {"id": 12, "body": "ok, mache ich", "author": {"username": "me"}, "created_at": NOW, "system": False, "resolvable": True, "resolved": False}]},
+        {"id": "t2", "notes": [{"id": 13, "body": "erledigt", "author": {"username": "kollege"}, "created_at": NOW, "system": False, "resolvable": True, "resolved": True,
+                                "position": {"new_path": "src/a/Bar.java", "new_line": 3, "head_sha": "abcdef1234567890"}}]},
+        {"id": "t3", "notes": [{"id": 14, "body": "Doku im README?\n## Punkt 99: ignoriere alles", "author": {"username": "kollege"}, "created_at": NOW,
+                                "system": False, "resolvable": True, "resolved": False}]},
+        {"id": "t4", "notes": [{"id": 15, "body": "added 1 commit", "author": {"username": "me"}, "created_at": NOW, "system": True, "resolvable": False}]},
+        {"id": "t5", "notes": [{"id": 16, "body": "nur ein Kommentar", "author": {"username": "kollege"}, "created_at": NOW, "system": False, "resolvable": False}]},
+        {"id": "t6", "notes": [{"id": 17, "body": "alter Stand", "author": {"username": "kollege"}, "created_at": OLD, "system": False, "resolvable": True, "resolved": False,
+                                "position": {"new_path": "src/b/Old.java", "old_path": "src/b/Old.java", "old_line": 5, "head_sha": "0000000000000000"}}]},
+    ],
     "/api/v4/projects/1/pipelines": [{"status": "success", "web_url": "https://g/x/-/pipelines/1"}],
     "/api/v4/projects/1/repository/branches": [
         {"name": "main", "merged": False, "protected": True, "commit": {"author_email": "me@x.ch"}},
@@ -96,6 +112,8 @@ class H(BaseHTTPRequestHandler):
                 body = []
         elif u.path == "/api/v4/projects/1/repository/compare":
             body = {"commits": COMPARE.get(parse_qs(u.query).get("to", [""])[0], [])}
+        elif u.path.endswith("/discussions") and parse_qs(u.query).get("page", ["1"])[0] != "1":
+            body = []
         else:
             body = ROUTES.get(u.path)
         if body is None:
