@@ -3,6 +3,7 @@ name: Auto-Tag
 # Auf main: Steht in server.py eine VERSION, zu der es noch keinen Tag gibt, setzt dieser Ablauf den Tag vX.Y.Z
 # auf genau diesen Commit und baut das Release (Launcher, Zipapp, Notizen aus dem CHANGELOG).
 # Damit reicht «git push origin main»; Tags von Hand pushen ist nicht mehr nötig.
+# Gibt es den Tag schon, aber noch kein Release (z. B. nach einem Fehler beim Bauen), baut er nur das Release nach.
 on:
   push:
     branches: [main]
@@ -23,23 +24,31 @@ jobs:
       tag: ${{ steps.v.outputs.tag }}
       new: ${{ steps.v.outputs.new }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: v
         name: Version lesen
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           V=$(python3 -c "import re;print(re.search(r'^VERSION = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"', open('server.py').read(), re.M).group(1))")
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          if ! grep -q "^## \[$V\]" CHANGELOG.md; then
+            echo "new=false" >> "$GITHUB_OUTPUT"; echo "::warning::CHANGELOG hat keinen Abschnitt [$V]; kein Tag."; exit 0
+          fi
           if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
-            echo "new=false" >> "$GITHUB_OUTPUT"; echo "Tag v$V gibt es schon."
-          elif ! grep -q "^## \[$V\]" CHANGELOG.md; then
-            echo "new=false" >> "$GITHUB_OUTPUT"; echo "::warning::CHANGELOG hat keinen Abschnitt [$V]; kein Tag."
+            echo "settag=false" >> "$GITHUB_OUTPUT"; echo "Tag v$V gibt es schon."
+          else
+            echo "settag=true" >> "$GITHUB_OUTPUT"
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$V" >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"; echo "Release v$V gibt es schon."
           else
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Tag setzen
-        if: steps.v.outputs.new == 'true'
+        if: steps.v.outputs.settag == 'true'
         env:
           TAG: ${{ steps.v.outputs.tag }}
         run: |
