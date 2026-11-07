@@ -30,7 +30,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.21.1** ✓ | Launcher zum Herunterladen, GitHub Actions für Tests und Releases (geliefert 2026-11-06) | – | S |
 | **0.22.0** ✓ | KI-Tempo mit Zeitmarke, UI-Nutzung lokal erfassen für die UI-Optimierung (geliefert 2026-11-06) | – | S–M |
 | **0.23.0** ✓ | Helpdesk-Jira (nur lesend), Fokusbereiche mit Wochenziel (Berufsbildung 30 %), Fokus-Sitzung und Fokus-Modus, Auto-Tag (geliefert 2026-11-07) | – | M |
-| 0.24.0 | Mail, Kalender, Teams ohne Graph-App: Kalender als ICS-Abo im Tagesplan, Termine buchen über Outlook- und Teams-Links, «wartet auf Antwort» (Umfang hängt an Outlook-Variante) | – | M |
+| 0.24.0 | Kalender und Termine ohne Graph-App (neues Outlook/Web, ICS mit Details freigegeben): Outlook-Kalender als ICS-Abo im Tagesplan, Termine vor Fokus-Blöcken und Sitzungen, freie Lücken für Berufsbildung, Termin buchen über Outlook- und Teams-Links. Mails lesen geht im neuen Outlook ohne Graph nicht: «wartet auf Antwort» nur von Hand oder aus dem Helpdesk | – | M |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.
