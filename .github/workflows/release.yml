@@ -2,9 +2,15 @@ name: Release
 
 # Bei jedem Tag vX.Y.Z: Tests, dann den Launcher bauen (Zipapp und PyInstaller für Linux, macOS, Windows)
 # und als GitHub-Release mit dem CHANGELOG-Abschnitt veröffentlichen.
+# Ab 0.23 setzt «Auto-Tag» den Tag selbst und ruft diesen Ablauf direkt auf (Tags mit dem GITHUB_TOKEN starten keine Workflows).
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,6 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -37,6 +45,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -58,6 +68,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -66,12 +78,17 @@ jobs:
           path: assets
           merge-multiple: true
       - name: Zipapp und Release-Text
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           python launcher/build.py assets/tinyops-launcher.pyz
-          V="${GITHUB_REF_NAME#v}"
+          V="${TAG#v}"
           awk -v v="$V" '/^## \[/{p = ($0 ~ "^## \\[" v "\\]")} p' CHANGELOG.md > notes.md
           printf '\n---\nStart: Launcher für dein System herunterladen und ausführen (macOS/Linux: vorher `chmod +x`). Braucht git und Python 3.10+.\n' >> notes.md
       - name: Veröffentlichen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" assets/* --title "tinyops $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG gibt es schon."; exit 0; fi
+          gh release create "$TAG" assets/* --title "tinyops $TAG" --notes-file notes.md --verify-tag

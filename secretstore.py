@@ -15,7 +15,8 @@ import sys
 from pathlib import Path
 
 SERVICE = "tinyops"
-NAMES = ("gitlab_token", "jira_token", "jira_password", "access_token", "llm_key", "sonar_token", "github_token", "mcp_token")
+NAMES = ("gitlab_token", "jira_token", "jira_password", "access_token", "llm_key", "sonar_token", "github_token", "mcp_token",
+         "helpdesk_token", "helpdesk_password")
 
 # Umgebungsvariablen, die Secrets enthalten können: werden Jobs nicht vererbt.
 SENSITIVE_ENV = set()

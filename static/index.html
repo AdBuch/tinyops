@@ -10,6 +10,7 @@
     --ground: #eceef1; --surface: #ffffff; --raised: #f4f5f8; --ink: #161a21; --quiet: #596271; --line: #d8dce3;
     --focus: #2747d6; --focus-bg: #e3e8fb;
     --jira: #6b3fc4; --jira-bg: #ece6fa; --gl: #b4530b; --gl-bg: #fbe9d8;
+    --hd: #0b7480; --hd-bg: #d9f0f1; --bb: #9a3d86; --bb-bg: #f6e2f1;
     --ok: #12744a; --ok-bg: #dcf1e6; --bad: #bc2d26; --bad-bg: #fbe3e1; --warn: #94560a; --warn-bg: #faebcf;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     --sans: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -19,6 +20,7 @@
       --ground: #0f1217; --surface: #171b22; --raised: #1e232c; --ink: #e8ebf1; --quiet: #9aa3b2; --line: #29303b;
       --focus: #86a2ff; --focus-bg: #1c2540;
       --jira: #b99cff; --jira-bg: #2a2147; --gl: #f2a15f; --gl-bg: #3a2616;
+      --hd: #63cfd9; --hd-bg: #12302f; --bb: #ee93d9; --bb-bg: #37182f;
       --ok: #62d4a0; --ok-bg: #16302a; --bad: #ff8f87; --bad-bg: #36201f; --warn: #f2bc5c; --warn-bg: #33290f;
     }
   }
@@ -294,6 +296,7 @@
   .field > label { font-size: 13px; font-weight: 650; }
   .field .help { font-size: 12.5px; color: var(--quiet); max-width: 70ch; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 16px; align-items: start; }
   @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
   input[type=text], input[type=password], input[type=number], select.full, textarea.full {
     width: 100%; font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
@@ -651,6 +654,63 @@
   .ragent .agspin { color: var(--k-wait); } .ragent span { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #fRailUsage #usageBox { margin: 0; }
 
+
+  /* Helpdesk und Fokusbereiche (0.23) */
+  .st-hd { background: var(--hd-bg); color: var(--hd); }
+  .hdprio { width: 136px; flex: none; display: flex; align-items: center; gap: 3px; }
+  .hdprio::before { content: ""; height: 6px; border-radius: 3px; background: var(--hd); width: calc(var(--w, 3) * 20%); }
+  .hdprio.p1 { --w: 1; } .hdprio.p2 { --w: 2; } .hdprio.p3 { --w: 3; } .hdprio.p4 { --w: 4; } .hdprio.p5 { --w: 5; }
+  .hdprio.p4::before, .hdprio.p5::before { background: var(--bad); }
+  .hdst { font-weight: 650; color: var(--hd); }
+  .hdq { display: grid; gap: 4px; padding: 8px 14px 12px; }
+  .hdq .q { display: grid; grid-template-columns: 14px 92px minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; font-size: 13.5px; }
+  .hdq .q .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hdq .q small { color: var(--quiet); }
+  .hdq .q i { width: 8px; height: 8px; border-radius: 50%; background: transparent; align-self: center; }
+  .hdq .q.new i { background: var(--hd); }
+  .hdq .q.new .tt { font-weight: 650; }
+  .hdq .q .sla { color: var(--bad); font-weight: 650; }
+  .hdqh { display: flex; gap: 10px; align-items: center; } .hdqh .sp { flex: 1; }
+  .ar-dev { --ac: var(--focus); --ac-bg: var(--focus-bg); } .ar-hd { --ac: var(--hd); --ac-bg: var(--hd-bg); } .ar-bb { --ac: var(--bb); --ac-bg: var(--bb-bg); }
+  .ar-x { --ac: var(--xp); --ac-bg: var(--xp-bg); }
+  .farea { display: grid; gap: 5px; font-size: 13px; }
+  .farea .l1 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .farea .l1 b { font-weight: 650; } .farea .l1 span { color: var(--quiet); font-size: 12px; }
+  .fabar { position: relative; height: 10px; border-radius: 5px; background: var(--raised); overflow: visible; }
+  .fabar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--ac, var(--focus)); max-width: 100%; }
+  .fabar > em { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+  .farea .lag { color: var(--warn); font-size: 12px; } .farea .lead { color: var(--ok); font-size: 12px; }
+  .fshare { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--raised); }
+  .fshare i { background: var(--ac); }
+  .fblock { display: flex; gap: 12px; align-items: center; padding: 9px 14px; border-radius: 12px; background: var(--ac-bg); color: var(--ac); font-size: 13.5px; }
+  .fblock b { font-weight: 700; } .fblock .sp { flex: 1; }
+  .fblock button { border-color: currentColor; color: inherit; background: transparent; }
+  #fsDlg .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  #fsDlg .chips button.on, #fmode .acts button.on { background: var(--ac, var(--focus)); color: var(--surface); border-color: transparent; }
+  #fsDlg .what { display: grid; gap: 6px; }
+  #fsDlg .what label { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  #fsDlg .what label:has(input:checked) { border-color: var(--ac, var(--focus)); background: var(--ac-bg, var(--focus-bg)); }
+  #fsDlg .what small { color: var(--quiet); margin-left: auto; }
+  /* Fokus-Modus: alles andere verschwindet */
+  #fmode { position: fixed; inset: 0; z-index: 30; background: var(--ground); display: grid; grid-template-rows: auto 1fr auto; padding: 22px 28px; }
+  #fmode .top { display: flex; gap: 12px; align-items: center; color: var(--quiet); font-size: 13.5px; }
+  #fmode .top .sp { flex: 1; }
+  #fmode .tag { padding: 3px 10px; border-radius: 999px; background: var(--ac-bg); color: var(--ac); font-weight: 700; font-size: 12.5px; }
+  #fmode .mid { display: grid; place-content: center; justify-items: center; gap: 22px; text-align: center; max-width: 760px; margin: 0 auto; width: 100%; }
+  #fmode .clock { font-size: clamp(72px, 14vw, 168px); font-weight: 300; letter-spacing: -.04em; line-height: .9; font-variant-numeric: tabular-nums; }
+  #fmode .clock.over { color: var(--ac); }
+  #fmode .what { font-size: 20px; font-weight: 600; max-width: 62ch; }
+  #fmode .what small { display: block; font-size: 13px; font-weight: 500; color: var(--quiet); margin-top: 4px; }
+  #fmode .line { width: min(560px, 80vw); height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
+  #fmode .line i { display: block; height: 100%; background: var(--ac); transition: width 1s linear; }
+  #fmode .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  #fmode .park { display: flex; gap: 8px; width: min(560px, 86vw); }
+  #fmode .park input { flex: 1; }
+  #fmode .bot { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  #fmode .fmhint { color: var(--quiet); font-size: 12.5px; }
+  .fpill { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px; background: var(--ac-bg); color: var(--ac); font-weight: 650; font-size: 12.5px; border: 0; cursor: pointer; font-variant-numeric: tabular-nums; }
+  @media (max-width: 700px) { .hdq .q { grid-template-columns: 10px 76px minmax(0, 1fr); } .hdq .q > :nth-child(n+4) { display: none; } }
+
   /* Detail-Panel auf der halben Seite */
   #fx { position: fixed; top: 52px; right: 0; bottom: 0; width: min(50vw, 860px); z-index: 9; background: var(--surface); border-left: 1px solid var(--line);
         box-shadow: -16px 0 40px rgba(10, 14, 22, .14); transform: translateX(102%); transition: transform .18s ease; display: flex; flex-direction: column; }
@@ -704,6 +764,7 @@
   <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
   <span id="fetched"></span>
   <span id="ver" class="quiet small" title="tinyops-Version"></span>
+  <button id="fPill" class="fpill" hidden title="Fokus-Modus öffnen"></button>
   <button id="ideaBtn" class="idea-btn" title="Idee festhalten (Taste i)" hidden>+ Idee</button>
   <button id="logBtn" class="quiet-btn">Log</button>
   <button id="refresh" title="GitLab, Jira und Sonar jetzt abgleichen">Neu laden</button>
@@ -720,6 +781,8 @@
   <aside id="fRail"><div id="fRailCards"></div><div id="fRailUsage"></div></aside>
 </div>
 <aside id="fx" hidden aria-label="Details"></aside>
+<dialog id="fsDlg" style="width:min(560px,94vw)"><div id="fsBody"></div></dialog>
+<div id="fmode" hidden role="dialog" aria-modal="true" aria-label="Fokus-Modus"></div>
 <div id="viewOverview" hidden>
   <section id="left">
     <div id="banners"></div>
@@ -1742,9 +1805,9 @@ const hm = secs => { const m = Math.max(0, Math.round(secs / 60)); return `${Mat
 let timeAt = Date.now();
 function timeChip(e) {
   const t = state.time || {};
-  if (!t.enabled || e.t !== 'card') return '';
+  if (!t.enabled || !['card', 'hd'].includes(e.t)) return '';
   const r = t.running;
-  if (r && r.key === e.id) {
+  if (r && r.key === (e.t === 'hd' ? e.h.key : e.id)) {
     return `<div class="htime" data-tbase="${r.today_secs}"><span class="dot"></span><span>Zeit läuft</span><b class="tval">${hm(r.today_secs)}</b><span>heute bei diesem Vorhaben</span>
       <button class="quiet-btn" data-tpause="1" title="Zeit anhalten; der Fokus bleibt">Pause</button><button class="quiet-btn" data-tview="1">Tag ansehen</button></div>`;
   }
@@ -2374,7 +2437,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokusbereiche</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -2503,6 +2566,37 @@ async function loadSettings() {
     <div class="row"><button class="primary" id="tm-test">Verbindung testen</button><span class="quiet small">Testet mit GET, bucht nichts.</span></div>
     <div id="tm-result"></div>`)}
 
+  ${sect('focusareas', 'Fokusbereiche', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
+    <div class="grid3">
+      ${field('fo-hours', 'Arbeitsstunden pro Woche', S.focus.week_hours, { type: 'number', err: 'focus.week_hours' })}
+      ${field('fo-start', 'Arbeitstag ab', S.focus.day_start, { ph: '08:00', err: 'focus.day_start' })}
+      ${field('fo-end', 'Arbeitstag bis', S.focus.day_end, { ph: '17:00', err: 'focus.day_end', help: 'Für «Soll bis jetzt»: Das Wochenziel wird anteilig auf die vergangene Arbeitszeit gerechnet.' })}
+    </div>
+    <div id="fa-list"></div>
+    <div class="row"><button id="fa-add">Bereich hinzufügen</button><span class="quiet small" id="fa-sum"></span></div>
+    <div class="ferr" data-err="focus.areas"></div>`)}
+
+  ${sect('helpdesk', 'Helpdesk-Jira', 'Eine zweite Jira-Instanz, nur lesend: dir zugewiesene Tickets erscheinen im Fokus, eine Queue meldet Neues, und angeheftet läuft die Zeit auf das Helpdesk-Ticket. Kommentieren und Status ändern bleibt im Helpdesk.', `
+    <label class="check"><input type="checkbox" id="hd-on" ${S.helpdesk.enabled ? 'checked' : ''}><span><strong>Helpdesk einbinden</strong></span></label>
+    <div class="grid2">
+      ${field('hd-url', 'Adresse', S.helpdesk.url, { ph: 'https://helpdesk.firma.example', err: 'helpdesk.url' })}
+      ${field('hd-name', 'Anzeigename', S.helpdesk.name, { ph: 'Helpdesk', err: 'helpdesk.name' })}
+      <div class="field"><label for="hd-auth">Anmeldeart</label>
+        <select class="full" id="hd-auth"><option value="basic" ${S.helpdesk.auth !== 'bearer' ? 'selected' : ''}>basic: Benutzername + Passwort (Jira 8.5)</option>
+          <option value="bearer" ${S.helpdesk.auth === 'bearer' ? 'selected' : ''}>bearer: Personal Access Token (ab Jira 8.14)</option></select>
+        <div class="ferr" data-err="helpdesk.auth"></div></div>
+      ${field('hd-user', 'Benutzername', S.helpdesk.username, { err: 'helpdesk.username' })}
+    </div>
+    <div id="hd-secbox"></div>
+    ${field('hd-jql', 'JQL «Mir zugewiesen»', S.helpdesk.assigned_jql, { area: true, rows: 2, err: 'helpdesk.assigned_jql' })}
+    ${field('hd-qjql', 'JQL Queue (optional)', S.helpdesk.queue_jql, { area: true, rows: 2, err: 'helpdesk.queue_jql', help: 'Zum Beispiel <code>project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC</code>. Neue Treffer sind fett, bis du «Alle gesehen» drückst.' })}
+    <div class="grid2">
+      ${field('hd-sla', 'SLA in Stunden', S.helpdesk.sla_hours, { type: 'number', err: 'helpdesk.sla_hours', help: 'Ab diesem Alter steigt ein Ticket nach oben und ist rot markiert.' })}
+      <div class="field"><label for="hd-area">Zeit zählt zum Bereich</label><select class="full" id="hd-area">${S.focus.areas.map(a => `<option value="${esc(a.id)}" ${a.id === S.helpdesk.area ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+    </div>
+    <div class="row"><button class="primary" id="hd-test">Verbindung testen</button>${S.secrets.helpdesk_password.set || S.secrets.helpdesk_token.set ? '<button id="hd-del">Gespeicherte Zugangsdaten löschen</button>' : ''}<span class="quiet small">Liest nur: Serverinfo, Anmeldung, beide JQL.</span></div>
+    <div id="hd-result"></div>`)}
+
   ${sect('usage', 'KI-Kontingent', 'Zeigt, wie viel im 5-Stunden- und Wochenfenster deines Claude- und Codex-Abos noch frei ist (gelesen über die Schnittstelle, die auch die CLIs nutzen: inoffiziell, kann sich ändern) und das Monatsbudget von Mistral (per Lesezeichen aus deinem Browser).', `
     <label class="check"><input type="checkbox" id="us-claude" ${S.usage.claude ? 'checked' : ''}><span><strong>Claude lesen</strong> <span class="quiet small">(Token aus der Anmeldedatei von Claude Code)</span></span></label>
     ${field('us-claude-file', 'Pfad der Claude-Anmeldedatei', S.usage.claude_file, { ph: '~/.claude/.credentials.json', err: 'usage.claude_file' })}
@@ -2557,6 +2651,14 @@ async function loadSettings() {
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
   renderLlmKey();
+  FA = S.focus.areas.map(a => ({ ...a, pools: (a.pools || []).join(', '), activities: (a.activities || []).join(', ') })); renderFocusAreas();
+  $('fa-add').onclick = () => { FA.push({ id: '', name: '', target_pct: 0, ticket: '', pools: '', activities: '', blocks_text: '' }); renderFocusAreas(); };
+  renderHdSecret(); $('hd-auth').onchange = renderHdSecret;
+  $('hd-test').onclick = () => busy($('hd-test'), 'Teste …', async () => {
+    try { $('hd-result').innerHTML = stepsHtml(await api('POST', '/api/settings/test/helpdesk', hdForm())); }
+    catch (e) { $('hd-result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+  if ($('hd-del')) $('hd-del').onclick = () => delSecrets(['helpdesk_password', 'helpdesk_token'], 'Helpdesk-Zugangsdaten');
   $('tm-test').onclick = () => busy($('tm-test'), 'Teste …', async () => {
     try { $('tm-result').innerHTML = stepsHtml(await api('POST', '/api/settings/test/mcp', { url: val('tm-url'), allow_remote: $('tm-remote').checked, secret: $('tm-secret').value })); }
     catch (e) { $('tm-result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
@@ -2601,6 +2703,45 @@ function renderJiraSecret() {
       : ` Anlegen in Jira: Profil → Personal Access Tokens. Ein Jira-Token hat die Rechte deines Kontos.`) });
 }
 
+
+// Fokusbereiche und Helpdesk (0.23)
+let FA = [];
+function renderFocusAreas() {
+  const fixed = id => ['dev'].includes(id);
+  $('fa-list').innerHTML = FA.map((a, i) => `<div class="agbox ${arCls(a.id)}" data-fa="${i}">
+    <div class="grid3">
+      ${field('fa-n' + i, 'Name', a.name, { err: 'focus.areas' })}
+      ${field('fa-p' + i, 'Wochenziel in %', a.target_pct, { type: 'number', err: 'focus.areas.' + i + '.target_pct', help: fixed(a.id) ? 'Entwicklung ist der Rest, meist 0.' : '' })}
+      ${field('fa-t' + i, 'Buchen auf', a.ticket, { ph: 'Ticket oder Position', help: 'Für Zeit ohne Vorhaben (Block, Sitzung im Bereich). Leer: der Name des Bereichs.' })}
+    </div>
+    ${fixed(a.id) ? '' : `<div class="grid3">
+      ${field('fa-a' + i, 'Tätigkeiten', a.activities, { err: 'focus.areas.' + i + '.activities', help: 'Komma getrennt. Wählst du in der Sitzung; sie landen im Buchungstext.' })}
+      ${field('fa-c' + i, 'Kategorien im Board', a.pools, { err: 'focus.areas.' + i + '.pools', help: 'Vorhaben in diesen Kategorien zählen zu diesem Bereich.' })}
+      ${field('fa-b' + i, 'Feste Wochenblöcke', a.blocks_text || '', { ph: 'Di 13:30-17:00, Do 08:00-10:00', err: 'focus.areas.' + i + '.blocks', help: 'Im Block zeigt der Fokus ein Band zum Starten.' })}
+    </div>
+    <div class="row"><button class="quiet-btn" data-fadel="${i}">Bereich entfernen</button></div>`}
+  </div>`).join('');
+  const sum = FA.reduce((n, a) => n + (+a.target_pct || 0), 0);
+  $('fa-sum').textContent = `Ziele zusammen: ${sum} %` + (sum > 100 ? ' (zu viel)' : '');
+}
+function readFocusAreas() {
+  FA.forEach((a, i) => {
+    const g = k => $('fa-' + k + i) ? $('fa-' + k + i).value : null;
+    a.name = g('n'); a.target_pct = g('p'); a.ticket = g('t');
+    if (g('a') !== null) { a.activities = g('a'); a.pools = g('c'); a.blocks_text = g('b'); }
+  });
+  return FA;
+}
+document.addEventListener('click', ev => { const d = ev.target.closest && ev.target.closest('[data-fadel]'); if (d) { readFocusAreas(); FA.splice(+d.dataset.fadel, 1); renderFocusAreas(); } });
+document.addEventListener('input', ev => { if (ev.target.id && /^fa-p\d+$/.test(ev.target.id)) { readFocusAreas(); $('fa-sum').textContent = `Ziele zusammen: ${FA.reduce((n, a) => n + (+a.target_pct || 0), 0)} %`; } });
+function renderHdSecret() {
+  const basic = $('hd-auth').value !== 'bearer', name = basic ? 'helpdesk_password' : 'helpdesk_token';
+  const old = $('hd-secret') ? $('hd-secret').value : '';
+  $('hd-user').closest('.field').hidden = !basic;
+  $('hd-secbox').innerHTML = field('hd-secret', basic ? 'Passwort' : 'Personal Access Token', old, { type: 'password', err: name, ph: S.secrets[name].set ? '•••••••• gespeichert' : '',
+    help: secretHelp(name, basic ? 'Passwort' : 'Token') + (basic ? ' Jira 8.5 kennt keine Personal Access Tokens. Nach einem Fehlversuch pausiert der Test 30 Sekunden, damit das Konto nicht gesperrt wird.' : '') });
+}
+const hdForm = () => ({ url: val('hd-url'), auth: val('hd-auth'), username: val('hd-user'), secret: $('hd-secret').value, ca_bundle: val('gl-ca'), assigned_jql: val('hd-jql'), queue_jql: val('hd-qjql') });
 
 function renderLlmKey() {
   const show = $('lm-prov').value === 'openai';
@@ -2896,6 +3037,7 @@ function collect() {
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   if ($('tm-secret') && $('tm-secret').value.trim()) secrets.mcp_token = $('tm-secret').value;
+  if ($('hd-secret') && $('hd-secret').value.trim()) secrets[val('hd-auth') === 'bearer' ? 'helpdesk_token' : 'helpdesk_password'] = $('hd-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), ide_command: val('ide-cmd'),
@@ -2912,6 +3054,10 @@ function collect() {
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
+    helpdesk: { enabled: $('hd-on').checked, url: val('hd-url'), name: val('hd-name'), auth: val('hd-auth'), username: val('hd-user'), assigned_jql: val('hd-jql'),
+                queue_jql: val('hd-qjql'), sla_hours: val('hd-sla'), area: val('hd-area') },
+    focus: { week_hours: val('fo-hours'), day_start: val('fo-start'), day_end: val('fo-end'),
+             areas: readFocusAreas().map(a => ({ id: a.id, name: a.name, target_pct: a.target_pct, ticket: a.ticket, pools: a.pools, activities: a.activities, blocks_text: a.blocks_text || '' })) },
     secrets,
   };
 }
@@ -2927,6 +3073,7 @@ async function saveSettings() {
       if (S.jira.url) testJira();
       if (S.sonar.enabled && S.sonar.url) testSonar();
       if (S.github && S.github.enabled) testGithub();
+      if (S.helpdesk.enabled && S.helpdesk.url) $('hd-test').click();
     } catch (e) {
       showErrors(e.data && e.data.errors);
       toast(e.message);
@@ -2977,7 +3124,7 @@ const ACT = {
   threads: ['Offene Punkte', 'chat'], agent_question: ['Antworten', 'chat'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
   agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
-  retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'],
+  retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'], hd_work: ['Im Helpdesk öffnen', 'ext'],
   do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };
 const OWNER = { me: '', ci: 'gear', others: 'users', agent: 'bot', none: '' };
@@ -2994,15 +3141,20 @@ function focusEntries() {
   const cards = state.board.cards.filter(c => f.items[c.id]).map(c => ({ t: 'card', id: c.id, c, d: f.items[c.id], prio: f.items[c.id].prio }));
   const revs = (f.reviews || []).map(r => ({ t: 'review', id: 'rv:' + r.id, r, prio: 150 + Math.min(r.age_days || 0, 10) * 5,
     d: { next: r.next, phase: 4, phase_id: 'check', flags: [], checks: { done: 0, total: 0 }, checklist: [] } }));
-  return cards.concat(revs);
+  const hds = (f.helpdesk || []).map(h => ({ t: 'hd', id: h.id, h, prio: h.prio,
+    d: { next: h.next, phase: null, hd: true, flags: h.over_sla ? ['SLA'] : [], checks: { done: 0, total: 0 }, checklist: [] } }));
+  return cards.concat(revs, hds);
 }
+const hdName = () => ((state.flow && state.flow.hd_info) || {}).name || 'Helpdesk';
+const hAge = h => h == null ? '' : h < 1 ? Math.max(1, Math.round(h * 60)) + ' min' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' d';
 const mrNo = x => (x.host === 'github' ? '#' : '!') + x.iid;
-function eKey(e) { return e.t === 'review' ? mrNo(e.r) : (e.c.key || (e.c.idea_id ? 'Idee' : 'ohne Ticket')); }
-function eTitle(e) { return e.t === 'review' ? e.r.title : (e.c.title || '(ohne Titel)'); }
-function eUrl(e) { return e.t === 'review' ? e.r.url : (e.c.url || ''); }
+function eKey(e) { return e.t === 'hd' ? e.h.key : e.t === 'review' ? mrNo(e.r) : (e.c.key || (e.c.idea_id ? 'Idee' : 'ohne Ticket')); }
+function eTitle(e) { return e.t === 'hd' ? e.h.title : e.t === 'review' ? e.r.title : (e.c.title || '(ohne Titel)'); }
+function eUrl(e) { return e.t === 'hd' ? e.h.url : e.t === 'review' ? e.r.url : (e.c.url || ''); }
 function srcTags(e) {
   const t = [];
-  if (e.t === 'review') t.push(e.r.host === 'github' ? ['gh', 'GitHub'] : ['gl', 'GitLab']);
+  if (e.t === 'hd') t.push(['hd', hdName()]);
+  else if (e.t === 'review') t.push(e.r.host === 'github' ? ['gh', 'GitHub'] : ['gl', 'GitLab']);
   else {
     const c = e.c;
     if (c.key && !c.local) t.push(['jira', 'Jira']);
@@ -3010,9 +3162,10 @@ function srcTags(e) {
     if (c.items.some(x => x.host !== 'github')) t.push(['gl', 'GitLab']);
     if (c.items.some(x => x.host === 'github')) t.push(['gh', 'GitHub']);
   }
-  return t.map(([k, l]) => `<span class="st st-${k}" title="Quelle: ${l === 'tiny' ? 'eigenes Board' : l}">${l}</span>`).join('');
+  return t.map(([k, l]) => `<span class="st st-${k}" title="Quelle: ${l === 'tiny' ? 'eigenes Board' : esc(l)}">${esc(l)}</span>`).join('');
 }
 function trackHtml(d, big, pick) {
+  if (d.hd) return '';
   const ph = state.flow.phases, ps = state.flow.phase_stage || {};
   return `<ol class="trk ${big ? 'big' : ''} ${pick ? 'pick' : ''} k-${esc(d.next.kind)}" aria-label="Station ${d.phase + 1} von ${ph.length}: ${esc(ph[d.phase].label)}">` + ph.map((p, i) => {
     const s = i < d.phase ? 'past' : i === d.phase ? 'now' : 'todo';
@@ -3021,6 +3174,7 @@ function trackHtml(d, big, pick) {
   }).join('') + '</ol>';
 }
 function metaOf(e) {
+  if (e.t === 'hd') { const h = e.h; return `<span class="hdst">${esc(h.status)}</span>${h.priority ? `<span>${esc(h.priority)}</span>` : ''}${h.reporter ? `<span>von ${esc(h.reporter)}</span>` : ''}${h.age_h != null ? `<span class="${h.over_sla ? 'fflag' : ''}" title="${h.over_sla ? 'Über dem SLA' : 'Offen seit'}">seit ${hAge(h.age_h)}</span>` : ''}${h.outdated ? '<span class="fflag">veraltet</span>' : ''}`; }
   if (e.t === 'review') return `<span class="fm">${ic('mr')}${esc(e.r.project)}</span><span>von ${esc(e.r.author || '?')}</span><span>seit ${e.r.age_days} d</span>`;
   const c = e.c, d = e.d, p = [];
   const mrs = c.items.filter(x => x.iid), br = c.items.filter(x => !x.iid);
@@ -3036,7 +3190,7 @@ function goBtn(e, cls) {
   const n = e.d.next;
   if (n.kind === 'done') return '';
   let [l, i] = ACT[n.id] || ['Öffnen', 'ext'];
-  const items = e.t === 'review' ? [e.r] : e.c.items;
+  const items = e.t === 'review' ? [e.r] : e.t === 'hd' ? [] : e.c.items;
   if (items.length && items.every(x => x.host === 'github')) l = l.replace('MR', 'PR');
   return `<button class="${cls || 'fgo'} ${n.kind === 'wait' && !cls ? 'ghost' : ''}" data-fgo="${esc(e.id)}" title="${esc(l)}">${ic(i)}<span>${esc(l)}</span></button>`;
 }
@@ -3055,14 +3209,14 @@ function doneBtn(e, big) {
 }
 function fRow(e) {
   const n = e.d.next;
-  return `<div class="frow k-${esc(n.kind)}" data-fid="${esc(e.id)}">
-    ${trackHtml(e.d)}
+  return `<div class="frow k-${esc(n.kind)} ${e.t === 'hd' ? 'hdrow' : ''}" data-fid="${esc(e.id)}">
+    ${e.t === 'hd' ? `<span class="hdprio p${Math.min(5, e.h.prio_rank)}" title="Priorität ${esc(e.h.priority || 'ohne')}"></span>` : trackHtml(e.d)}
     <div class="fmain"><div class="fl1"><span class="fkey">${esc(eKey(e))}</span><span class="ftitle" title="${esc(eTitle(e))}">${esc(eTitle(e))}</span></div><div class="fl2">${srcTags(e)}${metaOf(e)}</div></div>
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
     <div class="fbtns">${doneBtn(e)}${goBtn(e)}</div></div>`;
 }
 function heroHtml(e, g) {
-  if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div></section>`;
+  if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div>${blockBanner()}</section>`;
   const n = e.d.next, url = eUrl(e);
   const pin = g && g.pinned;
   const lead = pin ? `Dein Fokus${n.kind === 'blocked' ? ' · blockiert' : n.kind === 'wait' ? ' · wartet' : ''}` : n.kind === 'blocked' ? `${ic('alert')} Blockiert: zuerst das` : e.t === 'review' ? `${ic('users')} Jemand wartet auf dich` : 'Jetzt dran';
@@ -3070,9 +3224,9 @@ function heroHtml(e, g) {
   return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
     ${trackHtml(e.d, true)}
-    ${pin ? timeChip(e) : ''}
+    ${pin ? timeChip(e) : ''}${blockBanner()}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
-      <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}<button class="big" data-fopen="${esc(e.id)}">Details</button>
+      <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}${state.focus && e.t !== 'review' ? `<button class="big" data-fsess="${esc(e.id)}" title="Fokus-Sitzung mit Zeitbox: Ablenkungen parken, Zeit läuft auf diese Aufgabe">${ic('clock')} Fokus</button>` : ''}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
   </section>`;
 }
@@ -3086,6 +3240,7 @@ function focusGroups() {
   return {
     hero, all,
     mine: cand.filter(e => e.t === 'card' && rest(e)),
+    hd: cand.filter(e => e.t === 'hd' && rest(e)),
     reviews: cand.filter(e => e.t === 'review' && rest(e)),
     wait: all.filter(e => e.d.next.kind === 'wait' && rest(e)), pinned: !!pinned,
     blockers: pinned ? act.filter(e => e.d.next.kind === 'blocked' && rest(e)) : [],
@@ -3122,6 +3277,8 @@ function renderFocus() {
   $('fHero').innerHTML = heroHtml(g.hero, g);
   box.innerHTML = fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', g.mine, g.hero ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
     + fGroup('Andere warten auf dich', 'Reviews und dir zugeteilte MRs', g.reviews, '')
+    + fGroup(hdName(), 'Dir zugewiesen, nach Priorität und SLA', g.hd, '')
+    + hdQueue()
     + fGroup('Läuft gerade', 'CI, Review, Agent: nichts zu tun, nur im Blick', g.wait, '')
     + fGroup('Geplant und Ideen', 'noch nicht begonnen', g.plan, '', true)
     + `<div class="fkeys"><kbd>j</kbd> <kbd>k</kbd> auswählen · <kbd>Enter</kbd> Details · <kbd>a</kbd> nächsten Schritt ausführen · <kbd>n</kbd> neue Aufgabe · <kbd>i</kbd> Idee · <kbd>Esc</kbd> schliessen${g.done ? ` · ${g.done} erledigt im Board` : ''}</div>`;
@@ -3131,6 +3288,9 @@ function renderFocus() {
   renderRail();
   celebrateNew();
   if (FXID) renderFx();
+  const ses = FOC() && FOC().session;
+  if (ses && !FM_OPEN && !LS.get('fmMin', false) && !$('fsDlg').open) FM_OPEN = true;
+  renderFmode();
 }
 // Neue Erfolge seit dem letzten Blick: kurz feiern
 function celebrateNew() {
@@ -3183,6 +3343,7 @@ function renderRail() {
       ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
     </section>`;
   }
+  h += focusRail();
   const j = state.jira;
   if (j && j.ok) {
     const n = Math.max(j.limit, j.count);
@@ -3203,12 +3364,18 @@ function renderFx() {
   if (!e) { closeFx(); return; }
   const n = e.d.next, url = eUrl(e);
   const keep = ['fxCkNew', 'fxNote', 'fxEnv'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
-  const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
+  const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : e.t === 'hd' ? 'Helpdesk' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
     <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
       ${(n.action || {}).accept ? `<div class="fxacc"><input id="fxNote" maxlength="500" placeholder="Was hast du getestet? (optional)" autocomplete="off"><input id="fxEnv" maxlength="120" placeholder="Umgebung (optional)" autocomplete="off"></div>` : ''}</div>
     ${accHtml(e.d.acceptance || [])}`;
-  if (e.t === 'review') {
+  if (e.t === 'hd') {
+    const h = e.h, info = state.flow.hd_info || {};
+    body += `<div><h3>${esc(hdName())} <small>nur lesend</small></h3><div class="fxitem"><span class="hdprio p${Math.min(5, h.prio_rank)}" style="width:44px"></span><div class="nm"><b>${esc(h.key)} ${esc(h.title)}</b><small><span class="hdst">${esc(h.status)}</span><span>${esc(h.priority || 'ohne Priorität')}</span>${h.reporter ? `<span>von ${esc(h.reporter)}</span>` : ''}${h.age_h != null ? `<span class="${h.over_sla ? 'chip warn' : ''}">offen seit ${hAge(h.age_h)}${h.over_sla ? `, über ${info.sla_hours} h SLA` : ''}</span>` : ''}${h.idle_h != null ? `<span>zuletzt geändert vor ${hAge(h.idle_h)}</span>` : ''}${h.due ? `<span>fällig ${esc(h.due)}</span>` : ''}</small></div>
+      <div class="ibtns"><a class="ibtn" href="${esc(h.url)}" target="_blank" rel="noopener">${ic('ext')} Im Helpdesk öffnen</a></div></div>
+      <div class="small quiet" style="margin-top:8px">Angeheftet läuft die Zeit auf ${esc(h.key)} (Bereich Helpdesk) und landet in den Zeitentwürfen. Kommentare und Status änderst du im Helpdesk selbst.</div></div>`;
+    body += `<div class="fxfoot">${state.flow.pinned === e.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(e.id)}">${ic('chevron2')} Als Fokus anheften</button>`}${FOC() ? `<button data-fsess="${esc(e.id)}">${ic('clock')} Fokus-Sitzung</button>` : ''}</div>`;
+  } else if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><button class="ibtn" data-topics="${esc(JSON.stringify({ host: e.r.host || 'gitlab', project_id: e.r.project_id, iid: e.r.iid }))}" title="Offene Review-Kommentare ansehen und exportieren">${ic('chat')} Offene Punkte</button><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
     const c = e.c;
@@ -3223,6 +3390,7 @@ function renderFx() {
     if (!c.idea_id) body += `<div><h3>Verlauf <small>Was du entschieden hast</small></h3><ol class="aud short" id="fxHist">${HIST.id === c.id ? audRows(HIST.rows, true) : '<li class="quiet small" style="display:block">lädt …</li>'}</ol></div>`;
     const foot = [];
     if (!c.idea_id) foot.push(state.flow.pinned === c.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(c.id)}">${ic('chevron2')} Als Fokus anheften</button>`);
+    if (!c.idea_id && FOC()) foot.push(`<button data-fsess="${esc(c.id)}">${ic('clock')} Fokus-Sitzung</button>`);
     if (c.idea_id) foot.push('<button data-fxboard="1">Im Board einplanen</button>');
     else foot.push('<button data-fxboard="1">Im Board zeigen</button>');
     if (c.local && !c.idea_id) foot.push(`<button data-fxdel="1">Aufgabe löschen</button>`);
@@ -3372,6 +3540,158 @@ document.addEventListener('keydown', ev => {
   else if (ev.key === 'Enter' && rows[Math.max(0, fSel)]) { ev.preventDefault(); openFx(rows[Math.max(0, fSel)].dataset.fid); }
   else if (ev.key === 'a') { const r = rows[Math.max(0, fSel)]; const e = r && fEntry(r.dataset.fid); if (e) { ev.preventDefault(); doNext(e, r.querySelector('[data-fgo]') || r); } }
   else if (ev.key === 'n') { ev.preventDefault(); $('fAdd').focus(); }
+});
+
+// ---- Helpdesk-Queue, Fokusbereiche, Fokus-Sitzung (0.23)
+const FOC = () => state && state.focus;
+const arCls = id => ['dev', 'hd', 'bb'].includes(id) ? 'ar-' + id : 'ar-x';
+function hdQueue() {
+  const q = (state.flow && state.flow.hd_queue) || [], info = (state.flow && state.flow.hd_info) || {};
+  if (!info.name || !q.length) return '';
+  const nw = q.filter(x => x.new).length;
+  const rows = q.map(x => `<div class="q ${x.new ? 'new' : ''}"><i></i><a class="fkey" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a><span class="tt" title="${esc(x.title)}">${esc(x.title)}</span>
+    <small>${esc(x.priority || '')}</small><small class="${x.over_sla ? 'sla' : ''}" title="${x.over_sla ? 'Über dem SLA' : 'Offen seit'}">${hAge(x.age_h)}</small></div>`).join('');
+  const open = nw > 0 || LS.get('fopen.hdq', false);
+  return `<div class="fgroup"><details ${open ? 'open' : ''} data-fgrp="hdq"><summary>Queue ${esc(info.name)} <span class="count">${q.length}${info.queue_total > q.length ? '/' + info.queue_total : ''}</span><small>${nw ? nw + ' neu seit deinem letzten Blick' : 'nichts Neues'}</small></summary>
+    <div class="flist"><div class="hdq">${rows}${nw ? `<div class="hdqh"><span class="sp"></span><button data-hdseen="1" title="Alle als gesehen markieren; neue Tickets erscheinen wieder fett">Alle gesehen</button></div>` : ''}</div></div></details></div>`;
+}
+function blockBanner() {
+  const f = FOC();
+  if (!f || !f.block || (f.session && f.session.area === f.block.area)) return '';
+  return `<div class="fblock ${arCls(f.block.area)}">${ic('clock')}<span><b>${esc(f.block.name)}-Block</b> bis ${esc(f.block.until)}</span><span class="sp"></span><button data-fsess="area:${esc(f.block.area)}">Block starten</button></div>`;
+}
+function focusRail() {
+  const f = FOC();
+  if (!f) return '';
+  const w = f.week, H = s => s < 3600 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1).replace('.0', '') + ' h';
+  const shown = w.areas.filter(a => a.target_pct || a.secs);
+  const tot = Math.max(1, w.total_secs);
+  const rows = shown.map(a => {
+    const max = Math.max(a.target_secs, a.secs, 1);
+    const tgt = a.target_pct ? ` von ${H(a.target_secs)} (${a.target_pct} %)` : '';
+    const lag = a.target_pct && a.behind_secs >= 1800 ? `<span class="lag">${H(a.behind_secs)} hinter Plan</span>` : a.target_pct && a.secs ? `<span class="lead">im Plan${a.ahead_secs >= 1800 ? ', ' + H(a.ahead_secs) + ' voraus' : ''}</span>` : '';
+    return `<div class="farea ${arCls(a.id)}"><div class="l1"><b>${esc(a.name)}</b><span>${H(a.secs)}${tgt}</span></div>
+      ${a.target_pct ? `<div class="fabar" title="Soll bis jetzt: ${H(a.due_secs)}"><i style="width:${(100 * a.secs / max).toFixed(1)}%"></i><em style="left:${(100 * a.due_secs / max).toFixed(1)}%"></em></div>` : ''}
+      ${lag}${a.target_pct ? `<button class="quiet-btn" data-fsess="area:${esc(a.id)}" style="justify-self:start">${ic('play')} ${esc(a.name)}-Block starten</button>` : ''}</div>`;
+  }).join('');
+  const share = shown.length ? `<div class="fshare" title="Verteilung dieser Woche">${w.areas.filter(a => a.secs).map(a => `<i class="${arCls(a.id)}" style="flex:${a.secs}" title="${esc(a.name)}: ${a.share_pct} %"></i>`).join('')}</div>` : '';
+  const nb = f.next_block ? `<div class="small quiet">Nächster Block: ${esc(f.next_block.name)}, ${esc(f.next_block.label)}</div>` : '';
+  const td = f.today.sessions ? `<div class="small quiet">Heute ${f.today.sessions} Fokus-Sitzung${f.today.sessions === 1 ? '' : 'en'}, ${f.today.minutes} min</div>` : '';
+  return `<section class="rcard"><h3>Fokuszeit diese Woche <small>${H(w.total_secs)} erfasst</small></h3>${share}${rows || '<div class="small quiet">Noch nichts erfasst. Zeit läuft, sobald du eine Aufgabe als Fokus anheftest oder eine Sitzung startest.</div>'}${nb}${td}
+    ${f.session ? '' : '<button data-fsess="">Fokus-Sitzung starten</button>'}</section>`;
+}
+// Sitzungs-Dialog: was, welche Tätigkeit, wie lange
+let FS = { what: '', act: '', min: 50 };
+function openFocusDlg(what) {
+  const f = FOC();
+  if (!f) { toast('Fokus-Sitzungen brauchen die Zeiterfassung (Einstellungen → Zeiterfassung).'); return; }
+  if (f.session) { openFmode(); return; }
+  const g = state.flow ? focusGroups() : { hero: null };
+  const opts = [];
+  if (g.hero && g.hero.t !== 'review') opts.push({ v: g.hero.id, l: `${eKey(g.hero)} ${eTitle(g.hero)}`, s: g.pinned ? 'angeheftet' : 'jetzt dran' });
+  if (what && !what.startsWith('area:') && !opts.some(o => o.v === what)) { const e = fEntry(what); if (e) opts.unshift({ v: e.id, l: `${eKey(e)} ${eTitle(e)}`, s: 'diese Aufgabe' }); }
+  f.areas.filter(a => a.id !== 'dev').forEach(a => opts.push({ v: 'area:' + a.id, l: a.name, s: a.ticket ? 'bucht auf ' + a.ticket : 'Bereich', area: a.id }));
+  FS = { what: what || (opts[0] || {}).v || '', act: '', min: LS.get('fsMin', 50) };
+  renderFocusDlg(opts);
+  $('fsDlg').showModal();
+}
+function renderFocusDlg(opts) {
+  const f = FOC();
+  const area = FS.what.startsWith('area:') ? f.areas.find(a => 'area:' + a.id === FS.what) : null;
+  const acts = area ? area.activities : [];
+  $('fsBody').innerHTML = `<div class="${area ? arCls(area.id) : ''}" style="display:grid;gap:14px">
+    <div><strong>Fokus-Sitzung</strong><div class="quiet small">Eine Sache, eine Zeitbox. Was dazwischenkommt, parkst du mit einem Satz und machst weiter.</div></div>
+    <div class="what" role="radiogroup" aria-label="Woran">${opts.map(o => `<label class="${o.area ? arCls(o.area) : ''}"><input type="radio" name="fsw" value="${esc(o.v)}" ${o.v === FS.what ? 'checked' : ''}><span>${esc(short(o.l, 64))}</span><small>${esc(o.s)}</small></label>`).join('')}</div>
+    ${acts.length ? `<div><div class="small quiet" style="margin-bottom:6px">Tätigkeit (landet im Text der Zeitbuchung)</div><div class="chips">${acts.map(a => `<button data-fsact="${esc(a)}" class="${FS.act === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div></div>` : ''}
+    <div><div class="small quiet" style="margin-bottom:6px">Dauer</div><div class="chips">${[25, 50, 90].map(m => `<button data-fsmin="${m}" class="${FS.min === m ? 'on' : ''}">${m} min</button>`).join('')}</div></div>
+    <div class="row"><button class="primary" id="fsGo">Starten</button><button id="fsNo">Abbrechen</button></div></div>`;
+  $('fsBody')._opts = opts;
+}
+$('fsDlg').addEventListener('click', async ev => {
+  const t = ev.target, opts = $('fsBody')._opts;
+  const a = t.closest('[data-fsact]'); if (a) { FS.act = FS.act === a.dataset.fsact ? '' : a.dataset.fsact; renderFocusDlg(opts); return; }
+  const m = t.closest('[data-fsmin]'); if (m) { FS.min = +m.dataset.fsmin; LS.set('fsMin', FS.min); renderFocusDlg(opts); return; }
+  if (t.id === 'fsNo') { $('fsDlg').close(); return; }
+  if (t.id === 'fsGo') {
+    const body = { minutes: FS.min, activity: FS.act };
+    if (FS.what.startsWith('area:')) body.area = FS.what.slice(5); else body.key = FS.what;
+    try { state.focus = await post('/api/focus/start', body); $('fsDlg').close(); await load(); openFmode(); } catch (e) { toast(e.message); }
+  }
+});
+$('fsDlg').addEventListener('change', ev => { if (ev.target.name === 'fsw') { FS.what = ev.target.value; FS.act = ''; renderFocusDlg($('fsBody')._opts); } });
+// Fokus-Modus: Vollbild mit Uhr, Tätigkeit, Gedanken parken, Abschluss
+let FM_OPEN = false;
+function openFmode() { FM_OPEN = true; LS.set('fmMin', false); renderFmode(); const i = $('fmPark'); i && i.focus(); }
+function closeFmode() { FM_OPEN = false; LS.set('fmMin', true); renderFmode(); }
+const mmss = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60); return `${s < 0 ? '+' : ''}${m}:${String(a % 60).padStart(2, '0')}`; };
+function fmLeft(ses) { return ses.start + ses.planned_min * 60 - Date.now() / 1000; }
+function renderFmode() {
+  const f = FOC(), ses = f && f.session, el = $('fmode'), pill = $('fPill');
+  if (!ses) { el.hidden = true; pill.hidden = true; document.body.style.overflow = ''; return; }
+  const left = fmLeft(ses), area = f.areas.find(a => a.id === ses.area) || { activities: [] };
+  pill.hidden = FM_OPEN; pill.className = 'fpill ' + arCls(ses.area); pill.innerHTML = `${ic('clock')}<span id="fPillT">${mmss(left)}</span>`;
+  el.hidden = !FM_OPEN; document.body.style.overflow = FM_OPEN ? 'hidden' : '';
+  if (!FM_OPEN) return;
+  const keep = $('fmPark') ? $('fmPark').value : '', had = document.activeElement && document.activeElement.id === 'fmPark';
+  const pct = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60))));
+  el.className = arCls(ses.area);
+  el.innerHTML = `<div class="top"><span class="tag">${esc(ses.area_name)}</span><span>${esc(ses.planned_min)} min geplant${ses.parked ? ` · ${ses.parked} Gedanke${ses.parked === 1 ? '' : 'n'} geparkt` : ''}</span><span class="sp"></span><button class="quiet-btn" data-fmmin="1" title="Klein machen; die Sitzung läuft weiter (Esc)">${ic('x')} Klein machen</button></div>
+    <div class="mid"><div class="clock ${left < 0 ? 'over' : ''}" id="fmClock" aria-live="off">${mmss(left)}</div>
+      <div class="line"><i id="fmLine" style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="what">${esc(ses.title)}<small>${esc(ses.key !== ses.title ? ses.key : '')}${ses.activity ? (ses.key !== ses.title ? ' · ' : '') + esc(ses.activity) : ''}</small></div>
+      ${area.activities.length ? `<div class="acts" aria-label="Tätigkeit wechseln">${area.activities.map(a => `<button data-fmact="${esc(a)}" class="${ses.activity === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>` : ''}
+      <div class="park"><input id="fmPark" maxlength="500" autocomplete="off" placeholder="Was dir gerade durch den Kopf geht: parken und weitermachen (Enter)" aria-label="Gedanken parken"><button data-fmpark="1">Parken</button></div>
+      <div class="fmhint" id="fmHint">${left < 0 ? 'Zeitbox vorbei. Abschliessen oder bewusst weitermachen.' : 'Nur diese eine Sache. Mail, Teams und das Board warten.'}</div></div>
+    <div class="bot"><button class="primary big" data-fmend="erledigt">${ic('check')} Erledigt</button><button class="big" data-fmend="weiter" title="Die Zeitbox endet, die Zeit läuft auf der Aufgabe weiter">Beenden, Zeit läuft weiter</button><button class="big quiet-btn" data-fmend="abgelenkt" title="Ehrlich notieren: hilft beim Planen der nächsten Blöcke">Abgelenkt worden</button><button class="big quiet-btn" data-fmend="abgebrochen">Abbrechen</button></div>`;
+  if (keep) $('fmPark').value = keep;
+  if (had) $('fmPark').focus();
+}
+document.addEventListener('keydown', ev => {   // im Fokus-Modus keine Tastenkürzel des Panels
+  if ($('fmode').hidden || $('fmode').contains(ev.target)) return;
+  if (ev.key === 'Escape') { ev.preventDefault(); closeFmode(); }
+  ev.stopPropagation();
+}, true);
+setInterval(() => {
+  const f = FOC(), ses = f && f.session;
+  if (!ses) return;
+  const left = fmLeft(ses), t = mmss(left);
+  if ($('fPillT')) $('fPillT').textContent = t;
+  const c = $('fmClock'); if (c) { c.textContent = t; c.classList.toggle('over', left < 0); }
+  const l = $('fmLine'); if (l) l.style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%';
+  if (left < 0 && left > -1.2 && $('fmHint')) $('fmHint').textContent = 'Zeitbox vorbei. Abschliessen oder bewusst weitermachen.';
+  document.title = FM_OPEN ? `${t} · ${ses.area_name}` : 'tinyops';
+}, 1000);
+async function fmPark() {
+  const i = $('fmPark'), v = i.value.trim();
+  if (!v) return;
+  try { const r = await post('/api/focus/park', { text: v }); i.value = ''; toast(r.to === 'ideen' ? 'Geparkt in der Ideenbox' : 'Geparkt in der Sitzungsnotiz'); state.focus.session.parked = r.parked; renderFmode(); $('fmPark').focus(); } catch (e) { toast(e.message); }
+}
+$('fPill').onclick = openFmode;
+$('fmode').addEventListener('click', async ev => {
+  const t = ev.target;
+  if (t.closest('[data-fmmin]')) { closeFmode(); return; }
+  if (t.closest('[data-fmpark]')) { fmPark(); return; }
+  const a = t.closest('[data-fmact]');
+  if (a) { try { state.focus = await post('/api/focus/activity', { activity: a.dataset.fmact }); renderFmode(); } catch (e) { toast(e.message); } return; }
+  const en = t.closest('[data-fmend]');
+  if (en) {
+    try {
+      const r = await post('/api/focus/end', { result: en.dataset.fmend });
+      FM_OPEN = false; state.focus = r; renderFmode(); document.title = 'tinyops';
+      toast(`Sitzung beendet: ${r.ended.minutes} min${r.ended.xp ? ` · +${r.ended.xp} XP` : ''}${r.ended.parked ? ` · ${r.ended.parked} geparkt` : ''}`);
+      await load();
+    } catch (e) { toast(e.message); }
+  }
+});
+$('fmode').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ev.target.id === 'fmPark') { ev.preventDefault(); fmPark(); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); closeFmode(); }
+  ev.stopPropagation();
+});
+document.addEventListener('click', async ev => {
+  const t = ev.target;
+  const fs = t.closest('[data-fsess]'); if (fs) { ev.stopPropagation(); openFocusDlg(fs.dataset.fsess); return; }
+  if (t.closest('[data-hdseen]')) { ev.stopPropagation(); await act(() => post('/api/helpdesk/seen', { all: true }), 'Queue als gesehen markiert'); }
 });
 
 $('fRailUsage').appendChild($('usageBox'));

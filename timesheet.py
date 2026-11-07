@@ -77,6 +77,14 @@ class TimeBook:
                   " reference text not null default '', message text not null default '', attempts integer not null default 0, sent real,"
                   " merged_into text not null default '', updated real not null)")
         c.execute("create index if not exists time_draft_date on time_draft(date)")
+        for t in ("time_seg", "time_gap"):                       # 0.23: Fokusbereich und Tätigkeit je Abschnitt
+            have = {r[1] for r in c.execute("pragma table_info(%s)" % t)}
+            for col in ("area", "activity"):
+                if col not in have:
+                    c.execute("alter table %s add column %s text not null default ''" % (t, col))
+        c.execute("create table if not exists focus_session(id integer primary key autoincrement, key text not null, title text not null default '',"
+                  " area text not null default '', activity text not null default '', planned_min integer not null, start real not null, end real,"
+                  " parked integer not null default 0, result text not null default '', note text not null default '')")
         return c
 
     # -- Abschnitte
@@ -93,18 +101,20 @@ class TimeBook:
             return seg["end"]
         return seg["last_seen"] if now - seg["last_seen"] > idle * 60 else now
 
-    def start(self, key, title="", now=None, idle=15):
-        """Zeit für `key` starten. Ein offener Abschnitt eines anderen Vorhabens endet (bei Leerlauf am letzten Lebenszeichen)."""
+    def start(self, key, title="", now=None, idle=15, area="", activity=""):
+        """Zeit für `key` starten. Ein offener Abschnitt eines anderen Vorhabens (oder einer anderen Tätigkeit) endet,
+        bei Leerlauf am letzten Lebenszeichen."""
         now = now or time.time()
         with self.lock:
             cur = self.current()
-            if cur and cur["key"] == key:
+            if cur and cur["key"] == key and cur.get("activity", "") == (activity or "") and (not area or cur.get("area", "") == area):
                 self.ping(now, idle)
                 return self.current()
             self.stop(now, idle)
             c = self._conn()
             try:
-                c.execute("insert into time_seg(key, title, start, last_seen) values(?,?,?,?)", (key, title[:200], now, now))
+                c.execute("insert into time_seg(key, title, start, last_seen, area, activity) values(?,?,?,?,?,?)",
+                          (key, title[:200], now, now, area or "", (activity or "")[:80]))
                 c.commit()
             finally:
                 c.close()
@@ -121,7 +131,8 @@ class TimeBook:
             try:
                 c.execute("update time_seg set end=? where id=?", (max(end, cur["start"]), cur["id"]))
                 if end < now - 60 and now - cur["last_seen"] > idle * 60:
-                    c.execute("insert into time_gap(key, title, start, end) values(?,?,?,?)", (cur["key"], cur["title"], cur["last_seen"], now))
+                    c.execute("insert into time_gap(key, title, start, end, area, activity) values(?,?,?,?,?,?)",
+                              (cur["key"], cur["title"], cur["last_seen"], now, cur.get("area", ""), cur.get("activity", "")))
                 c.commit()
             finally:
                 c.close()
@@ -139,8 +150,10 @@ class TimeBook:
             try:
                 if now - cur["last_seen"] > idle * 60:
                     c.execute("update time_seg set end=? where id=?", (cur["last_seen"], cur["id"]))
-                    c.execute("insert into time_gap(key, title, start, end) values(?,?,?,?)", (cur["key"], cur["title"], cur["last_seen"], now))
-                    c.execute("insert into time_seg(key, title, start, last_seen) values(?,?,?,?)", (cur["key"], cur["title"], now, now))
+                    c.execute("insert into time_gap(key, title, start, end, area, activity) values(?,?,?,?,?,?)",
+                              (cur["key"], cur["title"], cur["last_seen"], now, cur.get("area", ""), cur.get("activity", "")))
+                    c.execute("insert into time_seg(key, title, start, last_seen, area, activity) values(?,?,?,?,?,?)",
+                              (cur["key"], cur["title"], now, now, cur.get("area", ""), cur.get("activity", "")))
                 else:
                     c.execute("update time_seg set last_seen=? where id=?", (now, cur["id"]))
                 c.commit()
@@ -167,16 +180,35 @@ class TimeBook:
     def totals(self, d, now=None, idle=15):
         t = {}
         for s in self.segments(d, now, idle):
-            x = t.setdefault(s["key"], {"secs": 0, "title": s["title"], "segments": 0})
+            x = t.setdefault(s["key"], {"secs": 0, "title": s["title"], "segments": 0, "activities": [], "area": ""})
             x["secs"] += s["secs"]
             x["segments"] += 1
             x["title"] = s["title"] or x["title"]
+            x["area"] = s.get("area") or x["area"]
+            if s.get("activity") and s["activity"] not in x["activities"]:
+                x["activities"].append(s["activity"])
         return t
 
-    def add_segment(self, key, title, start, end, source="manuell"):
+    def range_segments(self, a, b, now=None, idle=15):
+        """Abschnitte zwischen zwei Zeitpunkten, auf [a, b) zugeschnitten (für Wochenauswertungen)."""
+        now = now or time.time()
         c = self._conn()
         try:
-            c.execute("insert into time_seg(key, title, start, end, last_seen, source) values(?,?,?,?,?,?)", (key, title[:200], start, end, end, source))
+            rows = [dict(r) for r in c.execute("select * from time_seg where start < ? and (end is null or end > ?) order by start", (b, a))]
+        finally:
+            c.close()
+        out = []
+        for r in rows:
+            s_, e_ = max(r["start"], a), min(self._eff_end(r, now, idle), b)
+            if e_ > s_:
+                out.append(dict(r, secs=int(e_ - s_)))
+        return out
+
+    def add_segment(self, key, title, start, end, source="manuell", area="", activity=""):
+        c = self._conn()
+        try:
+            c.execute("insert into time_seg(key, title, start, end, last_seen, source, area, activity) values(?,?,?,?,?,?,?,?)",
+                      (key, title[:200], start, end, end, source, area or "", activity or ""))
             c.commit()
         finally:
             c.close()
@@ -205,8 +237,46 @@ class TimeBook:
             finally:
                 c.close()
             if count:
-                self.add_segment(g["key"], g["title"], g["start"], g["end"], "lücke")
+                self.add_segment(g["key"], g["title"], g["start"], g["end"], "lücke", g["area"], g["activity"])
             return dict(g)
+
+    # -- Fokus-Sitzungen (0.23)
+    def session(self):
+        c = self._conn()
+        try:
+            r = c.execute("select * from focus_session where end is null order by id desc limit 1").fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
+
+    def session_start(self, key, title, area, activity, minutes, now=None):
+        now = now or time.time()
+        with self.lock:
+            c = self._conn()
+            try:
+                c.execute("update focus_session set end=?, result=case when result='' then 'abgelöst' else result end where end is null", (now,))
+                sid = c.execute("insert into focus_session(key, title, area, activity, planned_min, start) values(?,?,?,?,?,?)",
+                                (key, title[:200], area or "", activity or "", int(minutes), now)).lastrowid
+                c.commit()
+                return sid
+            finally:
+                c.close()
+
+    def session_update(self, sid, **kw):
+        with self.lock:
+            c = self._conn()
+            try:
+                c.execute("update focus_session set %s where id=?" % ", ".join("%s=?" % k for k in kw), list(kw.values()) + [sid])
+                c.commit()
+            finally:
+                c.close()
+
+    def sessions(self, a, b):
+        c = self._conn()
+        try:
+            return [dict(r) for r in c.execute("select * from focus_session where start >= ? and start < ? order by start", (a, b))]
+        finally:
+            c.close()
 
     # -- Entwürfe
     def drafts(self, d=None, state=None):
@@ -306,7 +376,7 @@ def compose(d, totals, meta, events, accs, unit=15, minimum=5):
         evs = [e for e in events if e.get("key") == key]
         ev = ["%s %s" % (e["text"], _hhmm(e["ts"])) for e in evs][:12]
         ev += ["Abnahme %s @ %s" % (a.get("label") or a.get("ref", ""), (a.get("sha") or "?")[:8]) for a in accs if a.get("key") == key][:6]
-        done = [e["text"] for e in evs if e.get("kind") == "check"][:4]
+        done = (list(t.get("activities") or []) + [e["text"] for e in evs if e.get("kind") == "check"])[:6]
         text = title + (": " + ", ".join(done) if done else "")
         out.append({"ticket": key, "title": title, "project_hint": m.get("project_hint", ""), "minutes": round_minutes(t["secs"], unit, minimum),
                     "secs": t["secs"], "text": text[:300], "evidence": ev})

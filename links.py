@@ -478,7 +478,22 @@ class _IdeMixin:
             c.execute("delete from ide_wt where ref=?", (ref,))
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin):
+class _HdMixin:
+    """Gesehene Tickets der Helpdesk-Queue (0.23)."""
+    def hd_seen(self):
+        with self._conn() as c:
+            if c is None:
+                return set()
+            return {r["key"] for r in c.execute("select key from hd_seen")}
+
+    def hd_seen_add(self, keys):
+        if not keys:
+            return
+        with self._conn(True) as c:
+            c.executemany("insert or ignore into hd_seen(key, ts) values(?,?)", [(k, time.time()) for k in keys])
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin, _HdMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -519,6 +534,7 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 conn.execute("create table if not exists acceptance(key text not null, ref text not null, sha text not null, ts real not null,"
                              " note text not null default '', env text not null default '', primary key(key, ref))")
                 conn.execute("create table if not exists pin(id integer primary key check (id = 1), key text not null, ts real not null)")
+                conn.execute("create table if not exists hd_seen(key text primary key, ts real not null)")
                 conn.execute("create table if not exists ide_wt(ref text primary key, host text not null, project_id integer not null, iid integer not null,"
                              " sha text not null, path text not null, repo text not null, ts real not null)")
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"

@@ -20,6 +20,8 @@ import net
 import secretstore as store
 import sonar
 import usage
+import focusplan
+import helpdesk
 import sprint
 import timesheet
 import tlog
@@ -29,7 +31,8 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token", "mcp_token")
+SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token", "mcp_token",
+                 "helpdesk_token", "helpdesk_password")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
@@ -420,9 +423,9 @@ def normalize_trailer(line):
 
 
 # ------------------------------------------------------------ Jira
-def _jira_headers(form, stored):
-    auth = form.get("auth") or "bearer"
-    name = "jira_token" if auth == "bearer" else "jira_password"
+def _jira_headers(form, stored, prefix="jira", default_auth="bearer"):
+    auth = form.get("auth") or default_auth
+    name = prefix + ("_token" if auth == "bearer" else "_password")
     sec, src = _token(form, stored, name)
     if not sec:
         return None, src, "Kein %s eingegeben und keiner gespeichert." % ("Token" if auth == "bearer" else "Passwort")
@@ -950,6 +953,99 @@ def test_jira(form, stored):
                     user={"name": user.get("name"), "displayName": user.get("displayName")} if user else None)
 
 
+def test_helpdesk(form, stored):
+    """Helpdesk-Jira (nur lesend): API, Anmeldung, «Mir zugewiesen», Queue. form: url, auth, username, secret, ca_bundle, assigned_jql, queue_jql."""
+    r = Report()
+    base, ok = _check_url(r, form.get("url"), "helpdesk")
+    if not ok:
+        return r.result()
+    ctx = _check_connection(r, base, form.get("ca_bundle"))
+    steps = (("api", "Jira-API"), ("auth", "Anmeldung"), ("assigned", "Mir zugewiesen"), ("queue", "Queue"))
+    if ctx is None:
+        for sid, t in steps:
+            r.skip(sid, t)
+        return r.result()
+    try:
+        resp = _get(base, "/rest/api/2/serverInfo", {"Accept": "application/json"}, ctx)
+        d, st = net.parse_json(resp), resp["status"]
+        if st == 200 and isinstance(d, dict) and d.get("version"):
+            old = d["version"].split(".")[:2]
+            r.add("api", "Jira-API", "ok", "%s %s (%d ms)" % (d.get("serverTitle", "Jira"), d["version"], resp["ms"]))
+            if (form.get("auth") or "basic") == "bearer" and old and old[0].isdigit() and (int(old[0]), int(old[1] if len(old) > 1 and old[1].isdigit() else 0)) < (8, 14):
+                r.add("pat", "Personal Access Token", "warn", "Jira %s kennt noch keine Personal Access Tokens (erst ab 8.14)." % d["version"],
+                      "Stelle die Anmeldeart auf «basic» und nimm Benutzername und Passwort.")
+        elif st in (401, 403) and not net.looks_html(resp):
+            r.add("api", "Jira-API", "ok", "Jira-API antwortet (HTTP %d ohne Anmeldung)" % st)
+        elif net.looks_html(resp) or st in (301, 302, 303, 307, 308, 404):
+            r.add("api", "Jira-API", "fail", "HTTP %d: keine Jira-API unter %s/rest/api/2." % (st, base),
+                  "Stimmt die Adresse? Läuft Jira unter einem Kontextpfad (z. B. https://host/jira)?")
+        else:
+            r.add("api", "Jira-API", "fail", "HTTP %d: %s" % (st, _msg(resp)))
+    except net.NetError as e:
+        r.add("api", "Jira-API", "fail", e.detail, net_hint(e.kind))
+    if r.blocked:
+        for sid, t in steps[1:]:
+            r.skip(sid, t)
+        return r.result()
+    hdr, src, problem = _jira_headers(form, stored, "helpdesk", "basic")
+    auth = form.get("auth") or "basic"
+    if hdr is None:
+        r.add("auth", "Anmeldung", "fail", problem, "Benutzername und Passwort eingeben." if auth == "basic" else "Personal Access Token eingeben.")
+        for sid, t in steps[2:]:
+            r.skip(sid, t)
+        return r.result()
+    ck = (base, (form.get("username") or "").strip().lower())
+    if auth == "basic" and _cool.get(ck, 0) > time.time():
+        r.add("auth", "Anmeldung", "fail", "Pause nach dem letzten Fehlversuch (noch %d s)." % (_cool[ck] - time.time()),
+              "Mehrere falsche Passwörter in Folge sperren das Konto oder lösen ein CAPTCHA aus. Erst im Browser prüfen, dann erneut testen.")
+        for sid, t in steps[2:]:
+            r.skip(sid, t)
+        return r.result()
+    user = None
+    try:
+        resp = _get(base, "/rest/api/2/myself", hdr, ctx)
+        st, d = resp["status"], net.parse_json(resp)
+        denied = resp["headers"].get("x-authentication-denied-reason", "") + resp["headers"].get("x-seraph-loginreason", "")
+        if st == 200 and isinstance(d, dict) and d.get("name"):
+            user = d
+            r.add("auth", "Anmeldung", "ok", "Angemeldet als %s (%s), %s aus: %s" % (d["name"], d.get("displayName", ""), "Token" if auth == "bearer" else "Passwort", src))
+        elif "captcha" in denied.lower():
+            r.add("auth", "Anmeldung", "fail", "Jira verlangt ein CAPTCHA.", "Einmal im Browser anmelden und das CAPTCHA lösen, dann erneut testen.")
+        elif st == 401:
+            if auth == "basic":
+                _cool[ck] = time.time() + COOLDOWN_S
+            r.add("auth", "Anmeldung", "fail", "HTTP 401: Zugangsdaten werden nicht akzeptiert.",
+                  "Benutzername (nicht E-Mail) und Passwort prüfen." if auth == "basic" else "Token falsch oder abgelaufen?")
+        else:
+            r.add("auth", "Anmeldung", "fail", "HTTP %d: %s" % (st, _msg(resp)))
+    except net.NetError as e:
+        r.add("auth", "Anmeldung", "fail", e.detail, net_hint(e.kind))
+    if r.blocked:
+        for sid, t in steps[2:]:
+            r.skip(sid, t)
+        return r.result()
+    import helpdesk as hdmod
+    for sid, title, jql in (("assigned", "Mir zugewiesen", (form.get("assigned_jql") or "").strip() or hdmod.DEFAULTS["assigned_jql"]),
+                            ("queue", "Queue", (form.get("queue_jql") or "").strip())):
+        if not jql:
+            r.skip(sid, title, "keine Queue-JQL eingetragen")
+            continue
+        try:
+            resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": "summary,status,priority", "maxResults": 5})
+            st, d = resp["status"], net.parse_json(resp)
+            if st == 200 and isinstance(d, dict):
+                lines = ["%s · %s · %s" % (i["key"], ((i.get("fields") or {}).get("status") or {}).get("name", ""),
+                                            ((i.get("fields") or {}).get("summary") or "")[:50]) for i in d.get("issues", [])[:5]]
+                r.add(sid, title, "ok", "%d Tickets.%s" % (int(d.get("total", 0)), ("\n" + "\n".join(lines)) if lines else ""))
+            elif st == 400:
+                r.add(sid, title, "fail", "Jira weist die JQL ab: %s" % _msg(resp), "Teste die Abfrage im Jira-Suchfeld (Erweitert).")
+            else:
+                r.add(sid, title, "fail", "HTTP %d: %s" % (st, _msg(resp)))
+        except net.NetError as e:
+            r.add(sid, title, "fail", e.detail)
+    return r.result(user={"name": user.get("name"), "displayName": user.get("displayName")} if user else None)
+
+
 # ------------------------------------------------------------ Lesen und Speichern
 def _lst(v, what, errors, limit=60, upper=False):
     out = []
@@ -1012,6 +1108,8 @@ def view(cfg, config_path, features_default=None):
         "ux": dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {})),
         "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
+        "helpdesk": helpdesk.cfg(cfg),
+        "focus": _focus_view(cfg),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
         "branch_filter": {
@@ -1045,6 +1143,53 @@ def view(cfg, config_path, features_default=None):
         "server": {"config": str(config_path), "log": str(tlog.log_file(cfg)), "bind": cfg.get("bind"), "port": cfg.get("port")},
         "jql_default": JQL_DEFAULT,
     }
+
+
+def _focus_view(cfg):
+    f = focusplan.cfg(cfg)
+    return {"week_hours": f["week_hours"], "day_start": f["day_start"], "day_end": f["day_end"],
+            "areas": [dict(a, blocks_text=focusplan.blocks_text(a.get("blocks"))) for a in f["areas"]]}
+
+
+def _clean_focus(p, errors):
+    f = dict(focusplan.DEFAULTS)
+    f["week_hours"] = _int(p.get("week_hours"), "focus.week_hours", 1, 80, errors, focusplan.DEFAULTS["week_hours"])
+    for k in ("day_start", "day_end"):
+        v = str(p.get(k) or focusplan.DEFAULTS[k]).strip()
+        if not re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", v):
+            errors["focus." + k] = "Uhrzeit wie 08:00."
+        else:
+            f[k] = "%02d:%s" % (int(v.split(":")[0]), v.split(":")[1])
+    if f["day_start"] >= f["day_end"]:
+        errors["focus.day_end"] = "Ende muss nach dem Beginn liegen."
+    areas, seen, total = [], set(), 0
+    for i, a in enumerate(p.get("areas") or []):
+        name = str(a.get("name") or "").strip()[:40]
+        aid = re.sub(r"[^a-z0-9_-]", "", str(a.get("id") or "").lower())[:20] or re.sub(r"[^a-z0-9]", "", name.lower())[:20]
+        if not name or not aid:
+            errors["focus.areas"] = "Jeder Bereich braucht einen Namen."
+            continue
+        if aid in seen:
+            errors["focus.areas"] = "Bereich «%s» doppelt." % name
+            continue
+        seen.add(aid)
+        pct = _int(a.get("target_pct"), "focus.areas.%d.target_pct" % i, 0, 100, errors, 0)
+        total += pct
+        try:
+            blocks = focusplan.parse_blocks(a.get("blocks_text") if "blocks_text" in a else focusplan.blocks_text(a.get("blocks")))
+        except ValueError as e:
+            errors["focus.areas.%d.blocks" % i] = str(e)
+            blocks = []
+        ticket = str(a.get("ticket") or "").strip()[:80]
+        areas.append({"id": aid, "name": name, "target_pct": pct, "ticket": ticket,
+                      "pools": _lst(a.get("pools"), "focus.areas.%d.pools" % i, errors, 20),
+                      "activities": _lst(a.get("activities"), "focus.areas.%d.activities" % i, errors, 20), "blocks": blocks})
+    if total > 100:
+        errors["focus.areas"] = "Die Ziele ergeben zusammen %d %%, höchstens 100 %%." % total
+    if not any(a["id"] == "dev" for a in areas):
+        areas.insert(0, dict(focusplan.DEFAULTS["areas"][0]))
+    f["areas"] = areas
+    return f
 
 
 def _clean_class(item, entry, errors, errkey):
@@ -1282,6 +1427,37 @@ def build_config(current, p):
                 errors["time.mcp_url"] = "«%s» liegt nicht im eigenen Netz. Nur mit «Externe Adresse erlauben»." % u.hostname
         tc["mcp_url"] = url
         cfg["time"] = tc
+    if isinstance(p.get("helpdesk"), dict):
+        h, hc = p["helpdesk"], helpdesk.cfg(cfg)
+        hc["enabled"] = bool(h.get("enabled", hc["enabled"]))
+        url = str(h.get("url", hc["url"]) or "").strip().rstrip("/")
+        if url:
+            u = urllib.parse.urlparse(url)
+            if u.scheme not in ("http", "https") or not u.hostname:
+                errors["helpdesk.url"] = "Muss mit https:// (oder http://) beginnen."
+        elif hc["enabled"]:
+            errors["helpdesk.url"] = "Zum Einschalten die Adresse eintragen."
+        hc["url"] = url
+        auth = h.get("auth", hc["auth"])
+        if auth not in ("basic", "bearer"):
+            errors["helpdesk.auth"] = "basic oder bearer."
+        else:
+            hc["auth"] = auth
+        hc["username"] = str(h.get("username", hc["username"]) or "").strip()[:120]
+        if hc["enabled"] and hc["auth"] == "basic" and not hc["username"]:
+            errors["helpdesk.username"] = "Bei «basic» den Benutzernamen eintragen."
+        hc["name"] = (str(h.get("name", hc["name"]) or "").strip() or "Helpdesk")[:40]
+        for k in ("assigned_jql", "queue_jql"):
+            v = " ".join(str(h.get(k, hc[k]) or "").split())
+            if len(v) > 1000:
+                errors["helpdesk." + k] = "JQL zu lang."
+            else:
+                hc[k] = v or (helpdesk.DEFAULTS[k] if k == "assigned_jql" else "")
+        hc["sla_hours"] = _int(h.get("sla_hours"), "helpdesk.sla_hours", 1, 720, errors, hc["sla_hours"])
+        hc["area"] = re.sub(r"[^a-z0-9_-]", "", str(h.get("area", hc["area"]) or "hd").lower())[:20] or "hd"
+        cfg["helpdesk"] = hc
+    if isinstance(p.get("focus"), dict):
+        cfg["focus"] = _clean_focus(p["focus"], errors)
     if isinstance(p.get("ux"), dict):
         u = dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {}))
         u["enabled"] = bool(p["ux"].get("enabled", u["enabled"]))

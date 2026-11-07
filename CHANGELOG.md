@@ -5,6 +5,35 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.23.0]
+
+### Neu
+- **Helpdesk-Jira** (Einstellungen → Helpdesk), eine zweite Jira-Instanz, nur lesend. Gedacht für Jira 8.5: Anmeldung mit Benutzername und Passwort, Bearer-Token ab 8.14.
+  - **Dir zugewiesene Tickets** stehen im Fokus in einer eigenen Gruppe. Sortiert wird nach Priorität, SLA und Alter. Über dem SLA steigt ein Ticket nach oben und ist rot markiert, «Waiting for customer» heisst «Antwort prüfen».
+  - **Queue:** Eine eigene JQL (z. B. nicht zugewiesene Tickets) meldet Neues fett, bis du «Alle gesehen» drückst.
+  - **Zeit:** Ein angeheftetes Helpdesk-Ticket startet die Zeit auf dieses Ticket, im Bereich Helpdesk. Es erscheint in den Zeitentwürfen wie jedes andere Ticket.
+  - «Verbindung testen» liest Serverinfo, Anmeldung und beide JQL. Nach einem Fehlversuch pausiert der Test 30 Sekunden, damit das Konto nicht gesperrt wird.
+  - `python3 server.py --check` prüft den Helpdesk mit.
+- **Fokusbereiche mit Wochenziel** (Einstellungen → Fokusbereiche). Standard: Entwicklung, Helpdesk, Berufsbildung 30 % von 42 Stunden.
+  - Je Bereich: Ziel in Prozent, Tätigkeiten, Kategorien im Board, feste Wochenblöcke («Di 13:30-17:00») und ein Buchungsziel.
+  - Zeit gehört zu einem Bereich, wenn sie dort gestartet wurde, wenn das Vorhaben in einer seiner Kategorien liegt oder wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.
+  - **Fokuszeit diese Woche** in der Seitenleiste: Ist je Bereich, Ziel, ein Strich für «Soll bis jetzt» und «x h hinter Plan». Das Soll wird anteilig auf die vergangene Arbeitszeit gerechnet (Arbeitstage 08–17 Uhr).
+  - Läuft gerade ein fester Block, zeigt der Fokus oben ein Band «Berufsbildung-Block bis 17:00» mit «Block starten».
+- **Fokus-Sitzung und Fokus-Modus** («Fokus» im Hero, in den Details oder in der Seitenleiste):
+  - Du wählst die Aufgabe (oder einen Bereich), eine Tätigkeit (z. B. «Aufgaben reviewen») und 25, 50 oder 90 Minuten.
+  - Der Fokus-Modus zeigt nur noch Uhr, Aufgabe, Tätigkeit und ein Feld «Gedanken parken» (landet in der Ideenbox). Tastenkürzel des Panels sind aus.
+  - «Klein machen» lässt die Sitzung als Uhr in der Kopfzeile weiterlaufen.
+  - Abschluss mit «Erledigt», «Beenden, Zeit läuft weiter», «Abgelenkt worden» oder «Abbrechen». Ab 20 Minuten gibt es +15 XP.
+  - Die Tätigkeiten landen im Text der Zeitentwürfe. Start und Ende stehen im Verlauf.
+- **Releases ohne Tag-Push:** Der neue Workflow «Auto-Tag» setzt nach einem Push auf `main` den Tag `vX.Y.Z` aus `VERSION` selbst, wenn es ihn noch nicht gibt und das CHANGELOG den Abschnitt hat, und baut gleich das Release. `git push origin main` reicht.
+
+### Geändert
+- Zeitabschnitte merken sich Bereich und Tätigkeit. Ein Wechsel der Tätigkeit beginnt einen neuen Abschnitt beim selben Ticket.
+
+### Grenzen
+- Mail, Kalender und Teams kommen nicht in diese Version. Geplant für 0.24 ohne Graph-App: Kalender als ICS-Abo, Termine buchen über Outlook- und Teams-Links.
+- Das Helpdesk bleibt nur lesend: Kommentare und Statuswechsel machst du im Helpdesk selbst.
+
 ## [0.22.0]
 
 ### Neu

@@ -117,6 +117,21 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.23.0
+
+- [ ] `r23-01` Einstellungen → Helpdesk: Adresse, «basic», Benutzername und Passwort eintragen → «Verbindung testen» zeigt Jira 8.5.1, «Angemeldet als …» und die Anzahl deiner Tickets
+- [ ] `r23-02` Speichern → im Fokus erscheint eine Gruppe mit deinen Helpdesk-Tickets; ein Ticket über dem SLA steht oben und zeigt «seit … h» rot
+- [ ] `r23-03` Queue-JQL eintragen, speichern → «Queue …» zeigt neue Tickets fett; «Alle gesehen» → nichts mehr fett, nach dem nächsten Abgleich nur wirklich neue
+- [ ] `r23-04` Ein Helpdesk-Ticket öffnen → «Als Fokus anheften» → Hero zeigt das Ticket, «Zeit läuft»; Tab «Zeit» zeigt einen Abschnitt auf das Helpdesk-Ticket
+- [ ] `r23-05` Einstellungen → Fokusbereiche: bei Berufsbildung einen Block für jetzt eintragen, speichern → über dem Fokus erscheint das Band «Berufsbildung-Block bis …»
+- [ ] `r23-06` Seitenleiste «Fokuszeit diese Woche» → Berufsbildung mit Ziel, Strich «Soll bis jetzt» und «… h hinter Plan»
+- [ ] `r23-07` «Berufsbildung-Block starten» → Tätigkeit «Betreuung Lernende», 25 min → Vollbild mit Uhr, Aufgabe und Tätigkeit; die Tasten j/k/i tun nichts
+- [ ] `r23-08` Im Fokus-Modus einen Gedanken eintippen, Enter → «Geparkt in der Ideenbox», das Feld ist leer und behält den Cursor
+- [ ] `r23-09` Tätigkeit wechseln, dann «Klein machen» (oder Esc) → die Uhr läuft in der Kopfzeile weiter; Klick darauf öffnet den Fokus-Modus wieder
+- [ ] `r23-10` «Erledigt» nach mehr als 20 Minuten → Meldung mit +15 XP; Tab «Zeit» → der Entwurf für Berufsbildung nennt die Tätigkeiten im Text
+- [ ] `r23-11` Fokusbereiche: Ziele über 100 % oder einen Block wie «Mo 9-10» speichern → verständliche Fehlermeldung am Feld
+- [ ] `r23-12` Log → Verlauf → «Fokus-Sitzung gestartet» und «beendet» mit Bereich, Minuten und Ergebnis
+
 ## 0.22.0
 
 - [ ] `r22-01` KI-Kontingent aufklappen → jeder Balken hat einen senkrechten Strich (Zeit übrig), darunter eine Tempo-Zeile

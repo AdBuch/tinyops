@@ -291,7 +291,7 @@ class AppFlow(unittest.TestCase):
 
     def test_sources_and_last_good_data_on_outage(self):
         ov = self.app.overview()
-        self.assertEqual({s["id"]: s["ok"] for s in ov["sources"]}, {"gitlab": True, "jira": True, "sonar": True})
+        self.assertEqual({s["id"]: s["ok"] for s in ov["sources"]}, {"gitlab": True, "jira": True, "sonar": True, "helpdesk": True})
         prev_mine = [dict(i) for i in self.app.cache["mine"]]
         data = {"mine": [i for i in prev_mine if i["project_id"] != 1], "review": [], "assigned": [], "errors": ["dlp-core: HTTP 503"], "gl_failed_pids": [1]}
         self.app._keep_last_good(data)

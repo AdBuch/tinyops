@@ -20,6 +20,14 @@ ACTIVE_SPRINT = ["com.atlassian.greenhopper.service.sprint.Sprint@1[id=11,rapidV
 LAST = {}
 NO_SPRINT = {"DLP-120"}
 BASIC = "Basic " + base64.b64encode(b"jira-user:jpass").decode()
+VERSION = sys.argv[2] if len(sys.argv) > 2 else "9.4.14"     # Helpdesk-Tests: 8.5.1
+SD = [("SD-1", "Drucker spinnt", "Open", "High", 30, 2), ("SD-2", "VPN", "Waiting for customer", "Low", 3, 30),
+      ("SD-3", "Neue Lernende", "Open", "Medium", 1, 1)]
+
+
+def sd_issue(k, s, st, pr, age, upd):
+    return {"key": k, "fields": {"summary": s, "status": {"name": st}, "priority": {"name": pr}, "created": jira_time(age),
+                                 "updated": jira_time(upd), "reporter": {"displayName": "Kollegin"}, "duedate": None}}
 
 
 def issue(key):
@@ -45,7 +53,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         auth = self.headers.get("Authorization", "")
         if self.path.startswith("/rest/api/2/serverInfo"):
-            return self._json(200, {"version": "9.4.14", "serverTitle": "Mock Jira"})
+            return self._json(200, {"version": VERSION, "serverTitle": "Mock Jira"})
         if self.path == "/_last":
             return self._json(200, LAST)
         if auth not in ("Bearer jtoken", BASIC):
@@ -73,6 +81,9 @@ class H(BaseHTTPRequestHandler):
             return self._json(200, issue(key))
         if u.path == "/rest/api/2/search":
             jql = (q.get("jql") or [""])[0]
+            if "project = SD" in jql:
+                rows = SD[:2] if "currentUser()" in jql else SD[2:]
+                return self._json(200, {"issues": [sd_issue(*r) for r in rows], "total": len(rows)})
             if "HELP" in jql:
                 issues = [{"key": "HELP-%d" % i, "fields": {"created": jira_time(h), "summary": "x"}}
                           for i, h in enumerate((5, 30, 80), 1)]

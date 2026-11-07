@@ -459,6 +459,32 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4ö. Helpdesk, Fokusbereiche und Fokus-Modus (neu in 0.23.0)
+
+**Helpdesk-Jira** (Einstellungen → Helpdesk) bindet eine zweite Jira-Instanz nur lesend ein.
+- Dir zugewiesene Tickets stehen im Fokus, nach Priorität und SLA sortiert.
+- Eine Queue-JQL meldet neue Tickets, bis du «Alle gesehen» drückst.
+- Angeheftet läuft die Zeit auf das Helpdesk-Ticket.
+- Für Jira 8.5: Anmeldeart «basic» mit Benutzername und Passwort (Secret `helpdesk_password`). Ab Jira 8.14 geht auch ein Token (`helpdesk_token`).
+
+```json
+"helpdesk": {"enabled": true, "name": "Servicedesk", "url": "https://helpdesk.firma.example", "auth": "basic", "username": "abucher",
+             "assigned_jql": "assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC",
+             "queue_jql": "project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC", "sla_hours": 24, "area": "hd"}
+```
+
+**Fokusbereiche** (Einstellungen → Fokusbereiche) verteilen deine Woche. Standard ist Berufsbildung mit 30 %.
+- Die Seitenleiste zeigt je Bereich Ist, Ziel und «Soll bis jetzt», dazu den Rückstand in Stunden.
+- Feste Blöcke (`Di 13:30-17:00, Do 08:00-10:00`) erscheinen zur Blockzeit als Band über dem Fokus.
+- Zeit ohne Vorhaben (z. B. «Betreuung Lernende») bucht auf das Buchungsziel des Bereichs, sonst auf seinen Namen.
+
+**Fokus-Sitzung:** Aufgabe oder Bereich wählen, Tätigkeit, 25/50/90 Minuten. Der Fokus-Modus blendet alles andere aus.
+- Was dir dazwischen einfällt, parkst du mit einem Satz in der Ideenbox.
+- «Klein machen» lässt die Sitzung als Uhr in der Kopfzeile weiterlaufen.
+- Braucht die Zeiterfassung (Einstellungen → Zeit).
+
+**Releases:** Nach `git push origin main` setzt GitHub Actions den Tag aus `VERSION` selbst und baut das Release (Workflow «Auto-Tag»).
+
 ## 4ä. KI-Tempo und UI-Nutzung (neu in 0.22.0)
 
 **Zeitmarke im KI-Kontingent:** Der Strich im Balken zeigt, wie viel Zeit im Fenster noch übrig ist, die Füllung, wie viel Kontingent frei ist. Füllung rechts vom Strich heisst Vorsprung (der Rest verfällt beim Reset, also ruhig mehr nutzen), links davon heisst zu schnell. 20 % nach 15 Minuten ist etwas anderes als 20 % in der letzten halben Stunde; die Tempo-Zeile darunter rechnet das aus.

@@ -31,6 +31,8 @@ from pathlib import Path
 
 import agents
 import audit
+import focusplan
+import helpdesk
 import qa
 import review
 import timesheet
@@ -50,7 +52,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.22.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.23.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1107,6 +1109,23 @@ class DemoClient:
                 "sha": "a1b2c3d4e5f60718", "url": "https://gitlab.example/demo/%s" % iid}
 
 
+class DemoHelpdesk:
+    """Demo-Servicedesk (Jira 8.5): drei zugewiesene Tickets, eines über dem SLA, und eine kleine Queue."""
+    base = "https://servicedesk.example"
+
+    def _search(self, jql, fields, limit=100):
+        def j(h):
+            return datetime.fromtimestamp(time.time() - h * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+        mk = lambda k, s, st, p, c, u, r: {"key": k, "fields": {"summary": s, "status": {"name": st}, "priority": {"name": p}, "created": j(c), "updated": j(u),
+                                                                "reporter": {"displayName": r}}}
+        if jql == "demo":
+            return [mk("SD-4711", "Drucker im 3. Stock druckt nur leere Seiten", "Open", "Medium", 0.5, 0.5, "Empfang"),
+                    mk("SD-4712", "VPN-Zugang für neue Lernende", "Open", "High", 2, 2, "Berufsbildung")], 2
+        return [mk("SD-4690", "Outlook-Regel leitet Mails doppelt weiter", "In Progress", "High", 30, 3, "Buchhaltung"),
+                mk("SD-4702", "Freigabe auf Laufwerk P: für Projektteam", "Open", "Medium", 6, 6, "Projektbüro"),
+                mk("SD-4655", "Laptop-Tausch vorbereiten", "Waiting for customer", "Low", 80, 50, "Personal")], 3
+
+
 class DemoSonar:
     """Erfundene Quality Gates für die Demo: stabil pro MR/Branch."""
     base = "https://sonar.example"
@@ -1327,6 +1346,7 @@ class App:
         self.qabook = qa.QaBook(data_dir(cfg) / "tinyops.db")
         self.uxlog = ux.UxLog(data_dir(cfg) / "tinyops.db")
         self.tc = time_cfg(cfg)
+        self.fc = focusplan.cfg(cfg)
         self.mcp_token = secrets.get("mcp_token", "")
         self.ssl_ctx = ssl.create_default_context()
         if not hasattr(self, "_send_lock"):
@@ -1344,6 +1364,8 @@ class App:
         self._by_key = {}
         self.problems = []
         self.client, self.jira, self.github = None, None, None
+        self.hdj = None                       # Helpdesk-Jira (0.23)
+        self.hdc = helpdesk.cfg(cfg)
         self.ghc = github_cfg(cfg)
         self.cache, self.cache_t = None, 0.0
         self.hd_cache, self.hd_t = None, 0.0
@@ -1358,6 +1380,8 @@ class App:
             self.client = DemoClient(cfg)
             self.jira = DemoJira(self.jc)
             self.sonar = DemoSonar()
+            self.hdj = DemoHelpdesk()
+            self.hdc = dict(self.hdc, enabled=True, name="Servicedesk", queue_jql="demo")
             if not self.proj_cfg:
                 self.proj_cfg = {1: {"id": 1, "name": "dlp-core", "chart": "./helm/dlp-core"}}
             return
@@ -1382,6 +1406,17 @@ class App:
                     self.jira = JiraClient(self.jc, jira_auth_header(self.jc, secrets), ctx)
                 except SystemExit as e:
                     self.problems.append(str(e))
+        if self.hdc["enabled"]:
+            need = helpdesk.secret_name(self.hdc)
+            if not self.hdc["url"]:
+                self.problems.append("Helpdesk-Jira: Adresse fehlt.")
+            elif not secrets.get(need):
+                self.problems.append("Helpdesk-Jira: %s fehlt." % ("Token" if need == "helpdesk_token" else "Passwort"))
+            else:
+                try:
+                    self.hdj = JiraClient(dict(self.hdc), helpdesk.auth_header(self.hdc, secrets), ctx)
+                except ValueError as e:
+                    self.problems.append("Helpdesk-Jira: %s" % e)
         if self.ghc["enabled"]:
             if not secrets.get("github_token"):
                 self.problems.append("GitHub-Token fehlt.")
@@ -1942,6 +1977,8 @@ class App:
         else:
             data["jira"] = None
         data["sonar"] = self._sonar(data, step)
+        if self.hdj:
+            data["helpdesk_jira"] = self._helpdesk_fetch(step)
         now = time.time()
         src = []
         if self.client is not None:
@@ -1952,6 +1989,8 @@ class App:
             src.append(("jira", "Jira", bool((data.get("jira") or {}).get("ok"))))
         if self.sonar:
             src.append(("sonar", "Sonar", bool((data.get("sonar") or {}).get("ok", True))))
+        if self.hdj:
+            src.append(("helpdesk", self.hdc.get("name") or "Helpdesk", bool((data.get("helpdesk_jira") or {}).get("ok"))))
         data["sources"] = []
         for sid, name, ok in src:
             if ok:
@@ -1961,6 +2000,28 @@ class App:
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
         return data
+
+    def _helpdesk_fetch(self, step):
+        """Helpdesk-Jira lesen. Fällt es aus, bleiben die letzten Tickets stehen, als veraltet markiert."""
+        name = self.hdc.get("name") or "Helpdesk"
+        step("hd", "%s: zugewiesene Tickets und Queue" % name, "run")
+        try:
+            r = helpdesk.fetch(self.hdj, self.hdc)
+            step("hd", "%s: zugewiesene Tickets und Queue" % name, "ok", "%d zugewiesen, %d in der Queue" % (r["assigned_total"], r["queue_total"]))
+            return r
+        except UserError as e:
+            jlog.warning("Helpdesk-Jira: %s", e)
+            step("hd", "%s: zugewiesene Tickets und Queue" % name, "err", str(e))
+            prev = (self.cache or {}).get("helpdesk_jira")
+            if prev:
+                return dict(prev, ok=False, outdated=True, error=str(e))
+            return {"assigned": [], "queue": [], "assigned_total": 0, "queue_total": 0, "ok": False, "error": str(e), "name": name, "sla_hours": self.hdc["sla_hours"]}
+
+    def helpdesk_seen(self, b):
+        hd = (self.cache or {}).get("helpdesk_jira") or {}
+        keys = [t["key"] for t in hd.get("queue") or []] if b.get("all") else [str(k) for k in (b.get("keys") or [])][:200]
+        self.store.hd_seen_add(keys)
+        return {"seen": len(keys)}
 
     def _keep_last_good(self, data):
         """Fällt eine Quelle (ganz oder je Projekt/Repo) aus, bleiben ihre letzten Einträge stehen, als «veraltet» markiert (outdated),
@@ -2550,6 +2611,20 @@ class App:
         except Exception as e:   # der Ablauf ist eine Ansicht; er darf die Übersicht nie verhindern
             log.warning("Ablauf: %s", scrub(e))
             data["flow"] = None
+        if data.get("flow") is not None:
+            hd = data.get("helpdesk_jira")
+            ent, queue = helpdesk.entries(hd, self.store.hd_seen()) if hd else ([], [])
+            data["flow"]["helpdesk"] = ent
+            data["flow"]["hd_queue"] = queue
+            data["flow"]["hd_info"] = {k: hd.get(k) for k in ("name", "url", "ok", "error", "outdated", "assigned_total", "queue_total", "sla_hours")} if hd else None
+            pin = self.store.pin_get()
+            if pin and pin.startswith("hd:") and any(e["id"] == pin for e in ent):
+                data["flow"]["pinned"] = pin
+        try:
+            data["focus"] = self.focus_state()
+        except Exception as e:      # Zugabe: darf die Übersicht nie verhindern
+            log.warning("Fokusbereiche: %s", scrub(e))
+            data["focus"] = None
         try:
             data["time"] = self.time_state()
         except Exception as e:      # die Zeit ist eine Zugabe; sie darf die Übersicht nie verhindern
@@ -2637,12 +2712,19 @@ class App:
                 return self._flow_accept(b)
             if action == "pin":
                 cid = b.get("id") or None
-                if cid and cid not in self._cards and not str(cid).startswith("rv:"):
+                if cid and str(cid).startswith("hd:"):
+                    if not any(x["key"] == cid[3:] for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or []):
+                        raise UserError("Dieses Helpdesk-Ticket ist nicht (mehr) dir zugewiesen.")
+                elif cid and cid not in self._cards and not str(cid).startswith("rv:"):
                     raise UserError("Dieses Vorhaben gibt es (gerade) nicht.")
                 self.store.pin_set(cid)
                 if self.tc["enabled"]:
-                    if cid and not str(cid).startswith("rv:"):
-                        self.timebook.start(cid, (self._cards.get(cid) or {}).get("title") or "", idle=self.tc["idle_minutes"])
+                    if cid and str(cid).startswith("hd:"):
+                        key = cid[3:]
+                        t = next((x for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or [] if x["key"] == key), {})
+                        self.timebook.start(key, t.get("title") or key, idle=self.tc["idle_minutes"], area=self.hdc.get("area") or "hd")
+                    elif cid and not str(cid).startswith("rv:"):
+                        self.timebook.start(cid, (self._cards.get(cid) or {}).get("title") or "", idle=self.tc["idle_minutes"], area=self._area_of(cid))
                     else:
                         self.timebook.stop(idle=self.tc["idle_minutes"])
                 return {"pinned": cid}
@@ -2812,7 +2894,7 @@ class App:
         if cur:
             idle_now = now - cur["last_seen"] > idle * 60
             run = {"key": cur["key"], "title": cur["title"], "since": cur["start"], "idle": idle_now,
-                   "today_secs": (tot.get(cur["key"]) or {}).get("secs", 0)}
+                   "today_secs": (tot.get(cur["key"]) or {}).get("secs", 0), "area": cur.get("area") or "dev", "activity": cur.get("activity") or ""}
         return {"enabled": True, "running": run, "today_secs": sum(x["secs"] for x in tot.values()), "gaps": len(tb.gaps(d)),
                 "open_drafts": len([x for x in tb.drafts(state="offen") if x["date"] < d]), "date": d}
 
@@ -2821,6 +2903,8 @@ class App:
         for cid, c in (self._cards or {}).items():
             hint = ", ".join(p["name"] for p in c.get("pools") or []) or next((x.get("project") for x in c.get("items") or [] if x.get("project")), "")
             meta[cid] = {"title": c.get("title") or cid, "project_hint": hint}
+        for t in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or []:
+            meta.setdefault(t["key"], {"title": t["title"], "project_hint": self.hdc.get("name") or "Helpdesk"})
         return meta
 
     def time_day(self, d=None, now=None):
@@ -3068,6 +3152,98 @@ class App:
         n = self.uxlog.clear()
         self.audit("ux.clear", "", events=n)
         return {"deleted": n}
+
+    # -- Fokusbereiche und Fokus-Sitzung (0.23)
+    def _area_of(self, cid):
+        if str(cid).startswith("hd:"):
+            return self.hdc.get("area") or "hd"
+        return focusplan.area_of_card(self.fc, self._cards.get(cid))
+
+    def focus_state(self, now=None):
+        now = now or time.time()
+        if not self.tc["enabled"]:
+            return None
+        ws = focusplan.week_start(now).timestamp()
+        segs = self.timebook.range_segments(ws, now + 1, now, self.tc["idle_minutes"])
+        rep = focusplan.week_report(self.fc, segs, now)
+        ses = self.timebook.session()
+        if ses:
+            ses["left_secs"] = int(ses["start"] + ses["planned_min"] * 60 - now)
+            a = focusplan.area(self.fc, ses["area"])
+            ses["area_name"] = a["name"] if a else ses["area"]
+        today_a = datetime.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        done = [x for x in self.timebook.sessions(today_a, now + 1) if x["end"]]
+        return {"week": rep, "session": ses, "block": focusplan.current_block(self.fc, now), "next_block": focusplan.next_block(self.fc, now),
+                "areas": [{"id": a["id"], "name": a["name"], "activities": a.get("activities") or [], "ticket": a.get("ticket") or "",
+                           "target_pct": a.get("target_pct", 0)} for a in self.fc["areas"]],
+                "today": {"sessions": len(done), "minutes": int(sum((x["end"] - x["start"]) for x in done) // 60)}}
+
+    def focus_action(self, action, b, now=None):
+        now = now or time.time()
+        if not self.tc["enabled"]:
+            raise UserError("Die Zeiterfassung ist ausgeschaltet (Einstellungen → Zeiterfassung).")
+        tb, idle = self.timebook, self.tc["idle_minutes"]
+        ses = tb.session()
+        if action == "start":
+            try:
+                minutes = int(b.get("minutes") or 50)
+            except (TypeError, ValueError):
+                minutes = 0
+            if not 5 <= minutes <= 240:
+                raise UserError("Dauer zwischen 5 und 240 Minuten.")
+            activity = " ".join(str(b.get("activity") or "").split())[:80]
+            cid = str(b.get("key") or "")
+            if cid:
+                if cid.startswith("hd:"):
+                    key = cid[3:]
+                    t = next((x for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or [] if x["key"] == key), None)
+                    if not t:
+                        raise UserError("Dieses Helpdesk-Ticket ist nicht (mehr) dir zugewiesen.")
+                    title, aid = t["title"], self.hdc.get("area") or "hd"
+                else:
+                    c = self._cards.get(cid)
+                    if not c:
+                        raise UserError("Dieses Vorhaben gibt es nicht (mehr).")
+                    key, title, aid = cid, c.get("title") or cid, b.get("area") or self._area_of(cid)
+                self.store.pin_set(cid)
+            else:
+                a = focusplan.area(self.fc, b.get("area"))
+                if not a:
+                    raise UserError("Unbekannter Fokusbereich.")
+                key, title, aid = focusplan.booking_key(a), a["name"], a["id"]
+            tb.start(key, title, now=now, idle=idle, area=aid, activity=activity)
+            sid = tb.session_start(key, title, aid, activity, minutes, now)
+            self.audit("focus.start", key, area=aid, activity=activity, minutes=minutes, session=sid)
+            return self.focus_state(now)
+        if not ses:
+            raise UserError("Es läuft keine Fokus-Sitzung.")
+        if action == "park":
+            text = " ".join(str(b.get("text") or "").split())[:500]
+            if not text:
+                raise UserError("Der Gedanke fehlt.")
+            if self.ideas and self.has("ideas"):
+                self.ideas.add(text)
+            tb.session_update(ses["id"], parked=ses["parked"] + 1, note=(ses["note"] + "\n" + text)[-2000:] if not self.ideas else ses["note"])
+            return {"parked": ses["parked"] + 1, "to": "ideen" if self.ideas else "notiz"}
+        if action == "activity":
+            activity = " ".join(str(b.get("activity") or "").split())[:80]
+            tb.start(ses["key"], ses["title"], now=now, idle=idle, area=ses["area"], activity=activity)
+            tb.session_update(ses["id"], activity=activity)
+            return self.focus_state(now)
+        if action == "end":
+            result = b.get("result") if b.get("result") in ("erledigt", "weiter", "abgelenkt", "abgebrochen") else "abgebrochen"
+            mins = int((now - ses["start"]) // 60)
+            tb.session_update(ses["id"], end=now, result=result, note=(ses["note"] + "\n" + str(b.get("note") or "")[:500]).strip()[-2000:])
+            if result != "weiter":
+                tb.stop(now, idle)
+            xp = 0
+            if mins >= 20 and result in ("erledigt", "weiter"):
+                xp = 15
+                self.store.flow_event_once("focus:%d" % ses["id"], ses["key"], ses["title"], "focus", 0, xp,
+                                           "Fokus %d min%s" % (mins, (" · " + ses["activity"]) if ses["activity"] else ""), now)
+            self.audit("focus.end", ses["key"], area=ses["area"], minutes=mins, planned=ses["planned_min"], result=result, parked=ses["parked"])
+            return dict(self.focus_state(now), ended={"minutes": mins, "result": result, "xp": xp, "parked": ses["parked"]})
+        raise UserError("Unbekannte Aktion.")
 
     # -- Hinweis vom Starter (0.21): «Aktualisiert auf …» einmal im Panel zeigen
     def update_note(self):
@@ -3487,6 +3663,10 @@ def make_handler(app):
                     return self._send(200, app.ide_open(self._body()))
                 if method == "POST" and path == "/api/ide/close":
                     return self._send(200, app.ide_close(self._body()))
+                if method == "POST" and path.startswith("/api/focus/"):
+                    return self._send(200, app.focus_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "POST" and path == "/api/helpdesk/seen":
+                    return self._send(200, app.helpdesk_seen(self._body()))
                 if method == "POST" and path == "/api/ux/events":
                     return self._send(200, app.ux_events(self._body()))
                 if method == "GET" and path == "/api/ux/report":
@@ -3631,6 +3811,10 @@ def make_handler(app):
                 res = settings.test_jira(body, stored)
                 hlog.info("Test Jira: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
+            if path == "/api/settings/test/helpdesk":
+                res = settings.test_helpdesk(body, stored)
+                hlog.info("Test Helpdesk: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
+                return self._send(200, res)
             if path == "/api/settings/test/sonar":
                 res = settings.test_sonar(body, stored)
                 hlog.info("Test Sonar: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
@@ -3718,6 +3902,8 @@ def resolve_secrets(cfg, demo, show=False):
         names.append("github_token")
     if time_cfg(cfg).get("mcp_url"):
         names.append("mcp_token")
+    if not demo and helpdesk.cfg(cfg).get("enabled"):
+        names.append(helpdesk.secret_name(helpdesk.cfg(cfg)))
     out = {}
     for name in names:
         try:
@@ -3798,6 +3984,11 @@ def run_preflight(cfg, config_path, demo):
                                               "only_active_sprints": bool(jc.get("only_active_sprints", True))}, stored))
         else:
             print("\nJira\n%snicht eingerichtet" % marks["info"])
+        hc = helpdesk.cfg(cfg)
+        if hc.get("enabled") and hc.get("url"):
+            steps(hc.get("name") or "Helpdesk", settings.test_helpdesk({"url": hc["url"], "auth": hc["auth"], "username": hc.get("username", ""),
+                                                                        "ca_bundle": cfg.get("ca_bundle", ""), "assigned_jql": hc["assigned_jql"],
+                                                                        "queue_jql": hc.get("queue_jql", "")}, stored))
         uc = usage_cfg(cfg)
         if uc.get("claude") or uc.get("codex"):
             print("\nKI-Kontingent")
@@ -3890,6 +4081,11 @@ def run_selftest(cfg):
         td = a.ticket_draft({"idea_id": iid})
         ok = ra["recommendation"] == "später" and "h3. Akzeptanzkriterien" in td["draft"]["description"]
         step("idea", "Idee bewerten und Ticket-Entwurf", "ok" if ok else "fail", "Bewertung gespeichert, Entwurf mit Story und Akzeptanzkriterien")
+        hd = (a.overview().get("flow") or {}).get("helpdesk") or []
+        st = a.focus_action("start", {"area": "bb", "activity": "Betreuung Lernende", "minutes": 25})
+        en = a.focus_action("end", {"result": "erledigt"}, now=st["session"]["start"] + 25 * 60)
+        ok = len(hd) == 3 and en["ended"]["xp"] == 15 and any(x["id"] == "bb" for x in en["week"]["areas"])
+        step("focus", "Helpdesk und Fokus-Sitzung", "ok" if ok else "fail", "%d Helpdesk-Tickets, Sitzung %d min, +%d XP" % (len(hd), en["ended"]["minutes"], en["ended"]["xp"]))
         q = a.qa_view()
         step("qa", "Prüfliste lesen", "ok" if q["sections"] else "warn", "%d Abschnitte" % len(q["sections"]))
     except Exception as e:      # der Selbsttest meldet, statt abzustürzen

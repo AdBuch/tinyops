@@ -71,6 +71,15 @@
   "github": {"enabled": false, "api_url": "https://api.github.com", "repos": [{"full": "owner/repo", "id": 123456, "agent_dir": "", "allow_cloud_agents": false}]},
   "flow": {"daily_goal": 3},
   "time": {"enabled": true, "round_minutes": 15, "min_minutes": 5, "idle_minutes": 15, "mcp_url": "", "allow_remote": false, "send_on_confirm": true},
+  "helpdesk": {"enabled": false, "name": "Helpdesk", "url": "https://helpdesk.example.intern", "auth": "basic", "username": "",
+               "assigned_jql": "assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC",
+               "queue_jql": "", "sla_hours": 24, "area": "hd"},
+  "focus": {"week_hours": 42, "day_start": "08:00", "day_end": "17:00", "areas": [
+    {"id": "dev", "name": "Entwicklung", "target_pct": 0},
+    {"id": "hd", "name": "Helpdesk", "target_pct": 0},
+    {"id": "bb", "name": "Berufsbildung", "target_pct": 30, "ticket": "", "pools": ["Berufsbildung"],
+     "activities": ["Betreuung Lernende", "Aufgaben vorbereiten", "Aufgaben reviewen", "Meeting", "Fortschritt prüfen", "Eigene Weiterbildung"],
+     "blocks": [{"day": 2, "from": "13:30", "to": "17:00"}]}]},
   "connections": [
     {"id": "dev-vm", "name": "dev-vm", "host": "dev.example.intern", "user": "adrian", "port": 22, "identity_file": "", "host_key": "strict"}
   ],
