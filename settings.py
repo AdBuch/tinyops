@@ -22,6 +22,7 @@ import sonar
 import usage
 import focusplan
 import helpdesk
+import workspaces
 import sprint
 import timesheet
 import tlog
@@ -1110,6 +1111,7 @@ def view(cfg, config_path, features_default=None):
         "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
         "helpdesk": helpdesk.cfg(cfg),
+        "workspaces": dict(workspaces.cfg(cfg), found=workspaces.roots_of(cfg)),
         "focus": _focus_view(cfg),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
@@ -1459,6 +1461,28 @@ def build_config(current, p):
         cfg["helpdesk"] = hc
     if isinstance(p.get("focus"), dict):
         cfg["focus"] = _clean_focus(p["focus"], errors)
+    if isinstance(p.get("workspaces"), dict):
+        w, wc = p["workspaces"], workspaces.cfg(cfg)
+        wc["enabled"] = bool(w.get("enabled", wc["enabled"]))
+        roots = w.get("roots", wc["roots"])
+        if isinstance(roots, str):
+            roots = [x.strip() for x in re.split(r"[\n;]+", roots)]
+        clean = []
+        for r in roots or []:
+            r = str(r).strip()
+            if not r:
+                continue
+            if len(r) > 400 or "\0" in r or not (r.startswith(("/", "~")) or re.match(r"^[A-Za-z]:[\\/]", r)):
+                errors["workspaces.roots"] = "«%s»: bitte einen absoluten Pfad (z. B. ~/work oder C:\\work)." % r[:60]
+                continue
+            if r not in clean:
+                clean.append(r)
+        wc["roots"] = clean[:20]
+        wc["depth"] = _int(w.get("depth"), "workspaces.depth", 1, 6, errors, wc["depth"])
+        wc["stale_days"] = _int(w.get("stale_days"), "workspaces.stale_days", 0, 365, errors, wc["stale_days"])
+        wc["scan_minutes"] = _int(w.get("scan_minutes"), "workspaces.scan_minutes", 1, 240, errors, wc["scan_minutes"])
+        wc.pop("found", None)
+        cfg["workspaces"] = wc
     if isinstance(p.get("ux"), dict):
         u = dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {}))
         u["enabled"] = bool(p["ux"].get("enabled", u["enabled"]))

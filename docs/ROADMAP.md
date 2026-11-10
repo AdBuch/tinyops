@@ -31,7 +31,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.22.0** ✓ | KI-Tempo mit Zeitmarke, UI-Nutzung lokal erfassen für die UI-Optimierung (geliefert 2026-11-06) | – | S–M |
 | **0.23.0** ✓ | Helpdesk-Jira (nur lesend), Fokusbereiche mit Wochenziel (Berufsbildung 30 %), Fokus-Sitzung und Fokus-Modus, Auto-Tag (geliefert 2026-11-07) | – | M |
 | **0.24.0** ✓ | Helpdesk im Panel lesen, «Ich beobachte» (Watcher), Fokus-Leiste, Korrekturen aus dem Nutzungsbericht (geliefert 2026-11-10) | – | S–M |
-| 0.25.0 | Workspaces lokal: ungepushte Commits, Uncommittetes, Stashes, Worktrees der Agenten, Agent direkt zuweisen | – | M |
+| **0.25.0** ✓ | Workspaces lokal: Unterordner nach Git-Repos durchsuchen (GitLab, GitHub, andere, ohne Git), ungepushte Commits, Uncommittetes, Stashes, Worktrees der Agenten, Agent direkt zuweisen (geliefert 2026-11-10) | – | M |
 | 0.26.0 | Agenten aus tinyops: Auftrag aus Ticket und Akzeptanzkriterien, Start bei Claude, Codex, Mistral, Ergebnis zurück ins Panel | – | M–L |
 | 0.27.0 | Qwen als lokaler Agent über Goose, Branch-Vorprüfung, Geheimnis-Scan vor dem Push; DLP-Regel: `restricted` nur lokal, `internal`/`public` dürfen Code zu Cloud-Agenten | – | M |
 | 0.28.0 | Teams, Mail und Kalender über Graph (delegiert, Anmeldung im Browser mit 2FA): ersetzt den ICS-Plan. Braucht Client-ID, Tenant-ID und die Klärung zu Conditional Access; kann vorgezogen werden, sobald das da ist | – | L |

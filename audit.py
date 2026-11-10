@@ -40,7 +40,7 @@ LABELS = {
     "qa.check": "Prüfpunkt abgehakt", "qa.selftest": "Selbsttest",
     "ux.clear": "UI-Nutzung gelöscht",
     "focus.start": "Fokus-Sitzung gestartet", "focus.end": "Fokus-Sitzung beendet",
-    "idea.assess": "Idee bewertet", "idea.ticket": "Ticket aus Idee", "ide.open": "In IntelliJ geöffnet", "ide.close": "IntelliJ-Worktree entfernt",
+    "idea.assess": "Idee bewertet", "idea.ticket": "Ticket aus Idee", "ide.open": "In IntelliJ geöffnet", "workspace.fetch": "Workspace: Remote abgeholt", "workspace.task": "Workspace: Aufgabe für Agent angelegt", "ide.close": "IntelliJ-Worktree entfernt",
 }
 
 

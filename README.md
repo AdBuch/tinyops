@@ -459,6 +459,19 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4w. Workspaces: lokale Repos und ungepushte Arbeit (neu in 0.25.0)
+
+Der Tab «Workspaces» zeigt je lokalem Repo, was nur auf deinem Rechner liegt: Commits ohne Remote, Branches ohne Upstream, offene Dateien, Stashes und die Worktrees der Agenten.
+
+```json
+"workspaces": {"enabled": true, "roots": ["~/work"], "depth": 3, "stale_days": 2, "scan_minutes": 5}
+```
+
+- `roots` sind Ordner, deren Unterordner Projekte sind (`~/work/dlp-core`, `~/work/kunden/sync-tool`). Die Arbeitsordner lokaler Agenten und die Ordner über `repo_path` kommen von selbst dazu.
+- Gefunden werden auch Repos, die tinyops nicht kennt (GitLab, GitHub, andere Hosts, ohne Remote), und Projektordner ohne Git.
+- «Agent zuweisen» in der Repo-Zeile legt eine lokale Aufgabe an und öffnet den Auftragsdialog. Das geht nur für eingerichtete Projekte.
+- tinyops liest nur. «Abholen» ist ein `git fetch --prune`; gepusht wird nie, den Befehl kopierst du.
+
 ## 4ü. Helpdesk lesen, Beobachten und Fokus-Leiste (neu in 0.24.0)
 
 - **Ticket im Panel:** «Ticket ansehen» zeigt Beschreibung und die letzten Kommentare in tinyops. Geschrieben wird weiterhin nur im Helpdesk.

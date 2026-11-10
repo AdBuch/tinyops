@@ -117,6 +117,20 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.25.0
+
+- [ ] `r25-01` Einstellungen → Workspaces: deinen Projektordner eintragen (z. B. `~/work`), speichern → «Durchsucht wird» nennt ihn
+- [ ] `r25-02` Tab «Workspaces» → deine Repos erscheinen, auch die in Unterordnern; jedes zeigt GitLab, GitHub, anderer Host oder kein Remote
+- [ ] `r25-03` In einem Repo einen Commit machen, nicht pushen, «Neu einlesen» → «1 Commit nicht gepusht», das Repo steht oben
+- [ ] `r25-04` Eine Datei ändern und einen Stash anlegen → «Dateien offen» und «1 Stash» in der Zeile
+- [ ] `r25-05` Repo aufklappen → Branches mit Upstream, voraus/hinter; «push-Befehl» kopieren und im Terminal ausführen → nach «Neu einlesen» ist das Repo sauber
+- [ ] `r25-06` Ein Repo, das nicht in tinyops eingerichtet ist → «nicht in tinyops», Filter «Nicht in tinyops» zeigt es, kein «Agent zuweisen»
+- [ ] `r25-07` Ein Projektordner ohne Git (z. B. mit `package.json`) → steht unter «Projekte ohne Git»
+- [ ] `r25-08` «Abholen» bei einem Repo → Meldung «abgeholt», dein Arbeitsverzeichnis und deine Branches sind unverändert (`git status`)
+- [ ] `r25-09` Eingerichtetes Projekt: «Agent zuweisen», Satz eingeben, «Weiter zum Auftrag» → Auftragsdialog mit Prompt; nach dem Start erscheint der Worktree des Agenten im Repo
+- [ ] `r25-10` Fokus → Seitenleiste «Nicht gepusht» nennt die Repos; die Zahl am Tab zählt nur Repos über dem Meldealter
+- [ ] `r25-11` Projekt mit `restricted`: im Agenten-Menü sind Cloud-Agenten ausgegraut
+
 ## 0.24.0
 
 - [ ] `r24-01` Fokus: bei einem Helpdesk-Ticket «Ticket ansehen» → Details öffnen sich im Panel mit Beschreibung und Kommentaren, kein neuer Tab

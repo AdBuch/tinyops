@@ -33,6 +33,7 @@ import agents
 import audit
 import focusplan
 import helpdesk
+import workspaces
 import qa
 import review
 import timesheet
@@ -52,7 +53,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.24.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.25.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1109,6 +1110,39 @@ class DemoClient:
                 "sha": "a1b2c3d4e5f60718", "url": "https://gitlab.example/demo/%s" % iid}
 
 
+def demo_workspaces():
+    """Erfundene Workspaces für die Demo: ein Repo mit ungepushter Arbeit, ein Agent-Worktree, ein fremdes Repo, ein Ordner ohne Git."""
+    now = time.time()
+
+    def br(name, up, ahead, age, subject, behind=0, cur=False):
+        return {"name": name, "upstream": up, "gone": False, "ahead": ahead, "behind": behind, "sha": "%07x" % (abs(hash(name)) % 0xfffffff), "subject": subject,
+                "age_days": age, "agent": name.startswith("agent/"), "current": cur}
+
+    def repo(name, rel, host, remote, pid, head, branches, dirty=(0, 0, 0), stashes=0, stash_age=None, wts=(), fetched=0.2):
+        r = {"path": "/home/demo/work/" + rel, "name": name, "rel": rel, "root": "/home/demo/work", "ok": True, "head": head, "host": host, "remote": remote,
+             "remotes": [{"name": "origin", "url": "https://" + remote + ".git", "host": remote.split("/")[0], "path": remote.split("/", 1)[1], "kind": host}] if remote else [],
+             "project": {"pid": pid, "name": name, "host": host} if pid else None, "branches": branches,
+             "dirty": {"staged": dirty[0], "changed": dirty[1], "new": dirty[2], "total": sum(dirty)}, "stashes": stashes, "stash_age_days": stash_age,
+             "worktrees": list(wts), "fetched_days": fetched}
+        r.update(workspaces.summary(r))
+        return r
+    repos = [
+        repo("dlp-core", "dlp-core", "gitlab", "gitlab.example/dlp/dlp-core", 1, "feature/DLP-101-vendex-retry",
+             [br("main", "origin/main", 0, 1.0, "Merge DLP-99"), br("feature/DLP-101-vendex-retry", "origin/feature/DLP-101-vendex-retry", 3, 2.6, "Retry mit Backoff", cur=True),
+              br("spike/quarantine-api", "", 5, 9.0, "WIP Quarantäne-API"), br("agent/dlp-120-7", "", 2, 0.2, "Retry-Tests ergänzt")],
+             dirty=(1, 4, 2), stashes=2, stash_age=12.0,
+             wts=[{"path": "/home/demo/work/.tinyops-wt/7", "branch": "agent/dlp-120-7", "sha": "a1b2c3d4", "detached": False, "agent": True, "missing": False, "dirty": 0}]),
+        repo("dlp-ui", "dlp-ui", "gitlab", "gitlab.example/dlp/dlp-ui", 2, "main", [br("main", "origin/main", 0, 3.0, "Policy-Tabelle", behind=4, cur=True)], fetched=6.0),
+        repo("sync-tool", "kunden/sync-tool", "github", "github.com/demo/sync-tool", None, "main",
+             [br("main", "origin/main", 1, 0.4, "Mapping für Labelo", cur=True)], dirty=(0, 1, 0)),
+        repo("notizen", "notizen", "none", "", None, "master", [br("master", "", 14, 30.0, "Notizen November", cur=True)]),
+    ]
+    repos.sort(key=lambda x: (not x.get("todo"), -(x.get("oldest_days") or 0), x["name"].lower()))
+    return {"ts": now, "secs": 0.1, "partial": False, "repos": repos,
+            "roots": [{"path": "/home/demo/work", "why": "Arbeitsordner von goose-lokal", "ok": True, "repos": 4, "plain": 1}],
+            "plain": [{"path": "/home/demo/work/skripte/report-export", "name": "report-export", "rel": "skripte/report-export", "kind": "Python", "root": "/home/demo/work"}]}
+
+
 class DemoHelpdesk:
     """Demo-Servicedesk (Jira 8.5): drei zugewiesene Tickets, eines über dem SLA, und eine kleine Queue."""
     base = "https://servicedesk.example"
@@ -1315,6 +1349,7 @@ class App:
         self.sync = {"running": False, "steps": [], "started": 0.0, "finished": 0.0, "n": 0}
         self.partial, self.early_stories, self._sync_thread = None, None, None
         self.hd_lock = threading.Lock()
+        self.ws_lock, self.ws_cache, self.ws_busy = threading.Lock(), None, False
         self.ideas = None
         self.jobs = None
         self.apply(cfg, secrets)
@@ -1357,6 +1392,8 @@ class App:
         self.uxlog = ux.UxLog(data_dir(cfg) / "tinyops.db")
         self.tc = time_cfg(cfg)
         self.fc = focusplan.cfg(cfg)
+        self.wsc = workspaces.cfg(cfg)
+        self.ws_cache = None
         self.mcp_token = secrets.get("mcp_token", "")
         self.ssl_ctx = ssl.create_default_context()
         if not hasattr(self, "_send_lock"):
@@ -2027,6 +2064,99 @@ class App:
                 return dict(prev, ok=False, outdated=True, error=str(e))
             return {"assigned": [], "queue": [], "assigned_total": 0, "queue_total": 0, "ok": False, "error": str(e), "name": name, "sla_hours": self.hdc["sla_hours"]}
 
+    # -- Workspaces (0.25): lokale Repos, ungepushte Arbeit, Worktrees der Agenten
+    def _ws_projects(self):
+        out = [{"pid": p["id"], "name": p.get("name") or str(p["id"]), "host": "gitlab", "full": p.get("path") or "", "repo_path": p.get("repo_path") or "",
+                "agent_dir": p.get("agent_dir") or ""} for p in self.cfg.get("projects") or []]
+        for r in (self.ghc.get("repos") or []):
+            if r.get("id") and r.get("full"):
+                out.append({"pid": github.pid_of(r["id"]), "name": r["full"].split("/")[-1], "host": "github", "full": r["full"],
+                            "repo_path": r.get("repo_path") or "", "agent_dir": r.get("agent_dir") or ""})
+        return out
+
+    def _ws_hosts(self):
+        gl = urllib.parse.urlparse(self.cfg.get("gitlab_url") or "").hostname or ""
+        gh = urllib.parse.urlparse(self.ghc.get("api_url") or "").hostname or ""
+        return {"gitlab": [gl.lower()] if gl else [], "github": [h for h in (gh.lower(), gh.lower().replace("api.", "", 1)) if h]}
+
+    def _ws_scan(self):
+        if self.demo:
+            return demo_workspaces()
+        roots = workspaces.roots_of(self.cfg)
+        return workspaces.scan(roots, self._ws_hosts(), self._ws_projects(), int(self.wsc["depth"]), int(self.wsc["max_repos"]))
+
+    def workspaces_state(self, fresh=False):
+        """Stand der Workspaces. Der Scan läuft höchstens alle scan_minutes; fresh erzwingt ihn."""
+        if not self.wsc["enabled"]:
+            return {"enabled": False}
+        with self.ws_lock:
+            c = self.ws_cache
+            if fresh or c is None or time.time() - c["ts"] > float(self.wsc["scan_minutes"]) * 60:
+                c = self.ws_cache = self._ws_scan()
+        ag = self.agents.view() if self.agents else {"agents": [], "projects": [], "runs": []}
+        runs = {}
+        for r in ag.get("runs") or []:
+            if r.get("out_branch"):
+                runs[r["out_branch"]] = {"id": r["id"], "status": r["status"], "agent": r.get("agent_name") or r.get("agent"), "ticket": r.get("ticket")}
+        return dict(c, enabled=True, totals=workspaces.totals(c, float(self.wsc["stale_days"])), stale_days=self.wsc["stale_days"], runs=runs,
+                    agents=[{"id": a["id"], "name": a["name"], "cloud": a["cloud"], "where": a.get("where", "")} for a in ag.get("agents") or []],
+                    classes={p["id"]: p.get("data_class") for p in ag.get("projects") or []})
+
+    def _ws_summary(self):
+        """Für die Übersicht: Zahlen aus dem letzten Scan. Ist er alt, läuft im Hintergrund ein neuer."""
+        if not self.wsc["enabled"]:
+            return None
+        c = self.ws_cache
+        if (c is None or time.time() - c["ts"] > float(self.wsc["scan_minutes"]) * 60) and not self.ws_busy:
+            self.ws_busy = True
+
+            def run():
+                try:
+                    self.workspaces_state()
+                except Exception as e:      # noqa: BLE001 - der Scan ist Zugabe
+                    log.warning("Workspaces: %s", scrub(e))
+                finally:
+                    self.ws_busy = False
+            threading.Thread(target=run, name="workspaces", daemon=True).start()
+        return dict(workspaces.totals(c, float(self.wsc["stale_days"])), scanning=c is None) if c else {"scanning": True, "repos": 0, "todo": 0, "stale": []}
+
+    def _ws_repo(self, path):
+        c = self.ws_cache or {}
+        r = next((x for x in c.get("repos") or [] if x["path"] == str(path or "")), None)
+        if r is None:
+            raise UserError("Dieses Repo kennt der letzte Scan nicht. Workspaces neu einlesen.")
+        return r
+
+    def workspaces_action(self, action, b):
+        if not self.wsc["enabled"]:
+            raise UserError("Workspaces sind ausgeschaltet.")
+        r = self._ws_repo(b.get("path"))
+        if action == "fetch":
+            if self.demo:
+                ok, err = True, ""
+            else:
+                ok, err = workspaces.fetch(r["path"])
+            self.audit("workspace.fetch", r["name"], ok=ok, path=r["path"], error=err or None)
+            if not ok:
+                raise UserError("Abholen fehlgeschlagen: %s" % (err or "git fetch meldet einen Fehler"))
+            self.ws_cache = None
+            return self.workspaces_state(True)
+        if action == "task":
+            # Arbeit direkt aus dem Workspace vergeben: eine lokale Aufgabe anlegen, die der Agenten-Dialog dann zuweist
+            if not r.get("project"):
+                raise UserError("«%s» ist in tinyops kein eingerichtetes Projekt. Erst unter Einstellungen → Projekte aufnehmen, damit Datenklasse und Agenten-Regeln gelten." % r["name"])
+            title = " ".join(str(b.get("title") or "").split())[:200]
+            if not title:
+                raise UserError("Was soll der Agent tun? Ein Satz genügt.")
+            branch = str(b.get("branch") or r.get("head") or "")[:200]
+            if branch and not any(x["name"] == branch for x in r["branches"]):
+                raise UserError("Den Branch «%s» gibt es in diesem Repo nicht." % branch)
+            key = self.board_action("add", {"title": title, "stage": "idea", "pool_id": None})["key"]
+            self.audit("workspace.task", key, repo=r["name"], branch=branch, project_id=r["project"]["pid"])
+            self.cache_t = 0.0
+            return {"key": key, "title": title, "project_id": r["project"]["pid"], "branch": branch}
+        raise UserError("Unbekannte Aktion.")
+
     def helpdesk_seen(self, b):
         hd = (self.cache or {}).get("helpdesk_jira") or {}
         if b.get("all") == "watch":
@@ -2650,6 +2780,11 @@ class App:
             pin = self.store.pin_get()
             if pin and pin.startswith("hd:") and any(e["id"] == pin for e in ent):
                 data["flow"]["pinned"] = pin
+        try:
+            data["workspaces"] = self._ws_summary()
+        except Exception as e:      # Zugabe: darf die Übersicht nie verhindern
+            log.warning("Workspaces: %s", scrub(e))
+            data["workspaces"] = None
         try:
             data["focus"] = self.focus_state()
         except Exception as e:      # Zugabe: darf die Übersicht nie verhindern
@@ -3695,6 +3830,10 @@ def make_handler(app):
                     return self._send(200, app.ide_close(self._body()))
                 if method == "POST" and path.startswith("/api/focus/"):
                     return self._send(200, app.focus_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/workspaces":
+                    return self._send(200, app.workspaces_state("fresh=1" in (parsed.query or "")))
+                if method == "POST" and path.startswith("/api/workspaces/"):
+                    return self._send(200, app.workspaces_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "GET" and path == "/api/helpdesk/ticket":
                     return self._send(200, app.helpdesk_ticket((urllib.parse.parse_qs(parsed.query).get("key") or [""])[0]))
                 if method == "POST" and path == "/api/helpdesk/seen":
@@ -4118,6 +4257,9 @@ def run_selftest(cfg):
         en = a.focus_action("end", {"result": "erledigt"}, now=st["session"]["start"] + 25 * 60)
         ok = len(hd) == 3 and en["ended"]["xp"] == 15 and any(x["id"] == "bb" for x in en["week"]["areas"])
         step("focus", "Helpdesk und Fokus-Sitzung", "ok" if ok else "fail", "%d Helpdesk-Tickets, Sitzung %d min, +%d XP" % (len(hd), en["ended"]["minutes"], en["ended"]["xp"]))
+        w = a.workspaces_state()
+        step("ws", "Workspaces", "ok" if w["totals"]["todo"] == 3 and a.overview()["workspaces"]["repos"] == 4 else "fail",
+             "%d Repos, %d mit lokaler Arbeit" % (w["totals"]["repos"], w["totals"]["todo"]))
         q = a.qa_view()
         step("qa", "Prüfliste lesen", "ok" if q["sections"] else "warn", "%d Abschnitte" % len(q["sections"]))
     except Exception as e:      # der Selbsttest meldet, statt abzustürzen

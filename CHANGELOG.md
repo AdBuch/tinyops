@@ -5,6 +5,31 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.25.0]
+
+### Neu
+- **Workspaces** (neuer Tab): Was liegt lokal und ist noch nicht gepusht?
+  - Ein Workspace ist ein Ordner, dessen Unterordner deine Projekte sind. tinyops durchsucht ihn bis zur eingestellten Tiefe (Standard 3) nach Git-Repos.
+  - Je Repo: Commits, die auf keinem Remote liegen, Branches ohne Upstream, offene Dateien (geändert, vorgemerkt, neu), Stashes mit Alter und «hinter Upstream».
+  - Repos mit lokaler Arbeit stehen oben, das älteste zuerst. Ab dem eingestellten Alter (Standard 2 Tage) sind sie rot, und der Tab zeigt ihre Zahl.
+  - Aufgeklappt: alle Branches mit Upstream, voraus/hinter und Alter, dazu der `git push`-Befehl zum Kopieren.
+  - Im Fokus meldet die Karte «Nicht gepusht» in der Seitenleiste, wo etwas liegt.
+- **Herkunft je Repo:** GitLab, GitHub, anderer Host oder kein Remote. Repos, die tinyops nicht als Projekt kennt, sind mit «nicht in tinyops» markiert und haben einen eigenen Filter.
+- **Projekte ohne Git:** Ordner mit `package.json`, `pom.xml`, `pyproject.toml`, `go.mod` und Ähnlichem, aber ohne Git, stehen als «nicht versioniert, nicht gesichert» in einer eigenen Liste.
+- **Worktrees der Agenten:** Je Repo siehst du die Worktrees mit Branch, offenen Dateien und dem zugehörigen Lauf. Ein Klick auf den Lauf öffnet ihn.
+- **Agent direkt zuweisen:** In der Repo-Zeile einen Agenten wählen, einen Satz zum Auftrag schreiben, Basis-Branch wählen. tinyops legt die lokale Aufgabe an und öffnet den gewohnten Auftragsdialog.
+  - Das geht nur für eingerichtete Projekte, damit Datenklasse und Agenten-Regeln gelten. Cloud-Agenten sind bei `restricted` gesperrt.
+- **Abholen:** `git fetch --prune` je Repo auf Knopfdruck, im Verlauf festgehalten.
+- **Einstellungen → Workspaces:** Ordner, Suchtiefe, Meldealter, Abstand der Scans. Die Arbeitsordner lokaler Agenten und die Ordner über deinen lokalen Klonen kommen von selbst dazu.
+
+### Sicherheit
+- tinyops liest die Repos nur: ohne Index-Lock, ohne Netz. Es pusht, committet und wechselt nie einen Branch. Ein Test prüft das.
+- Zugangsdaten in Remote-Adressen (`https://user:token@host/…`) werden weder gezeigt noch geloggt.
+
+### Grenzen
+- «Voraus» und «hinter» gelten für den Stand des letzten Abholens.
+- Workspaces auf anderen Rechnern (Agenten über SSH) werden noch nicht durchsucht.
+
 ## [0.24.0]
 
 ### Neu
