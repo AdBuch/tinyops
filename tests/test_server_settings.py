@@ -47,7 +47,8 @@ class Flow(unittest.TestCase):
         end = time.time() + 20
         while True:
             code, ov = self.call("GET", "/api/overview")
-            if code != 200 or (not ov.get("sync", {}).get("running") and not ov.get("loading")) or time.time() > end:
+            started = ov.get("me") or not ov.get("configured")      # direkt nach dem Speichern hat der Abgleich noch nicht begonnen
+            if code != 200 or (started and not ov.get("sync", {}).get("running") and not ov.get("loading")) or time.time() > end:
                 return code, ov
             time.sleep(0.1)
 
@@ -117,7 +118,7 @@ class Flow(unittest.TestCase):
 
                 code, ov = self.overview()
                 self.assertTrue(ov["configured"], ov)
-                self.assertEqual(ov["me"], "me")
+                self.assertEqual(ov["me"], "me", {k: ov.get(k) for k in ("errors", "sync", "loading", "problems", "sources")})
                 self.assertTrue(ov["jira"]["ok"])
                 self.assertTrue(any(i["kind"] == "branch" and i["branch"] == "agent/DLP-130-retry" for i in ov["mine"]))
                 br = next(i for i in ov["mine"] if i["kind"] == "branch" and i["branch"] == "agent/DLP-130-retry")

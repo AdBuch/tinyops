@@ -74,6 +74,12 @@ class H(BaseHTTPRequestHandler):
             return self._json(200, [{"name": "To Do"}, {"name": "In Progress"}, {"name": "Done"}])
         if u.path == "/rest/api/2/myself":
             return self._json(200, {"name": "jira-user", "displayName": "Jira User"})
+        if u.path.startswith("/rest/api/2/issue/SD-"):
+            k = u.path.rsplit("/", 1)[1]
+            d = sd_issue(k, "Drucker spinnt", "Open", "High", 30, 2)
+            d["fields"].update({"description": "Zeile 1\r\nZeile 2 " + "x" * 7000, "assignee": {"displayName": "Ich"},
+                                "comment": {"total": 7, "comments": [{"author": {"displayName": "A%d" % i}, "created": jira_time(i), "body": "Kommentar %d" % i} for i in range(7, 0, -1)]}})
+            return self._json(200, d)
         if u.path.startswith("/rest/api/2/issue/"):
             key = unquote(u.path.rsplit("/", 1)[1])
             if key not in ISSUES:
@@ -81,6 +87,11 @@ class H(BaseHTTPRequestHandler):
             return self._json(200, issue(key))
         if u.path == "/rest/api/2/search":
             jql = (q.get("jql") or [""])[0]
+            if jql.startswith("watcher"):
+                rows = [("SD-9", "Beobachtet", "Open", "Low", 100, 2), SD[0]]      # SD-1 ist auch zugewiesen: darf nicht doppelt erscheinen
+                return self._json(200, {"issues": [dict(sd_issue(*r), **{}) for r in rows], "total": 2})
+            if "hdkaputt" in jql:
+                return self._json(400, {"errorMessages": ["JQL kaputt"]})
             if "project = SD" in jql:
                 rows = SD[:2] if "currentUser()" in jql else SD[2:]
                 return self._json(200, {"issues": [sd_issue(*r) for r in rows], "total": len(rows)})

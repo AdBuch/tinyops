@@ -486,11 +486,18 @@ class _HdMixin:
                 return set()
             return {r["key"] for r in c.execute("select key from hd_seen")}
 
+    def hd_seen_ts(self):
+        with self._conn() as c:
+            if c is None:
+                return {}
+            return {r["key"]: r["ts"] for r in c.execute("select key, ts from hd_seen")}
+
     def hd_seen_add(self, keys):
+        """Merkt «gesehen» mit Zeit. Ein erneutes Sehen setzt die Zeit neu (für beobachtete Tickets: geändert seit dem letzten Blick)."""
         if not keys:
             return
         with self._conn(True) as c:
-            c.executemany("insert or ignore into hd_seen(key, ts) values(?,?)", [(k, time.time()) for k in keys])
+            c.executemany("insert into hd_seen(key, ts) values(?,?) on conflict(key) do update set ts = excluded.ts", [(k, time.time()) for k in keys])
 
 
 class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin, _HdMixin):
@@ -526,7 +533,11 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 for col in ("mode", "out_branch", "wt", "taken",        # 0.16: Isolation je Lauf
                             "question", "answered", "qa", "summary", "checks", "ack"):   # 0.18: Rückfragen und Bericht
                     if col not in have:
-                        conn.execute("alter table agent_runs add column %s text not null default ''" % col)
+                        try:
+                            conn.execute("alter table agent_runs add column %s text not null default ''" % col)
+                        except sqlite3.OperationalError as e:      # zwei Threads beim ersten Start: der andere war schneller
+                            if "duplicate column" not in str(e):
+                                raise
                 conn.execute("create table if not exists flow_state(key text primary key, phase integer not null, max_phase integer not null, ts real not null)")
                 conn.execute("create table if not exists flow_events(id integer primary key autoincrement, ref text not null default '', key text not null,"
                              " title text not null default '', kind text not null, phase integer not null, xp integer not null, text text not null default '', ts real not null)")

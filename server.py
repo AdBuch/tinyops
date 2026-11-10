@@ -52,7 +52,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.23.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.24.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1118,12 +1118,22 @@ class DemoHelpdesk:
             return datetime.fromtimestamp(time.time() - h * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
         mk = lambda k, s, st, p, c, u, r: {"key": k, "fields": {"summary": s, "status": {"name": st}, "priority": {"name": p}, "created": j(c), "updated": j(u),
                                                                 "reporter": {"displayName": r}}}
+        if jql.startswith("watcher"):
+            return [mk("SD-4588", "Neuer Standort: Netzwerkdosen patchen", "In Progress", "Medium", 200, 1.5, "Facility"),
+                    mk("SD-4640", "Lizenz für Zeichenprogramm verlängern", "Waiting for support", "Low", 120, 70, "Konstruktion")], 2
         if jql == "demo":
             return [mk("SD-4711", "Drucker im 3. Stock druckt nur leere Seiten", "Open", "Medium", 0.5, 0.5, "Empfang"),
                     mk("SD-4712", "VPN-Zugang für neue Lernende", "Open", "High", 2, 2, "Berufsbildung")], 2
         return [mk("SD-4690", "Outlook-Regel leitet Mails doppelt weiter", "In Progress", "High", 30, 3, "Buchhaltung"),
                 mk("SD-4702", "Freigabe auf Laufwerk P: für Projektteam", "Open", "Medium", 6, 6, "Projektbüro"),
                 mk("SD-4655", "Laptop-Tausch vorbereiten", "Waiting for customer", "Low", 80, 50, "Personal")], 3
+
+
+DemoHelpdesk.detail = lambda self, key: dict(
+    next(helpdesk.item(self.base, i, 24, time.time()) for q in ("x", "demo", "watcher") for i in self._search(q, [])[0] if i["key"] == key),
+    description="Seit dem Update vom Montag kommen weitergeleitete Mails doppelt an.\n\nBetroffen: Sammelpostfach buchhaltung@.\nSchon versucht: Regel gelöscht und neu angelegt.",
+    comments_total=2, comments=[{"author": "Buchhaltung", "age_h": 3.0, "body": "Passiert auch bei Mails von extern."},
+                                {"author": "Demo", "age_h": 20.0, "body": "Regel geprüft, sieht korrekt aus. Ich schaue die Transportregeln an."}])
 
 
 class DemoSonar:
@@ -2007,7 +2017,7 @@ class App:
         step("hd", "%s: zugewiesene Tickets und Queue" % name, "run")
         try:
             r = helpdesk.fetch(self.hdj, self.hdc)
-            step("hd", "%s: zugewiesene Tickets und Queue" % name, "ok", "%d zugewiesen, %d in der Queue" % (r["assigned_total"], r["queue_total"]))
+            step("hd", "%s: zugewiesene Tickets und Queue" % name, "ok", "%d zugewiesen, %d in der Queue, %d beobachtet" % (r["assigned_total"], r["queue_total"], len(r.get("watched") or [])))
             return r
         except UserError as e:
             jlog.warning("Helpdesk-Jira: %s", e)
@@ -2019,9 +2029,28 @@ class App:
 
     def helpdesk_seen(self, b):
         hd = (self.cache or {}).get("helpdesk_jira") or {}
-        keys = [t["key"] for t in hd.get("queue") or []] if b.get("all") else [str(k) for k in (b.get("keys") or [])][:200]
+        if b.get("all") == "watch":
+            keys = [t["key"] for t in hd.get("watched") or []]
+        elif b.get("all"):
+            keys = [t["key"] for t in hd.get("queue") or []]
+        else:
+            keys = [str(k) for k in (b.get("keys") or []) if helpdesk.KEY_RE.match(str(k))][:200]
         self.store.hd_seen_add(keys)
         return {"seen": len(keys)}
+
+    def helpdesk_ticket(self, key):
+        """Ein Helpdesk-Ticket zum Lesen im Panel (Beschreibung, letzte Kommentare). Nur Tickets, die tinyops gerade zeigt."""
+        hd = (self.cache or {}).get("helpdesk_jira") or {}
+        known = {t["key"] for k in ("assigned", "queue", "watched") for t in hd.get(k) or []}
+        if key not in known or self.hdj is None:
+            raise UserError("Dieses Helpdesk-Ticket zeigt tinyops gerade nicht.")
+        try:
+            d = self.hdj.detail(key) if hasattr(self.hdj, "detail") else helpdesk.detail(self.hdj, key)
+        except ValueError as e:
+            raise UserError(str(e))
+        if any(t["key"] == key for t in hd.get("watched") or []):
+            self.store.hd_seen_add([key])
+        return d
 
     def _keep_last_good(self, data):
         """Fällt eine Quelle (ganz oder je Projekt/Repo) aus, bleiben ihre letzten Einträge stehen, als «veraltet» markiert (outdated),
@@ -2616,7 +2645,8 @@ class App:
             ent, queue = helpdesk.entries(hd, self.store.hd_seen()) if hd else ([], [])
             data["flow"]["helpdesk"] = ent
             data["flow"]["hd_queue"] = queue
-            data["flow"]["hd_info"] = {k: hd.get(k) for k in ("name", "url", "ok", "error", "outdated", "assigned_total", "queue_total", "sla_hours")} if hd else None
+            data["flow"]["hd_watch"] = helpdesk.watched(hd, self.store.hd_seen_ts()) if hd else []
+            data["flow"]["hd_info"] = {k: hd.get(k) for k in ("name", "url", "ok", "error", "outdated", "assigned_total", "queue_total", "watched_total", "watch_error", "sla_hours")} if hd else None
             pin = self.store.pin_get()
             if pin and pin.startswith("hd:") and any(e["id"] == pin for e in ent):
                 data["flow"]["pinned"] = pin
@@ -3665,6 +3695,8 @@ def make_handler(app):
                     return self._send(200, app.ide_close(self._body()))
                 if method == "POST" and path.startswith("/api/focus/"):
                     return self._send(200, app.focus_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/helpdesk/ticket":
+                    return self._send(200, app.helpdesk_ticket((urllib.parse.parse_qs(parsed.query).get("key") or [""])[0]))
                 if method == "POST" and path == "/api/helpdesk/seen":
                     return self._send(200, app.helpdesk_seen(self._body()))
                 if method == "POST" and path == "/api/ux/events":
@@ -3988,7 +4020,7 @@ def run_preflight(cfg, config_path, demo):
         if hc.get("enabled") and hc.get("url"):
             steps(hc.get("name") or "Helpdesk", settings.test_helpdesk({"url": hc["url"], "auth": hc["auth"], "username": hc.get("username", ""),
                                                                         "ca_bundle": cfg.get("ca_bundle", ""), "assigned_jql": hc["assigned_jql"],
-                                                                        "queue_jql": hc.get("queue_jql", "")}, stored))
+                                                                        "queue_jql": hc.get("queue_jql", ""), "watch_jql": hc.get("watch_jql", "")}, stored))
         uc = usage_cfg(cfg)
         if uc.get("claude") or uc.get("codex"):
             print("\nKI-Kontingent")

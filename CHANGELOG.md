@@ -5,6 +5,30 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.24.0]
+
+### Neu
+- **Helpdesk-Tickets im Panel lesen.** «Ticket ansehen» öffnet die Details in tinyops statt in einem neuen Tab: Beschreibung und die letzten fünf Kommentare, nur lesend. «Im Helpdesk öffnen» führt weiterhin zu Jira, dort antwortest du.
+- **Ich beobachte (Watcher).** Eine dritte Liste zeigt Tickets, bei denen du Beobachter bist, die aber jemand anderes bearbeitet.
+  - Ein Ticket ist fett, wenn es sich seit deinem letzten Blick geändert hat. Öffnen oder «Alle gesehen» nimmt das Fett weg.
+  - Die Abfrage steht in Einstellungen → Helpdesk und ist ab Werk an. Leer heisst aus.
+  - Auch Queue-Tickets lassen sich jetzt im Panel lesen.
+- **Fokus-Leiste.** Unter der Kopfzeile steht in jeder Ansicht ein breiter Balken, der sagt, woran du bist oder sein solltest. Er ersetzt die kleine Uhr und das Block-Band im Fokus.
+  - Sitzung klein gemacht: Bereich, Aufgabe, Tätigkeit, Restzeit und Fortschritt. Ein Klick öffnet den Fokus-Modus.
+  - Fester Block ohne Sitzung: «Jetzt wäre: Berufsbildung-Block bis 17:00» mit «Block starten», dazu woran du stattdessen bist.
+  - Zeit läuft ohne Zeitbox: Aufgabe, Bereich und die Zeit von heute, mit «Fokus-Sitzung».
+  - Passt die Sitzung nicht zum laufenden Block, steht das Soll daneben.
+- **Vorschläge für die Helpdesk-Abfragen.** Unter jedem der drei JQL-Felder setzen Knöpfe eine fertige Abfrage ein. Die Felder heissen jetzt «Meine Tickets», «Queue» und «Ich beobachte».
+
+### Geändert (aus dem Nutzungsbericht)
+- Ein Klick neben das Detail-Panel schliesst es.
+- Die Tempo-Zeile im KI-Kontingent erklärt sich beim Klick. Der Spielstand klappt beim Klick den Verlauf auf.
+- Der Nutzungsbericht nennt bei toten Klicks den Ort (z. B. «span in focus / rcard.score»).
+- Klicks auf die grosse Fokus-Karte zählten im Bericht fälschlich als tote Klicks. Sie öffnen die Details und werden jetzt richtig gezählt.
+
+### Behoben
+- Beim allerersten Start konnte der Abgleich mit «duplicate column name» abbrechen, wenn zwei Abläufe die Datenbank gleichzeitig anlegten. Der Stand blieb dann bis zum nächsten Abgleich leer.
+
 ## [0.23.0]
 
 ### Neu

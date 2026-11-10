@@ -273,8 +273,8 @@ def report_md(a, days, version):
             L.append("| %s | %d | %s | %s |" % (t.replace("|", "/"), x["n"], ("%.1f s" % (m / 1000.0)) if m else "–", ", ".join("%s %d" % kv for kv in x["views"].most_common(3))))
         L.append("")
     if a["dead"]:
-        dc = Counter((e["view"], e["target"]) for e in a["dead"])
-        L += ["## Tote Klicks (ins Leere)"] + ["- %s in %s: %d×" % (t, v or "?", n) for (v, t), n in dc.most_common(10)] + [""]
+        dc = Counter((e["view"], e["target"], e.get("ctx") or "") for e in a["dead"])
+        L += ["## Tote Klicks (ins Leere)"] + ["- %s in %s%s: %d×" % (t, v or "?", (" / " + c) if c else "", n) for (v, t, c), n in dc.most_common(14)] + [""]
     if a["rage"]:
         L += ["## Wutklicks (3+ Klicks in 1.5 s)"] + ["- %s: %d×" % kv for kv in a["rage"].most_common(8)] + [""]
     if a["keys"]:

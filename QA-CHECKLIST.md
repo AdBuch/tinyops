@@ -117,6 +117,19 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.24.0
+
+- [ ] `r24-01` Fokus: bei einem Helpdesk-Ticket «Ticket ansehen» → Details öffnen sich im Panel mit Beschreibung und Kommentaren, kein neuer Tab
+- [ ] `r24-02` Im Panel «Als Fokus anheften, Zeit starten» → Fokus-Leiste unter der Kopfzeile zeigt das Ticket und «Zeit läuft, ohne Zeitbox»
+- [ ] `r24-03` Gruppe «Ich beobachte» → deine beobachteten Tickets, geänderte fett; eines anklicken → lesbar im Panel, danach nicht mehr fett
+- [ ] `r24-04` «Alle gesehen» bei «Ich beobachte» → nichts mehr fett; die Queue bleibt unverändert
+- [ ] `r24-05` Einstellungen → Helpdesk: Vorschlag unter «Queue» anklicken → Abfrage steht im Feld; «Verbindung testen» zeigt die Schritte «Queue» und «Ich beobachte»
+- [ ] `r24-06` Fokus-Sitzung starten, «Klein machen» → breite Leiste mit Aufgabe, Restzeit und Fortschritt; sie bleibt in Board, Zeit und Einstellungen sichtbar
+- [ ] `r24-07` Klick auf die Leiste → Fokus-Modus öffnet sich wieder
+- [ ] `r24-08` Während eines festen Blocks ohne Sitzung → Leiste «Jetzt wäre: …-Block bis …» mit «Block starten»
+- [ ] `r24-09` Details offen, neben das Panel ins Leere klicken → Panel schliesst sich
+- [ ] `r24-10` Nach einem Tag Nutzung den Bericht kopieren → tote Klicks nennen den Ort (z. B. «/ rcard.score»)
+
 ## 0.23.0
 
 - [ ] `r23-01` Einstellungen → Helpdesk: Adresse, «basic», Benutzername und Passwort eintragen → «Verbindung testen» zeigt Jira 8.5.1, «Angemeldet als …» und die Anzahl deiner Tickets

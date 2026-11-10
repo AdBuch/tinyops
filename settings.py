@@ -960,7 +960,7 @@ def test_helpdesk(form, stored):
     if not ok:
         return r.result()
     ctx = _check_connection(r, base, form.get("ca_bundle"))
-    steps = (("api", "Jira-API"), ("auth", "Anmeldung"), ("assigned", "Mir zugewiesen"), ("queue", "Queue"))
+    steps = (("api", "Jira-API"), ("auth", "Anmeldung"), ("assigned", "Mir zugewiesen"), ("queue", "Queue"), ("watch", "Ich beobachte"))
     if ctx is None:
         for sid, t in steps:
             r.skip(sid, t)
@@ -1026,9 +1026,10 @@ def test_helpdesk(form, stored):
         return r.result()
     import helpdesk as hdmod
     for sid, title, jql in (("assigned", "Mir zugewiesen", (form.get("assigned_jql") or "").strip() or hdmod.DEFAULTS["assigned_jql"]),
-                            ("queue", "Queue", (form.get("queue_jql") or "").strip())):
+                            ("queue", "Queue", (form.get("queue_jql") or "").strip()),
+                            ("watch", "Ich beobachte", (form.get("watch_jql") or "").strip())):
         if not jql:
-            r.skip(sid, title, "keine Queue-JQL eingetragen")
+            r.skip(sid, title, "keine JQL eingetragen")
             continue
         try:
             resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": "summary,status,priority", "maxResults": 5})
@@ -1447,7 +1448,7 @@ def build_config(current, p):
         if hc["enabled"] and hc["auth"] == "basic" and not hc["username"]:
             errors["helpdesk.username"] = "Bei «basic» den Benutzernamen eintragen."
         hc["name"] = (str(h.get("name", hc["name"]) or "").strip() or "Helpdesk")[:40]
-        for k in ("assigned_jql", "queue_jql"):
+        for k in ("assigned_jql", "queue_jql", "watch_jql"):
             v = " ".join(str(h.get(k, hc[k]) or "").split())
             if len(v) > 1000:
                 errors["helpdesk." + k] = "JQL zu lang."

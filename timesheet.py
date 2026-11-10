@@ -81,7 +81,11 @@ class TimeBook:
             have = {r[1] for r in c.execute("pragma table_info(%s)" % t)}
             for col in ("area", "activity"):
                 if col not in have:
-                    c.execute("alter table %s add column %s text not null default ''" % (t, col))
+                    try:
+                        c.execute("alter table %s add column %s text not null default ''" % (t, col))
+                    except sqlite3.OperationalError as e:          # zwei Threads beim ersten Start: der andere war schneller
+                        if "duplicate column" not in str(e):
+                            raise
         c.execute("create table if not exists focus_session(id integer primary key autoincrement, key text not null, title text not null default '',"
                   " area text not null default '', activity text not null default '', planned_min integer not null, start real not null, end real,"
                   " parked integer not null default 0, result text not null default '', note text not null default '')")

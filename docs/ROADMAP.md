@@ -30,7 +30,12 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.21.1** ✓ | Launcher zum Herunterladen, GitHub Actions für Tests und Releases (geliefert 2026-11-06) | – | S |
 | **0.22.0** ✓ | KI-Tempo mit Zeitmarke, UI-Nutzung lokal erfassen für die UI-Optimierung (geliefert 2026-11-06) | – | S–M |
 | **0.23.0** ✓ | Helpdesk-Jira (nur lesend), Fokusbereiche mit Wochenziel (Berufsbildung 30 %), Fokus-Sitzung und Fokus-Modus, Auto-Tag (geliefert 2026-11-07) | – | M |
-| 0.24.0 | Kalender und Termine ohne Graph-App (neues Outlook/Web, ICS mit Details freigegeben): Outlook-Kalender als ICS-Abo im Tagesplan, Termine vor Fokus-Blöcken und Sitzungen, freie Lücken für Berufsbildung, Termin buchen über Outlook- und Teams-Links. Mails lesen geht im neuen Outlook ohne Graph nicht: «wartet auf Antwort» nur von Hand oder aus dem Helpdesk | – | M |
+| **0.24.0** ✓ | Helpdesk im Panel lesen, «Ich beobachte» (Watcher), Fokus-Leiste, Korrekturen aus dem Nutzungsbericht (geliefert 2026-11-10) | – | S–M |
+| 0.25.0 | Workspaces lokal: ungepushte Commits, Uncommittetes, Stashes, Worktrees der Agenten, Agent direkt zuweisen | – | M |
+| 0.26.0 | Agenten aus tinyops: Auftrag aus Ticket und Akzeptanzkriterien, Start bei Claude, Codex, Mistral, Ergebnis zurück ins Panel | – | M–L |
+| 0.27.0 | Qwen als lokaler Agent über Goose, Branch-Vorprüfung, Geheimnis-Scan vor dem Push; DLP-Regel: `restricted` nur lokal, `internal`/`public` dürfen Code zu Cloud-Agenten | – | M |
+| 0.28.0 | Teams, Mail und Kalender über Graph (delegiert, Anmeldung im Browser mit 2FA): ersetzt den ICS-Plan. Braucht Client-ID, Tenant-ID und die Klärung zu Conditional Access; kann vorgezogen werden, sobald das da ist | – | L |
+| 0.29.0 | Buchungen und Berufsbildung: Warteschlange für das langsame Qwen (Buchungstexte, Wochenrückblick), Projectron-Vertrag | – | M |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.

@@ -282,11 +282,11 @@
   #viewSettings { max-width: 1060px; margin: 0 auto; padding: 22px 20px 110px; }
   .setgrid { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 36px; }
   @media (max-width: 800px) { .setgrid { grid-template-columns: minmax(0, 1fr); } .setnav { display: none; } }
-  .setnav { position: sticky; top: 76px; align-self: start; display: grid; gap: 2px; }
+  .setnav { position: sticky; top: calc(76px + var(--bar, 0px)); align-self: start; display: grid; gap: 2px; }
   .setnav button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 8px; color: var(--quiet); font-weight: 600; }
   .setnav button:hover { background: var(--surface); color: var(--ink); }
   .setnav button.on { background: var(--surface); color: var(--ink); box-shadow: inset 3px 0 0 var(--focus); }
-  .sset { padding-bottom: 30px; margin-bottom: 30px; border-bottom: 1px solid var(--line); scroll-margin-top: 70px; }
+  .sset { padding-bottom: 30px; margin-bottom: 30px; border-bottom: 1px solid var(--line); scroll-margin-top: calc(70px + var(--bar, 0px)); }
   .sset:last-child { border-bottom: 0; }
   .sset > header { all: unset; display: block; margin-bottom: 14px; }
   .sset h2 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.015em; }
@@ -377,7 +377,7 @@
 
   @media (min-width: 961px) {
     html, body { min-height: 100%; }   /* nicht height: sonst scrollt die feste Kopfzeile nach 100vh mit weg */
-    #viewOverview { height: calc(100vh - 52px); overflow: hidden; }
+    #viewOverview { height: calc(100vh - 52px - var(--bar, 0px)); overflow: hidden; }
     #viewOverview > * { min-height: 0; }
     #left .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-columns: repeat(auto-fit, minmax(max(380px, calc((100% - 3 * 16px) / 4)), 1fr)); }
     #left .board.o1 { grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); }
@@ -431,7 +431,7 @@
     body.layout-list .tile.mini { flex-direction: column; }
     body.layout-list .tile.mini .thead { padding: 14px 16px 10px; }
     body.layout-list .tile.mini .thint { display: inline; }
-    body.layout-list aside { position: sticky; top: 70px; align-self: start; max-height: calc(100vh - 90px); }
+    body.layout-list aside { position: sticky; top: calc(70px + var(--bar, 0px)); align-self: start; max-height: calc(100vh - 90px); }
   }
   @media (max-width: 960px) { .seg { display: none; } }
   /* Herkunft: Jira = violett, GitLab = orange */
@@ -622,7 +622,7 @@
   .fkeys { color: var(--quiet); font-size: 12px; } .fkeys kbd { font: 11.5px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface); }
 
   /* Spielstand und Seitenleiste */
-  #fRail { display: grid; gap: 16px; position: sticky; top: 68px; }
+  #fRail { display: grid; gap: 16px; position: sticky; top: calc(68px + var(--bar, 0px)); }
   .rcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; }
   .rcard > h3 { margin: 0; font-size: 13.5px; display: flex; justify-content: space-between; align-items: baseline; }
   .rcard > h3 small { color: var(--quiet); font-weight: 500; }
@@ -663,6 +663,7 @@
   .hdprio.p4::before, .hdprio.p5::before { background: var(--bad); }
   .hdst { font-weight: 650; color: var(--hd); }
   .hdq { display: grid; gap: 4px; padding: 8px 14px 12px; }
+  .hdq .q { cursor: pointer; border-radius: 6px; padding: 2px 4px; } .hdq .q:hover { background: var(--raised); }
   .hdq .q { display: grid; grid-template-columns: 14px 92px minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; font-size: 13.5px; }
   .hdq .q .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hdq .q small { color: var(--quiet); }
@@ -708,11 +709,34 @@
   #fmode .park input { flex: 1; }
   #fmode .bot { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
   #fmode .fmhint { color: var(--quiet); font-size: 12.5px; }
-  .fpill { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px; background: var(--ac-bg); color: var(--ac); font-weight: 650; font-size: 12.5px; border: 0; cursor: pointer; font-variant-numeric: tabular-nums; }
+  /* Fokus-Leiste (0.24): sagt in jeder Ansicht, woran du bist oder sein solltest */
+  body.hasbar { --bar: 50px; }
+  #fbar { position: sticky; top: 52px; z-index: 4; height: 50px; display: flex; align-items: center; gap: 14px; padding: 0 20px 0 0;
+          background: var(--ac-bg); color: var(--ink); border-bottom: 1px solid color-mix(in srgb, var(--ac) 35%, transparent); overflow: hidden; }
+  #fbar::before { content: ""; align-self: stretch; width: 6px; background: var(--ac); flex: none; }
+  #fbar .tag { font-weight: 750; color: var(--ac); font-size: 13px; white-space: nowrap; }
+  #fbar .now { display: flex; gap: 8px; align-items: baseline; min-width: 0; flex: 1; font-size: 15px; }
+  #fbar .now b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fbar .now span { color: var(--quiet); font-size: 13px; white-space: nowrap; }
+  #fbar .soll { font-size: 13px; padding: 4px 10px; border-radius: 8px; background: var(--surface); color: var(--warn); font-weight: 650; white-space: nowrap; }
+  #fbar .clock { font-size: 24px; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-width: 4.2ch; text-align: right; }
+  #fbar .clock.over { color: var(--ac); font-weight: 500; }
+  #fbar button { white-space: nowrap; }
+  #fbar button.go { background: var(--ac); color: var(--surface); border-color: transparent; font-weight: 650; }
+  #fbar .prog { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ac); transition: width 1s linear; }
+  #fbar.soll-only { background: var(--surface); border-bottom-style: dashed; }
+  #fbar.soll-only::before { background: repeating-linear-gradient(180deg, var(--ac) 0 6px, transparent 6px 10px); }
+  #fbar.idle .clock { color: var(--warn); }
+  @media (max-width: 800px) { #fbar .now span, #fbar .tag { display: none; } #fbar { gap: 8px; padding-right: 10px; } #fbar .clock { font-size: 19px; } }
+  .hdtxt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.5; max-height: 42vh; overflow: auto; padding: 10px 12px; background: var(--raised); border-radius: 10px; }
+  .hdcm { display: grid; gap: 8px; } .hdcm > div { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
+  .hdcm small { color: var(--quiet); display: block; margin-bottom: 2px; } .hdcm p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
+  .jqlp { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; } .jqlp button { font-size: 12px; padding: 3px 9px; }
+  .aipace { cursor: help; } .rcard.score { cursor: pointer; }
   @media (max-width: 700px) { .hdq .q { grid-template-columns: 10px 76px minmax(0, 1fr); } .hdq .q > :nth-child(n+4) { display: none; } }
 
   /* Detail-Panel auf der halben Seite */
-  #fx { position: fixed; top: 52px; right: 0; bottom: 0; width: min(50vw, 860px); z-index: 9; background: var(--surface); border-left: 1px solid var(--line);
+  #fx { position: fixed; top: calc(52px + var(--bar, 0px)); right: 0; bottom: 0; width: min(50vw, 860px); z-index: 9; background: var(--surface); border-left: 1px solid var(--line);
         box-shadow: -16px 0 40px rgba(10, 14, 22, .14); transform: translateX(102%); transition: transform .18s ease; display: flex; flex-direction: column; }
   #fx.on { transform: none; }
   #fx .fxhead { padding: 16px 22px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
@@ -764,12 +788,12 @@
   <span id="demo" class="chip warn" style="display:none">Demo-Daten</span>
   <span id="fetched"></span>
   <span id="ver" class="quiet small" title="tinyops-Version"></span>
-  <button id="fPill" class="fpill" hidden title="Fokus-Modus öffnen"></button>
   <button id="ideaBtn" class="idea-btn" title="Idee festhalten (Taste i)" hidden>+ Idee</button>
   <button id="logBtn" class="quiet-btn">Log</button>
   <button id="refresh" title="GitLab, Jira und Sonar jetzt abgleichen">Neu laden</button>
 </header>
 
+<div id="fbar" hidden role="status" aria-label="Fokus-Leiste"></div>
 <div id="updBanner" hidden></div>
 <div id="viewFocus">
   <section id="fMain">
@@ -1453,6 +1477,13 @@ function renderUsageBox() {
   $('usageDetail').innerHTML = usageOpen ? usageBody() : '';
   if ($('us-live')) $('us-live').innerHTML = usageData ? usageBody() : '';
 }
+document.addEventListener('click', ev => {
+  const a = ev.target.closest && ev.target.closest('.aipace');
+  if (a) toast('Tempo: Der Strich im Balken zeigt, wie viel Zeit vom Fenster übrig ist. Liegt der Balken rechts vom Strich, hast du Vorsprung; links davon bist du schneller als die Zeit.');
+  const sc = ev.target.closest && ev.target.closest('.rcard.score');
+  if (sc && !ev.target.closest('button, a')) { LS.set('scoreOpen', !LS.get('scoreOpen', false)); renderRail(); }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches && ev.target.matches('[data-fopen][tabindex]')) ev.target.click(); });
 document.addEventListener('toggle', ev => { if (ev.target && ev.target.id === 'usageDet') { usageOpen = ev.target.open; renderUsageBox(); } }, true);
 function usageBody() {
   if (!usageData) return '<div class="empty">Frage Kontingent ab …</div>';
@@ -1821,7 +1852,7 @@ let lastInput = Date.now();
 setInterval(async () => {   // Lebenszeichen: nur wenn das Panel sichtbar ist und du in den letzten 5 Minuten etwas getan hast
   const t = state && state.time;
   if (!t || !t.enabled || !t.running || document.visibilityState !== 'visible' || Date.now() - lastInput > 5 * 60000) return;
-  try { const was = t.running && t.gaps; state.time = await post('/api/time/ping', {}); timeAt = Date.now(); if (state.time.gaps !== (t.gaps || 0) || was !== state.time.gaps) renderFocus(); } catch (e) { /* nächstes Mal */ }
+  try { const was = t.running && t.gaps; state.time = await post('/api/time/ping', {}); timeAt = Date.now(); renderFbar(); if (state.time.gaps !== (t.gaps || 0) || was !== state.time.gaps) renderFocus(); } catch (e) { /* nächstes Mal */ }
 }, 60000);
 document.addEventListener('click', async ev => {
   const t = ev.target.closest && ev.target.closest('[data-tpause],[data-tresume],[data-tview]');
@@ -2588,8 +2619,14 @@ async function loadSettings() {
       ${field('hd-user', 'Benutzername', S.helpdesk.username, { err: 'helpdesk.username' })}
     </div>
     <div id="hd-secbox"></div>
-    ${field('hd-jql', 'JQL «Mir zugewiesen»', S.helpdesk.assigned_jql, { area: true, rows: 2, err: 'helpdesk.assigned_jql' })}
-    ${field('hd-qjql', 'JQL Queue (optional)', S.helpdesk.queue_jql, { area: true, rows: 2, err: 'helpdesk.queue_jql', help: 'Zum Beispiel <code>project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC</code>. Neue Treffer sind fett, bis du «Alle gesehen» drückst.' })}
+    <h3 style="margin:14px 0 2px">Was tinyops aus dem Helpdesk zeigt</h3>
+    <div class="quiet small" style="margin-bottom:10px">Drei Listen, jede mit einer Jira-Abfrage (JQL). Die Vorschläge setzen eine fertige Abfrage ein; du musst kein JQL schreiben. Leer heisst: Liste aus.</div>
+    ${field('hd-jql', '1. Meine Tickets (im Fokus unter «Du bist dran»)', S.helpdesk.assigned_jql, { area: true, rows: 2, err: 'helpdesk.assigned_jql' })}
+    <div class="jqlp" data-jqlfor="hd-jql"><button data-jql="assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC">Mir zugewiesen, offen</button><button data-jql="assignee = currentUser() AND resolution = Unresolved AND status != &quot;Waiting for customer&quot; ORDER BY priority DESC, updated ASC">ohne «wartet auf Kunde»</button></div>
+    ${field('hd-qjql', '2. Queue (meldet neue Tickets)', S.helpdesk.queue_jql, { area: true, rows: 2, err: 'helpdesk.queue_jql', help: 'Neue Treffer sind fett, bis du «Alle gesehen» drückst. Für «Unzugewiesen im Projekt» das Projektkürzel anpassen.' })}
+    <div class="jqlp" data-jqlfor="hd-qjql"><button data-jql="project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC">Unzugewiesen im Projekt SD</button><button data-jql="assignee is EMPTY AND resolution = Unresolved AND created >= -7d ORDER BY created DESC">Unzugewiesen, letzte 7 Tage</button><button data-jql="">Aus</button></div>
+    ${field('hd-wjql', '3. Ich beobachte (Watcher)', S.helpdesk.watch_jql, { area: true, rows: 2, err: 'helpdesk.watch_jql', help: 'Tickets, bei denen du Beobachter bist, die aber jemand anderes bearbeitet. Fett, wenn sich seit deinem letzten Blick etwas geändert hat.' })}
+    <div class="jqlp" data-jqlfor="hd-wjql"><button data-jql="watcher = currentUser() AND (assignee is EMPTY OR assignee != currentUser()) AND resolution = Unresolved ORDER BY updated DESC">Beobachtet, nicht meine</button><button data-jql="watcher = currentUser() AND resolution = Unresolved AND updated >= -14d ORDER BY updated DESC">Beobachtet, geändert in 14 Tagen</button><button data-jql="">Aus</button></div>
     <div class="grid2">
       ${field('hd-sla', 'SLA in Stunden', S.helpdesk.sla_hours, { type: 'number', err: 'helpdesk.sla_hours', help: 'Ab diesem Alter steigt ein Ticket nach oben und ist rot markiert.' })}
       <div class="field"><label for="hd-area">Zeit zählt zum Bereich</label><select class="full" id="hd-area">${S.focus.areas.map(a => `<option value="${esc(a.id)}" ${a.id === S.helpdesk.area ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
@@ -2734,6 +2771,10 @@ function readFocusAreas() {
 }
 document.addEventListener('click', ev => { const d = ev.target.closest && ev.target.closest('[data-fadel]'); if (d) { readFocusAreas(); FA.splice(+d.dataset.fadel, 1); renderFocusAreas(); } });
 document.addEventListener('input', ev => { if (ev.target.id && /^fa-p\d+$/.test(ev.target.id)) { readFocusAreas(); $('fa-sum').textContent = `Ziele zusammen: ${FA.reduce((n, a) => n + (+a.target_pct || 0), 0)} %`; } });
+document.addEventListener('click', ev => {
+  const b = ev.target.closest && ev.target.closest('.jqlp [data-jql]');
+  if (b) { ev.preventDefault(); const f = $(b.parentElement.dataset.jqlfor); f.value = b.dataset.jql; f.dispatchEvent(new Event('input', { bubbles: true })); f.focus(); }
+});
 function renderHdSecret() {
   const basic = $('hd-auth').value !== 'bearer', name = basic ? 'helpdesk_password' : 'helpdesk_token';
   const old = $('hd-secret') ? $('hd-secret').value : '';
@@ -2741,7 +2782,7 @@ function renderHdSecret() {
   $('hd-secbox').innerHTML = field('hd-secret', basic ? 'Passwort' : 'Personal Access Token', old, { type: 'password', err: name, ph: S.secrets[name].set ? '•••••••• gespeichert' : '',
     help: secretHelp(name, basic ? 'Passwort' : 'Token') + (basic ? ' Jira 8.5 kennt keine Personal Access Tokens. Nach einem Fehlversuch pausiert der Test 30 Sekunden, damit das Konto nicht gesperrt wird.' : '') });
 }
-const hdForm = () => ({ url: val('hd-url'), auth: val('hd-auth'), username: val('hd-user'), secret: $('hd-secret').value, ca_bundle: val('gl-ca'), assigned_jql: val('hd-jql'), queue_jql: val('hd-qjql') });
+const hdForm = () => ({ url: val('hd-url'), auth: val('hd-auth'), username: val('hd-user'), secret: $('hd-secret').value, ca_bundle: val('gl-ca'), assigned_jql: val('hd-jql'), queue_jql: val('hd-qjql'), watch_jql: val('hd-wjql') });
 
 function renderLlmKey() {
   const show = $('lm-prov').value === 'openai';
@@ -3055,7 +3096,7 @@ function collect() {
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     helpdesk: { enabled: $('hd-on').checked, url: val('hd-url'), name: val('hd-name'), auth: val('hd-auth'), username: val('hd-user'), assigned_jql: val('hd-jql'),
-                queue_jql: val('hd-qjql'), sla_hours: val('hd-sla'), area: val('hd-area') },
+                queue_jql: val('hd-qjql'), watch_jql: val('hd-wjql'), sla_hours: val('hd-sla'), area: val('hd-area') },
     focus: { week_hours: val('fo-hours'), day_start: val('fo-start'), day_end: val('fo-end'),
              areas: readFocusAreas().map(a => ({ id: a.id, name: a.name, target_pct: a.target_pct, ticket: a.ticket, pools: a.pools, activities: a.activities, blocks_text: a.blocks_text || '' })) },
     secrets,
@@ -3124,7 +3165,7 @@ const ACT = {
   threads: ['Offene Punkte', 'chat'], agent_question: ['Antworten', 'chat'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
   agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
-  retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'], hd_work: ['Im Helpdesk öffnen', 'ext'],
+  retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'], hd_work: ['Ticket ansehen', 'chevron2'],
   do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };
 const OWNER = { me: '', ci: 'gear', others: 'users', agent: 'bot', none: '' };
@@ -3143,7 +3184,10 @@ function focusEntries() {
     d: { next: r.next, phase: 4, phase_id: 'check', flags: [], checks: { done: 0, total: 0 }, checklist: [] } }));
   const hds = (f.helpdesk || []).map(h => ({ t: 'hd', id: h.id, h, prio: h.prio,
     d: { next: h.next, phase: null, hd: true, flags: h.over_sla ? ['SLA'] : [], checks: { done: 0, total: 0 }, checklist: [] } }));
-  return cards.concat(revs, hds);
+  const wts = (f.hd_watch || []).concat(f.hd_queue || []).filter(h => !hds.some(x => x.h.key === h.key)).map(h => ({ t: 'hd', id: 'hdw:' + h.key, h, prio: 0, side: true,
+    d: { next: { kind: 'wait', id: 'hd_watch', label: 'Nur lesen', why: h.assignee ? 'Bearbeitet von ' + h.assignee : 'Noch niemandem zugewiesen', owner: 'other', action: { url: h.url } },
+         phase: null, hd: true, flags: [], checks: { done: 0, total: 0 }, checklist: [] } }));
+  return cards.concat(revs, hds, wts);
 }
 const hdName = () => ((state.flow && state.flow.hd_info) || {}).name || 'Helpdesk';
 const hAge = h => h == null ? '' : h < 1 ? Math.max(1, Math.round(h * 60)) + ' min' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' d';
@@ -3224,14 +3268,14 @@ function heroHtml(e, g) {
   return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
     ${trackHtml(e.d, true)}
-    ${pin ? timeChip(e) : ''}${blockBanner()}
+    ${pin ? timeChip(e) : ''}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
       <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}${state.focus && e.t !== 'review' ? `<button class="big" data-fsess="${esc(e.id)}" title="Fokus-Sitzung mit Zeitbox: Ablenkungen parken, Zeit läuft auf diese Aufgabe">${ic('clock')} Fokus</button>` : ''}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
   </section>`;
 }
 function focusGroups() {
-  const all = focusEntries();
+  const all = focusEntries().filter(e => !e.side);   // beobachtete und Queue-Tickets haben eigene Listen
   const act = all.filter(e => ['do', 'blocked'].includes(e.d.next.kind)).sort((a, z) => z.prio - a.prio);
   const cand = act.filter(e => !(e.t === 'card' && (e.c.idea_id || (e.d.phase === 0 && !e.c.jira_in_progress))));
   const pinned = state.flow.pinned && all.find(e => e.id === state.flow.pinned);
@@ -3340,7 +3384,8 @@ function renderRail() {
       <div class="lvl"><span>Level ${s.level}</span><div class="lbar"><i style="width:${(100 * s.level_xp / s.level_size).toFixed(0)}%"></i></div><span>${s.level_xp}/${s.level_size}</span></div>
       <div class="week" aria-label="Schritte der letzten 7 Tage">${s.week.map(w => `<i class="${w.n ? '' : 'zero'} ${w.day === today ? 'today' : ''}" style="--h:${(w.n / mx).toFixed(2)}" title="${esc(w.day)}: ${w.n} Schritt${w.n === 1 ? '' : 'e'}"></i>`).join('')}</div>
       <div class="wdays">${s.week.map(w => `<span>${wd(w.day)}</span>`).join('')}</div>
-      ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
+      ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, LS.get('scoreOpen', false) ? 12 : 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
+      <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Abnahmen und Fokus-Sitzungen ab 20 min. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
     </section>`;
   }
   h += focusRail();
@@ -3366,15 +3411,19 @@ function renderFx() {
   const keep = ['fxCkNew', 'fxNote', 'fxEnv'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
   const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : e.t === 'hd' ? 'Helpdesk' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
-    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : e.t === 'hd' ? `<a class="ibtn big" href="${esc(e.h.url)}" target="_blank" rel="noopener">${ic('ext')} Im Helpdesk öffnen</a>` : goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
       ${(n.action || {}).accept ? `<div class="fxacc"><input id="fxNote" maxlength="500" placeholder="Was hast du getestet? (optional)" autocomplete="off"><input id="fxEnv" maxlength="120" placeholder="Umgebung (optional)" autocomplete="off"></div>` : ''}</div>
     ${accHtml(e.d.acceptance || [])}`;
   if (e.t === 'hd') {
-    const h = e.h, info = state.flow.hd_info || {};
-    body += `<div><h3>${esc(hdName())} <small>nur lesend</small></h3><div class="fxitem"><span class="hdprio p${Math.min(5, h.prio_rank)}" style="width:44px"></span><div class="nm"><b>${esc(h.key)} ${esc(h.title)}</b><small><span class="hdst">${esc(h.status)}</span><span>${esc(h.priority || 'ohne Priorität')}</span>${h.reporter ? `<span>von ${esc(h.reporter)}</span>` : ''}${h.age_h != null ? `<span class="${h.over_sla ? 'chip warn' : ''}">offen seit ${hAge(h.age_h)}${h.over_sla ? `, über ${info.sla_hours} h SLA` : ''}</span>` : ''}${h.idle_h != null ? `<span>zuletzt geändert vor ${hAge(h.idle_h)}</span>` : ''}${h.due ? `<span>fällig ${esc(h.due)}</span>` : ''}</small></div>
-      <div class="ibtns"><a class="ibtn" href="${esc(h.url)}" target="_blank" rel="noopener">${ic('ext')} Im Helpdesk öffnen</a></div></div>
-      <div class="small quiet" style="margin-top:8px">Angeheftet läuft die Zeit auf ${esc(h.key)} (Bereich Helpdesk) und landet in den Zeitentwürfen. Kommentare und Status änderst du im Helpdesk selbst.</div></div>`;
-    body += `<div class="fxfoot">${state.flow.pinned === e.id ? '<button data-fpin="">Fokus lösen</button>' : `<button data-fpin="${esc(e.id)}">${ic('chevron2')} Als Fokus anheften</button>`}${FOC() ? `<button data-fsess="${esc(e.id)}">${ic('clock')} Fokus-Sitzung</button>` : ''}</div>`;
+    const h = e.h, info = state.flow.hd_info || {}, d = HDD[h.key], mine = !e.side;
+    if (d === undefined) hdLoad(h.key);
+    body += `<div><h3>${esc(hdName())} <small>nur lesend</small></h3><div class="fxitem"><span class="hdprio p${Math.min(5, h.prio_rank)}" style="width:44px"></span><div class="nm"><b>${esc(h.key)} ${esc(h.title)}</b><small><span class="hdst">${esc(h.status)}</span><span>${esc(h.priority || 'ohne Priorität')}</span>${h.reporter ? `<span>von ${esc(h.reporter)}</span>` : ''}${h.assignee && !mine ? `<span>bei ${esc(h.assignee)}</span>` : ''}${h.age_h != null ? `<span class="${h.over_sla && mine ? 'chip warn' : ''}">offen seit ${hAge(h.age_h)}${h.over_sla && mine ? `, über ${info.sla_hours} h SLA` : ''}</span>` : ''}${h.idle_h != null ? `<span>zuletzt geändert vor ${hAge(h.idle_h)}</span>` : ''}${h.due ? `<span>fällig ${esc(h.due)}</span>` : ''}</small></div>
+</div></div>`;
+    body += `<div><h3>Beschreibung</h3>${!d ? '<div class="small quiet">Lade das Ticket …</div>' : d.error ? `<div class="banner bad">${esc(d.error)}</div>` : d.description ? `<div class="hdtxt">${esc(d.description)}</div>` : '<div class="small quiet">Keine Beschreibung.</div>'}</div>`;
+    if (d && !d.error) body += `<div><h3>Letzte Kommentare <small>${d.comments.length}${d.comments_total > d.comments.length ? ' von ' + d.comments_total : ''}</small></h3>${d.comments.length ? `<div class="hdcm">${d.comments.map(c => `<div><small>${esc(c.author || 'unbekannt')}${c.age_h != null ? ' · vor ' + hAge(c.age_h) : ''}</small><p>${esc(c.body)}</p></div>`).join('')}</div>` : '<div class="small quiet">Noch keine Kommentare.</div>'}</div>`;
+    if (mine) body += `<div class="small quiet">Angeheftet läuft die Zeit auf ${esc(h.key)} (Bereich Helpdesk) und landet in den Zeitentwürfen.</div>
+      <div class="fxfoot">${state.flow.pinned === e.id ? '<button data-fpin="">Fokus lösen</button>' : `<button class="primary" data-fpin="${esc(e.id)}">${ic('chevron2')} Als Fokus anheften, Zeit starten</button>`}${FOC() ? `<button data-fsess="${esc(e.id)}">${ic('clock')} Fokus-Sitzung</button>` : ''}<button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
+    else body += `<div class="fxfoot"><button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
   } else if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><button class="ibtn" data-topics="${esc(JSON.stringify({ host: e.r.host || 'gitlab', project_id: e.r.project_id, iid: e.r.iid }))}" title="Offene Review-Kommentare ansehen und exportieren">${ic('chat')} Offene Punkte</button><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
@@ -3461,6 +3510,7 @@ async function doNext(e, btn) {
   const n = e.d.next, a = n.action || {};
   try {
     if (a.run) return openRunDlg(a.run);
+    if (a.open) return openFx(a.open);
     if (a.topics) return openTopics(a.topics, e.t === 'card' ? e.c : null);
     if (a.tiny) { const r = await post('/api/flow/tiny', a.tiny); toast(`${r.key} angelegt (Kategorie ${r.pool}). Der Branch hängt jetzt daran.`); burstAt(btn); closeFx(); await load(); return; }
     if (n.id === 'plan') { setView('board'); return; }
@@ -3525,6 +3575,7 @@ document.addEventListener('click', async ev => {
   const dp = t.closest('[data-fxdeploy]');
   if (dp) { const [p, i] = dp.dataset.fxdeploy.split(':'); await act(() => api('POST', '/api/deploy', { project_id: +p, iid: +i }), 'Deploy gestartet'); return; }
   const row = t.closest('#viewFocus .frow, #viewFocus .hero');
+  if (!row && FXID && !t.closest('#fx, header, #fbar, dialog, #fmode, a, button, input, select, textarea, summary, label, [data-fopen], .rcard')) { closeFx(); return; }
   if (row && !t.closest('a, button, select, input')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
 });
 document.addEventListener('change', ev => { const c = ev.target.closest && ev.target.closest('[data-fck]'); if (c) fCheck(+c.dataset.fck, c.checked, c); });
@@ -3543,22 +3594,75 @@ document.addEventListener('keydown', ev => {
 });
 
 // ---- Helpdesk-Queue, Fokusbereiche, Fokus-Sitzung (0.23)
+const HDD = {};   // Ticket-Details je Schlüssel: undefined = noch nicht geladen
+async function hdLoad(key) {
+  HDD[key] = null;
+  try { HDD[key] = await api('GET', '/api/helpdesk/ticket?key=' + encodeURIComponent(key)); } catch (e) { HDD[key] = { error: e.message }; }
+  if (FXID && fEntry(FXID) && fEntry(FXID).t === 'hd' && fEntry(FXID).h.key === key) renderFx();
+  const w = ((state.flow || {}).hd_watch || []).find(x => x.key === key); if (w && w.new) { w.new = false; renderFocus(); }
+}
 const FOC = () => state && state.focus;
 const arCls = id => ['dev', 'hd', 'bb'].includes(id) ? 'ar-' + id : 'ar-x';
-function hdQueue() {
-  const q = (state.flow && state.flow.hd_queue) || [], info = (state.flow && state.flow.hd_info) || {};
-  if (!info.name || !q.length) return '';
-  const nw = q.filter(x => x.new).length;
-  const rows = q.map(x => `<div class="q ${x.new ? 'new' : ''}"><i></i><a class="fkey" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a><span class="tt" title="${esc(x.title)}">${esc(x.title)}</span>
-    <small>${esc(x.priority || '')}</small><small class="${x.over_sla ? 'sla' : ''}" title="${x.over_sla ? 'Über dem SLA' : 'Offen seit'}">${hAge(x.age_h)}</small></div>`).join('');
-  const open = nw > 0 || LS.get('fopen.hdq', false);
-  return `<div class="fgroup"><details ${open ? 'open' : ''} data-fgrp="hdq"><summary>Queue ${esc(info.name)} <span class="count">${q.length}${info.queue_total > q.length ? '/' + info.queue_total : ''}</span><small>${nw ? nw + ' neu seit deinem letzten Blick' : 'nichts Neues'}</small></summary>
-    <div class="flist"><div class="hdq">${rows}${nw ? `<div class="hdqh"><span class="sp"></span><button data-hdseen="1" title="Alle als gesehen markieren; neue Tickets erscheinen wieder fett">Alle gesehen</button></div>` : ''}</div></div></details></div>`;
+function hdRows(list) {
+  return list.map(x => `<div class="q ${x.new ? 'new' : ''}" data-fopen="hdw:${esc(x.key)}" role="button" tabindex="0" title="Im Panel lesen"><i></i><span class="fkey">${esc(x.key)}</span><span class="tt" title="${esc(x.title)}">${esc(x.title)}</span>
+    <small>${esc(x.status || '')}${x.assignee ? ' · ' + esc(x.assignee) : ''}</small><small class="${x.over_sla ? 'sla' : ''}" title="zuletzt geändert">${hAge(x.idle_h)}</small></div>`).join('');
 }
-function blockBanner() {
+function hdList(grp, title, list, total, newText, noneText, seenArg, seenTitle) {
+  if (!list.length) return '';
+  const nw = list.filter(x => x.new).length;
+  const open = nw > 0 || LS.get('fopen.' + grp, false);
+  return `<div class="fgroup"><details ${open ? 'open' : ''} data-fgrp="${grp}"><summary>${esc(title)} <span class="count">${list.length}${total > list.length ? '/' + total : ''}</span><small>${nw ? nw + ' ' + newText : noneText}</small></summary>
+    <div class="flist"><div class="hdq">${hdRows(list)}${nw ? `<div class="hdqh"><span class="sp"></span><button data-hdseen="${seenArg}" title="${esc(seenTitle)}">Alle gesehen</button></div>` : ''}</div></div></details></div>`;
+}
+function hdQueue() {
+  const f = state.flow || {}, info = f.hd_info || {};
+  if (!info.name) return '';
+  return hdList('hdq', 'Queue ' + info.name, f.hd_queue || [], info.queue_total || 0, 'neu seit deinem letzten Blick', 'nichts Neues', 'queue', 'Alle als gesehen markieren; neue Tickets erscheinen wieder fett')
+    + hdList('hdw', 'Ich beobachte', f.hd_watch || [], info.watched_total || 0, 'mit Änderung seit deinem letzten Blick', 'nichts geändert', 'watch', 'Alle als gesehen markieren; fett wird wieder, was sich danach ändert')
+    + (info.watch_error ? `<div class="small quiet" style="padding:0 4px 8px">Beobachtete Tickets nicht lesbar: ${esc(info.watch_error)}</div>` : '');
+}
+function blockBanner() { return ''; }   // seit 0.24 steht das in der Fokus-Leiste (renderFbar)
+// Fokus-Leiste: in jeder Ansicht sichtbar. Ist (Sitzung oder laufende Zeit) und Soll (Block, angeheftete Aufgabe).
+function fbarModel() {
   const f = FOC();
-  if (!f || !f.block || (f.session && f.session.area === f.block.area)) return '';
-  return `<div class="fblock ${arCls(f.block.area)}">${ic('clock')}<span><b>${esc(f.block.name)}-Block</b> bis ${esc(f.block.until)}</span><span class="sp"></span><button data-fsess="area:${esc(f.block.area)}">Block starten</button></div>`;
+  if (!f) return null;
+  const ses = f.session, blk = f.block, run = state.time && state.time.running;
+  const areaName = id => (f.areas.find(a => a.id === id) || { name: id }).name;
+  if (ses) {
+    if (FM_OPEN) return null;
+    return { kind: 'ses', area: ses.area, tag: ses.area_name, title: ses.title, sub: [ses.key !== ses.title ? ses.key : '', ses.activity].filter(Boolean).join(' · '),
+             soll: blk && blk.area !== ses.area ? `Soll: ${blk.name}-Block bis ${blk.until}` : '', ses };
+  }
+  if (blk) {
+    const other = run && !run.idle && run.area !== blk.area;
+    return { kind: 'soll', area: blk.area, tag: 'Jetzt wäre', title: `${blk.name}-Block bis ${blk.until}`,
+             sub: other ? `du bist an ${run.key} (${areaName(run.area)})` : run && !run.idle ? `Zeit läuft auf ${run.key}, ohne Zeitbox` : 'gerade läuft keine Zeit', warn: other, start: 'area:' + blk.area, startLabel: 'Block starten' };
+  }
+  if (run) {
+    return { kind: 'run', area: run.area, tag: areaName(run.area), title: run.title && run.title !== run.key ? `${run.key} ${run.title}` : run.key,
+             sub: [run.activity, run.idle ? 'pausiert: keine Aktivität im Panel' : 'Zeit läuft, ohne Zeitbox'].filter(Boolean).join(' · '), run,
+             start: state.flow && state.flow.pinned ? state.flow.pinned : '', startLabel: 'Fokus-Sitzung' };
+  }
+  return null;
+}
+function renderFbar() {
+  const el = $('fbar'), m = fbarModel();
+  document.body.classList.toggle('hasbar', !!m);
+  el.hidden = !m;
+  if (!m) return;
+  el.className = arCls(m.area) + (m.kind === 'soll' ? ' soll-only' : '') + (m.run && m.run.idle ? ' idle' : '');
+  let right = '';
+  if (m.kind === 'ses') {
+    const left = fmLeft(m.ses);
+    right = `<span class="clock ${left < 0 ? 'over' : ''}" id="fbClock" title="${left < 0 ? 'Zeitbox vorbei' : 'Rest der Zeitbox'}">${mmss(left)}</span>
+      <button class="go" data-fbopen="1" title="Fokus-Modus öffnen: Uhr, Gedanken parken, abschliessen">Fokus-Modus</button>
+      <i class="prog" id="fbProg" style="width:${Math.max(0, Math.min(100, 100 * (1 - left / (m.ses.planned_min * 60)))).toFixed(1)}%"></i>`;
+  } else {
+    right = (m.run ? `<span class="clock" id="fbClock" title="Heute auf dieser Aufgabe">${hm(m.run.today_secs)} h</span>` : '')
+      + `<button class="go" data-fsess="${esc(m.start || '')}">${ic('clock')} ${esc(m.startLabel)}</button>`;
+  }
+  el.innerHTML = `<span class="tag">${esc(m.tag)}</span><div class="now"><b title="${esc(m.title)}">${esc(m.title)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div>
+    ${m.soll ? `<span class="soll" title="Der feste Block gehört zu einem anderen Bereich als diese Sitzung">${esc(m.soll)}</span>` : ''}${m.warn ? '<span class="soll">anderer Bereich</span>' : ''}${right}`;
 }
 function focusRail() {
   const f = FOC();
@@ -3626,10 +3730,10 @@ function closeFmode() { FM_OPEN = false; LS.set('fmMin', true); renderFmode(); }
 const mmss = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60); return `${s < 0 ? '+' : ''}${m}:${String(a % 60).padStart(2, '0')}`; };
 function fmLeft(ses) { return ses.start + ses.planned_min * 60 - Date.now() / 1000; }
 function renderFmode() {
-  const f = FOC(), ses = f && f.session, el = $('fmode'), pill = $('fPill');
-  if (!ses) { el.hidden = true; pill.hidden = true; document.body.style.overflow = ''; return; }
+  const f = FOC(), ses = f && f.session, el = $('fmode');
+  renderFbar();
+  if (!ses) { el.hidden = true; document.body.style.overflow = ''; return; }
   const left = fmLeft(ses), area = f.areas.find(a => a.id === ses.area) || { activities: [] };
-  pill.hidden = FM_OPEN; pill.className = 'fpill ' + arCls(ses.area); pill.innerHTML = `${ic('clock')}<span id="fPillT">${mmss(left)}</span>`;
   el.hidden = !FM_OPEN; document.body.style.overflow = FM_OPEN ? 'hidden' : '';
   if (!FM_OPEN) return;
   const keep = $('fmPark') ? $('fmPark').value : '', had = document.activeElement && document.activeElement.id === 'fmPark';
@@ -3655,7 +3759,7 @@ setInterval(() => {
   const f = FOC(), ses = f && f.session;
   if (!ses) return;
   const left = fmLeft(ses), t = mmss(left);
-  if ($('fPillT')) $('fPillT').textContent = t;
+  if (!FM_OPEN && $('fbClock')) { $('fbClock').textContent = t; $('fbClock').classList.toggle('over', left < 0); if ($('fbProg')) $('fbProg').style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%'; }
   const c = $('fmClock'); if (c) { c.textContent = t; c.classList.toggle('over', left < 0); }
   const l = $('fmLine'); if (l) l.style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%';
   if (left < 0 && left > -1.2 && $('fmHint')) $('fmHint').textContent = 'Zeitbox vorbei. Abschliessen oder bewusst weitermachen.';
@@ -3666,7 +3770,7 @@ async function fmPark() {
   if (!v) return;
   try { const r = await post('/api/focus/park', { text: v }); i.value = ''; toast(r.to === 'ideen' ? 'Geparkt in der Ideenbox' : 'Geparkt in der Sitzungsnotiz'); state.focus.session.parked = r.parked; renderFmode(); $('fmPark').focus(); } catch (e) { toast(e.message); }
 }
-$('fPill').onclick = openFmode;
+$('fbar').addEventListener('click', ev => { if (ev.target.closest('[data-fbopen]') || !ev.target.closest('button')) { if (FOC() && FOC().session) openFmode(); } });
 $('fmode').addEventListener('click', async ev => {
   const t = ev.target;
   if (t.closest('[data-fmmin]')) { closeFmode(); return; }
@@ -3691,7 +3795,9 @@ $('fmode').addEventListener('keydown', ev => {
 document.addEventListener('click', async ev => {
   const t = ev.target;
   const fs = t.closest('[data-fsess]'); if (fs) { ev.stopPropagation(); openFocusDlg(fs.dataset.fsess); return; }
-  if (t.closest('[data-hdseen]')) { ev.stopPropagation(); await act(() => post('/api/helpdesk/seen', { all: true }), 'Queue als gesehen markiert'); }
+  const hr = t.closest('[data-hdreload]'); if (hr) { delete HDD[hr.dataset.hdreload]; renderFx(); return; }
+  const hs = t.closest('[data-hdseen]');
+  if (hs) { ev.stopPropagation(); await act(() => post('/api/helpdesk/seen', { all: hs.dataset.hdseen === 'watch' ? 'watch' : true }), 'Als gesehen markiert'); }
 });
 
 $('fRailUsage').appendChild($('usageBox'));
@@ -3714,7 +3820,7 @@ function uxPush(e) {
   UX.q.push(e);
   if (UX.q.length > 400) UX.q.splice(0, UX.q.length - 400);
 }
-const UX_ACT = 'button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.bcard,.tab,.chip[data-arun],dialog';
+const UX_ACT = 'button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],.rcard.score,.aipace,#fbar,dialog';
 function uxDesc(el) {
   if (!el || el === document.body || el === document.documentElement) return 'body';
   const tag = el.tagName.toLowerCase();
@@ -3731,8 +3837,8 @@ function uxDesc(el) {
   return d.slice(0, 110);
 }
 function uxCtx(el) {
-  const c = el && el.closest && el.closest('dialog[id],#fx,#viewTime,#viewQa,#viewSettings,#fHero,#fList,#fRail,#board,#left,#aside,header,nav');
-  return c ? (c.id ? c.id : c.tagName.toLowerCase()) : '';
+  const c = el && el.closest && el.closest('dialog[id],#fx,#fbar,.rcard,.hero,.fgroup,.sset,#viewTime,#viewQa,#viewSettings,#fHero,#fList,#fRail,#board,#left,#aside,header,nav');
+  return c ? (c.id ? c.id : [...c.classList].slice(0, 2).join('.') || c.tagName.toLowerCase()) : '';
 }
 document.addEventListener('pointerover', ev => {
   const el = ev.target.closest && ev.target.closest(UX_ACT);

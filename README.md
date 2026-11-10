@@ -459,6 +459,16 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4ü. Helpdesk lesen, Beobachten und Fokus-Leiste (neu in 0.24.0)
+
+- **Ticket im Panel:** «Ticket ansehen» zeigt Beschreibung und die letzten Kommentare in tinyops. Geschrieben wird weiterhin nur im Helpdesk.
+- **Ich beobachte:** Tickets, bei denen du Watcher bist. Fett heisst: geändert seit deinem letzten Blick.
+
+  ```json
+  "helpdesk": {"watch_jql": "watcher = currentUser() AND (assignee is EMPTY OR assignee != currentUser()) AND resolution = Unresolved ORDER BY updated DESC"}
+  ```
+- **Fokus-Leiste:** Der Balken unter der Kopfzeile zeigt in jeder Ansicht die laufende Sitzung, die laufende Zeit oder den Block, der jetzt dran wäre.
+
 ## 4ö. Helpdesk, Fokusbereiche und Fokus-Modus (neu in 0.23.0)
 
 **Helpdesk-Jira** (Einstellungen → Helpdesk) bindet eine zweite Jira-Instanz nur lesend ein.

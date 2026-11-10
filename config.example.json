@@ -73,7 +73,9 @@
   "time": {"enabled": true, "round_minutes": 15, "min_minutes": 5, "idle_minutes": 15, "mcp_url": "", "allow_remote": false, "send_on_confirm": true},
   "helpdesk": {"enabled": false, "name": "Helpdesk", "url": "https://helpdesk.example.intern", "auth": "basic", "username": "",
                "assigned_jql": "assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC",
-               "queue_jql": "", "sla_hours": 24, "area": "hd"},
+               "queue_jql": "",
+               "watch_jql": "watcher = currentUser() AND (assignee is EMPTY OR assignee != currentUser()) AND resolution = Unresolved ORDER BY updated DESC",
+               "sla_hours": 24, "area": "hd"},
   "focus": {"week_hours": 42, "day_start": "08:00", "day_end": "17:00", "areas": [
     {"id": "dev", "name": "Entwicklung", "target_pct": 0},
     {"id": "hd", "name": "Helpdesk", "target_pct": 0},

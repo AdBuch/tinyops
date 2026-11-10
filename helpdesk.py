@@ -8,6 +8,7 @@ Jira 8.5 kennt keine Personal Access Tokens: Standard ist Basic Auth mit Benutze
 Neuere Instanzen gehen auch mit Bearer-Token (Secret helpdesk_token). Geschrieben wird nichts.
 """
 import base64
+import re
 import time
 from datetime import datetime
 
@@ -21,10 +22,13 @@ DEFAULTS = {
     "username": "",
     "assigned_jql": "assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC",
     "queue_jql": "",                       # z. B. project = SD AND assignee is EMPTY AND resolution = Unresolved
+    # Tickets, die du beobachtest (Watcher), aber nicht selbst bearbeitest. Leer = aus.
+    "watch_jql": "watcher = currentUser() AND (assignee is EMPTY OR assignee != currentUser()) AND resolution = Unresolved ORDER BY updated DESC",
     "sla_hours": 24,
     "area": "hd",                          # Fokusbereich für die Zeit
 }
-FIELDS = ["summary", "status", "priority", "created", "updated", "reporter", "duedate"]
+FIELDS = ["summary", "status", "priority", "created", "updated", "reporter", "duedate", "assignee"]
+KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}-\d{1,9}$")
 PRIO_RANK = {"blocker": 5, "highest": 5, "critical": 4, "high": 4, "major": 3, "medium": 3, "normal": 3, "minor": 2, "low": 2, "trivial": 1, "lowest": 1}
 
 
@@ -70,7 +74,8 @@ def item(base, i, sla, now):
     return {"key": i["key"], "title": f.get("summary", ""), "status": (f.get("status") or {}).get("name", ""), "priority": prio,
             "prio_rank": PRIO_RANK.get(prio.lower(), 2), "age_h": round(age, 1) if age is not None else None,
             "idle_h": round(upd, 1) if upd is not None else None, "reporter": (f.get("reporter") or {}).get("displayName", ""),
-            "due": f.get("duedate") or "", "url": "%s/browse/%s" % (base, i["key"]), "over_sla": bool(age is not None and age >= sla)}
+            "due": f.get("duedate") or "", "url": "%s/browse/%s" % (base, i["key"]), "over_sla": bool(age is not None and age >= sla),
+            "assignee": (f.get("assignee") or {}).get("displayName", ""), "updated_ts": (now - upd * 3600) if upd is not None else None}
 
 
 def fetch(client, hc, now=None):
@@ -83,6 +88,45 @@ def fetch(client, hc, now=None):
     if hc.get("queue_jql"):
         q, qt = client._search(hc["queue_jql"], FIELDS, 50)
         out["queue"], out["queue_total"] = [item(client.base, i, sla, now) for i in q], qt
+    out["watched"], out["watched_total"] = [], 0
+    if hc.get("watch_jql"):
+        try:
+            w, wt = client._search(hc["watch_jql"], FIELDS, 50)
+            mine = {t["key"] for t in out["assigned"]}
+            out["watched"], out["watched_total"] = [item(client.base, i, sla, now) for i in w if i["key"] not in mine], wt
+        except Exception as e:      # Beobachten ist Zugabe: Eine abgewiesene JQL darf die zugewiesenen Tickets nicht verhindern
+            out["watch_error"] = str(e)
+    return out
+
+
+def _text(v, limit):
+    """Jira-Text (Wiki-Markup) als reiner Text, gekürzt. Bleibt Daten: Die Oberfläche zeigt ihn nur an."""
+    v = (v or "").replace("\r\n", "\n").strip()
+    return v if len(v) <= limit else v[:limit].rstrip() + " …"
+
+
+def detail(client, key, now=None):
+    """Ein Ticket zum Lesen im Panel: Beschreibung und die letzten Kommentare. Nur GET."""
+    if not KEY_RE.match(key or ""):
+        raise ValueError("Ungültiger Ticket-Schlüssel.")
+    now = now or time.time()
+    d = client.http.get("/issue/%s" % key, {"fields": ",".join(FIELDS + ["description", "comment"])})
+    f = d.get("fields") or {}
+    cm = (f.get("comment") or {})
+    rows = cm.get("comments") or []
+    out = item(client.base, {"key": d.get("key") or key, "fields": f}, 10 ** 9, now)
+    out.update({"description": _text(f.get("description"), 6000), "comments_total": cm.get("total", len(rows)),
+                "comments": [{"author": (c.get("author") or {}).get("displayName", ""), "age_h": _age_h(c.get("created"), now) and round(_age_h(c.get("created"), now), 1),
+                              "body": _text(c.get("body"), 2000)} for c in rows[-5:]][::-1]})
+    return out
+
+
+def watched(hd, seen_ts):
+    """Beobachtete Tickets: «neu», wenn du sie noch nie gesehen hast oder sie sich seit dem letzten «gesehen» geändert haben."""
+    out = []
+    for t in (hd or {}).get("watched") or []:
+        s = seen_ts.get(t["key"])
+        out.append(dict(t, new=s is None or (t.get("updated_ts") or 0) > s + 1))
     return out
 
 
@@ -102,9 +146,9 @@ def entries(hd, seen):
             why.append("seit %s ohne Bewegung" % _dur(t["idle_h"]))
         prio = 120 + t["prio_rank"] * 12 + (60 if t["over_sla"] else 0) + min(int((t["age_h"] or 0) // 8), 20)
         out.append(dict(t, id="hd:" + t["key"], prio=prio, outdated=bool(hd.get("outdated")),
-                        next={"kind": "do", "id": "hd_work", "label": "Helpdesk bearbeiten" if t["status"].lower() not in ("waiting for customer", "warten auf kunde") else "Antwort prüfen",
+                        next={"kind": "do", "id": "hd_work", "label": "Ticket bearbeiten" if t["status"].lower() not in ("waiting for customer", "warten auf kunde") else "Antwort prüfen",
                               "why": ("%s (%s). " % (t["status"], t["priority"] or "ohne Priorität")) + (", ".join(why) + "." if why else ""),
-                              "owner": "me", "action": {"url": t["url"], "pin": "hd:" + t["key"]}}))
+                              "owner": "me", "action": {"open": "hd:" + t["key"], "url": t["url"]}}))
     queue = [dict(t, new=t["key"] not in seen) for t in hd.get("queue") or []]
     return out, queue
 
