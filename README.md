@@ -405,7 +405,7 @@ Pushen und MR erstellen bleiben bei dir. Ob ein Pfad in die Cloud darf, entschei
 
 ## 4v. Rückfragen, Bericht und offene Review-Punkte (neu in 0.18.0)
 
-**Rückfragen:** Im Lauf eines Agenten stehen `tinyops-ask`, `tinyops-check` und `tinyops-report` im PATH. Fragt der Agent, steht «Agent fragt» unter «Du bist dran». Du antwortest im Lauf-Dialog, und der Agent arbeitet weiter.
+**Rückfragen:** Im Lauf eines Agenten stehen `tinyops-ask`, `tinyops-check`, `tinyops-ak` und `tinyops-report` im PATH. Fragt der Agent, steht «Agent fragt» unter «Du bist dran». Du antwortest im Lauf-Dialog, und der Agent arbeitet weiter.
 
     tinyops-ask "Retry exponentiell oder fix?" "exponentiell" "fix"   # wartet, Antwort auf stdout; Exit 3 = weiter warten mit --wait 1
     tinyops-check mvn -q test                                        # Beleg: Befehl + Exit-Code
@@ -458,6 +458,23 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 - Beim «Fertig» räumt tinyops saubere Worktrees weg. Geänderte bleiben, × am Chip fragt nach.
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
+
+## 4x. Agenten: Auftrag aus dem Ticket, Ergebnis je Kriterium (neu in 0.26.0)
+
+Beim Zuweisen eines Agenten baut tinyops den Auftrag aus dem Ticket: Beschreibung, nummerierte Akzeptanzkriterien (AK1, AK2 …) und auf Wunsch die letzten Kommentare.
+
+- Kriterien erkennt tinyops unter der Überschrift «Akzeptanzkriterien», «Abnahmekriterien», «Acceptance Criteria» oder «Definition of Done». Bei lokalen Aufgaben sind es die offenen Teilschritte.
+- Im Dialog entscheidest du per Haken, was mitgeht. Geheimnisse im Tickettext werden geschwärzt; Helpdesk-Text geht an Cloud-Agenten erst nach deinem Haken.
+- Der Agent meldet jedes Kriterium zurück:
+
+      tinyops-ak 1 erfüllt "RetryTest grün"
+      tinyops-ak 2 offen "Limit fehlt noch"
+      tinyops-ak 3 unklar "Backoff fix oder exponentiell?"
+
+- Im Lauf siehst du Stand und Beleg je Kriterium, die Commits und Dateien des Laufs, Belege und Bericht.
+- «Nachbessern …» startet einen neuen Lauf mit den offenen Punkten auf dem Branch des ersten. «Als Ticket-Kommentar kopieren» legt das Ergebnis in die Zwischenablage.
+
+Damit Cloud-CLIs im Lauf Dateien ändern dürfen, brauchen sie ein zusätzliches Argument unter Einstellungen → Agenten: Claude Code `--permission-mode acceptEdits`, Codex `--full-auto`. tinyops weist im Dialog darauf hin, wenn es fehlt.
 
 ## 4w. Workspaces: lokale Repos und ungepushte Arbeit (neu in 0.25.0)
 

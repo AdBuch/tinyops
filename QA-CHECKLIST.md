@@ -117,6 +117,21 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.26.0
+
+- [ ] `r26-01` Jira-Ticket mit Abschnitt «Akzeptanzkriterien»: Agent zuweisen → der Dialog zeigt «Auftrag aus dem Ticket» mit den Kriterien als Haken, der Prompt enthält «AK1: …»
+- [ ] `r26-02` Haken bei einem Kriterium und bei «Beschreibung mitschicken» entfernen → der Prompt baut sich neu auf, ohne diese Teile
+- [ ] `r26-03` Ticket mit einem Passwort oder Token in der Beschreibung → im Prompt steht «entfernt», der Dialog nennt die Zahl der Schwärzungen
+- [ ] `r26-04` Ticket ohne Akzeptanzkriterien → Hinweis im Dialog, der Prompt sagt dem Agenten, dass er nachfragen soll
+- [ ] `r26-05` Claude Code ohne `--permission-mode` (oder Codex ohne `--full-auto`) → Warnung im Dialog; nach dem Eintragen unter Einstellungen → Agenten ist sie weg
+- [ ] `r26-06` Lauf starten und abwarten → auf der Karte «fertig · n/m AK»; im Lauf je Kriterium erfüllt, offen, unklar oder nicht gemeldet, mit Beleg
+- [ ] `r26-07` Im beendeten Lauf steht «Änderungen» mit Commits und Dateien; sie stimmen mit `git log` auf dem Branch `agent/…` überein
+- [ ] `r26-08` «Nachbessern …» mit einer Anmerkung → neuer Auftrag mit den offenen Kriterien, Ausgang ist der Branch des ersten Laufs; der neue Lauf sieht dessen Commits
+- [ ] `r26-09` «Als Ticket-Kommentar kopieren» → Text in der Zwischenablage, in Jira eingefügt lesbar; tinyops selbst hat nichts ins Ticket geschrieben
+- [ ] `r26-10` Lokale Aufgabe mit zwei offenen Teilschritten → sie stehen als Kriterien im Auftrag
+- [ ] `r26-11` Helpdesk-Ticket und Cloud-Agent → «Beschreibung mitschicken» ist nicht angehakt
+- [ ] `r26-12` Fokus: bei einem fertigen Lauf nennt «Ergebnis des Agenten prüfen», wie viele Kriterien als erfüllt gemeldet sind
+
 ## 0.25.0
 
 - [ ] `r25-01` Einstellungen → Workspaces: deinen Projektordner eintragen (z. B. `~/work`), speichern → «Durchsucht wird» nennt ihn

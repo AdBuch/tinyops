@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 
+import briefing
 import secretstore as store
 import tlog
 import audit as _audit
@@ -46,8 +47,10 @@ STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen",
 DEFAULT_MAX_MINUTES = 60
 MAX_PROMPT = 20000
 KINDS = {
-    "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic"},
-    "codex": {"label": "Codex", "bin": "codex", "argv": ["codex", "exec", PROMPT], "provider": "OpenAI"},
+    "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic",
+               "write_flags": ("--permission-mode", "--dangerously-skip-permissions", "--allowedTools", "--allowed-tools"), "write_hint": "--permission-mode acceptEdits"},
+    "codex": {"label": "Codex", "bin": "codex", "argv": ["codex", "exec", PROMPT], "provider": "OpenAI",
+              "write_flags": ("--full-auto", "--sandbox", "-s", "--dangerously-bypass-approvals-and-sandbox"), "write_hint": "--full-auto"},
     "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral"},
     # Lokale Agenten: Aufrufe aus der Dokumentation der CLIs abgeleitet, nicht gegen die echten Programme getestet.
     "goose": {"label": "Goose", "bin": "goose", "argv": ["goose", "run", "-i", PROMPT_FILE], "provider": "dem in Goose eingestellten Anbieter",
@@ -102,6 +105,15 @@ t0=$(date +%s); "$@"; rc=$?; t1=$(date +%s)
 printf '{"cmd": "%s", "exit": %d, "secs": %d, "ts": %d}\n' "$(j "$*")" "$rc" $((t1 - t0)) "$t1" >> "$R/$N.checks"
 echo "[tinyops-check] Exit $rc nach $((t1 - t0)) s: $*" >&2
 exit $rc
+''',
+    "tinyops-ak": _HELPER_HEAD + r'''# tinyops-ak NR erfüllt|offen|unklar ["Beleg oder Grund"]   meldet den Stand eines Akzeptanzkriteriums (AK1, AK2 …) an tinyops
+# Auch: ok, erfuellt, done | offen, open, fail | unklar, unclear. Die letzte Meldung je Kriterium gilt.
+k=$(printf '%s' "$1" | sed 's/^[Aa][Kk]//')
+case "$k" in ""|*[!0-9]*) echo 'Aufruf: tinyops-ak NR erfüllt|offen|unklar ["Beleg oder Grund"]' >&2; exit 2;; esac
+case "$2" in ok|OK|erf*|done|ja|pass*) s=ok;; offen|open|fail*|nein|nicht*) s=open;; unklar|unclear|block*|"?") s=unclear;;
+  *) echo 'tinyops-ak: Stand fehlt. Erlaubt: erfüllt, offen, unklar' >&2; exit 2;; esac
+printf '{"n": %d, "state": "%s", "note": "%s", "ts": %s}\n' "$k" "$s" "$(j "$3" | cut -c1-400)" "$(date +%s)" >> "$R/$N.ak"
+echo "[tinyops] AK$k: $s" >&2
 ''',
     "tinyops-report": _HELPER_HEAD + r'''# tinyops-report < bericht.md   oder   tinyops-report "Text"   speichert den Ergebnisbericht (Markdown, höchstens 20 KB)
 if [ $# -gt 0 ]; then printf '%s\n' "$*"; else cat; fi | head -c 20000 > "$R/$N.summary.md.tmp" && mv "$R/$N.summary.md.tmp" "$R/$N.summary.md"
@@ -443,7 +455,7 @@ cat > "$R/{rid}.cmd" <<'{d2}'
 cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
 {runner}TINYOPS_RUNNER_EOF
 command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.summary.md" "$R/{rid}.answer."*
+rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.summary.md" "$R/{rid}.answer."*
 {helpers}ID={rid}
 {prep}echo "$WD" > "$R/{rid}.wd"
 tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
@@ -469,7 +481,42 @@ def remote_status_script(ids):
 
 def remote_report_script(rid):
     return ('R="$HOME/.tinyops/runs"; echo "@@SUMMARY"; head -c 20000 "$R/%d.summary.md" 2>/dev/null; echo; echo "@@CHECKS"; '
-            'tail -n 50 "$R/%d.checks" 2>/dev/null; true') % (int(rid), int(rid))
+            'tail -n 50 "$R/%d.checks" 2>/dev/null; echo "@@AK"; tail -n 200 "$R/%d.ak" 2>/dev/null; true') % (int(rid), int(rid), int(rid))
+
+
+def result_script(wt, mode):
+    """Was der Lauf am Code geändert hat, gegen den Ausgangsstand: Commits, Dateien, Umfang, offene Änderungen. Nur lesend. Erwartet R und ID."""
+    base = "init" if mode == "export" else "base"
+    return ('cd %s 2>/dev/null || exit 0; B=$(cat "$R/$ID.%s" 2>/dev/null); [ -n "$B" ] || exit 0; export GIT_OPTIONAL_LOCKS=0; '
+            'echo "@@COMMITS"; git log --format="%%h %%s" "$B..HEAD" 2>/dev/null | head -n 30; '
+            'echo "@@STAT"; git diff --shortstat "$B" 2>/dev/null; '
+            'echo "@@FILES"; git diff --name-status "$B" 2>/dev/null | head -n 80; '
+            'echo "@@DIRTY"; git status --porcelain 2>/dev/null | wc -l; true') % (shlex.quote(wt), base)
+
+
+def parse_result(out):
+    """Ausgabe von result_script lesen."""
+    sec, cur = {}, None
+    for line in (out or "").splitlines():
+        if line.startswith("@@"):
+            cur = line[2:].strip()
+            sec[cur] = []
+        elif cur:
+            sec[cur].append(line)
+    if "COMMITS" not in sec:
+        return None
+    commits = [{"sha": x.split(" ", 1)[0], "subject": clean_text(x.split(" ", 1)[1] if " " in x else "", 200).strip()} for x in sec["COMMITS"] if x.strip()]
+    files = []
+    for x in sec.get("FILES") or []:
+        p = x.split("\t")
+        if len(p) >= 2:
+            files.append({"st": p[0][:1], "path": clean_text(p[-1], 300).strip()})
+    stat = " ".join(" ".join(sec.get("STAT") or []).split())
+    try:
+        dirty = int("".join(sec.get("DIRTY") or ["0"]).strip() or 0)
+    except ValueError:
+        dirty = 0
+    return {"commits": commits, "files": files, "stat": clean_text(stat, 200), "dirty": dirty}
 
 
 def answer_script(rid, qid, text):
@@ -728,7 +775,13 @@ class Service:
             wd, ok, why = "", False, str(e)
         p = self.project(pid) or {}
         mode = self.mode(a, pid) if p else "shared"
+        hints = []
+        spec = KINDS[a["kind"]]
+        if spec.get("write_flags") and not any(x.split("=")[0] in spec["write_flags"] for x in _extra(a)):
+            hints.append("%s läuft hier ohne Rückfrage-Fenster. Ohne «%s» in den zusätzlichen Argumenten (Einstellungen → Agenten) darf es laut Dokumentation "
+                         "der CLI keine Dateien ändern und endet dann ohne Ergebnis." % (spec["label"], spec["write_hint"]))
         return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or [], template, extra), "workdir": wd,
+                "hints": hints,
                 "where": "lokal auf diesem Rechner" if conn is None else "%s (%s)" % (conn["name"], ("%s@%s" % (conn["user"], conn["host"])) if conn["user"] else conn["host"]),
                 "cloud": bool(a.get("cloud", True)), "provider": KINDS[a["kind"]]["provider"], "kind": KINDS[a["kind"]]["label"],
                 "allowed": ok, "reason": why, "data_class": data_class(p), "mode": self.mode(a, pid) if p else "",
@@ -745,11 +798,13 @@ class Service:
         end = r["finished"] or time.time()
         v = dict(r)
         v["prompt_text"] = v.pop("prompt", "")
-        for k, empty in (("question", None), ("qa", []), ("checks", [])):
+        for k, empty in (("question", None), ("qa", []), ("checks", []), ("criteria", []), ("ak", []), ("result", None)):
             try:
                 v[k] = json.loads(r[k]) if r.get(k) else empty
             except ValueError:
                 v[k] = empty
+        v["criteria"] = briefing.merge(v["criteria"] or [], v.pop("ak") or [])
+        v["ak"] = briefing.counts(v["criteria"])
         v["ack"] = bool(r.get("ack"))
         v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
@@ -811,7 +866,9 @@ class Service:
             outb = self.out_branch(r["ticket"], run_id) if mode != "shared" else ""
             repo, root = self._paths(a, pid)
             prep = prepare_script(mode, self._q(a, repo), self._q(a, root), run_id, outb, branch, (self.project(pid) or {}).get("cloud_paths") or [])
-            self.store.agent_run_update(run_id, project_id=pid, branch=branch, workdir=wd, prompt=prompt, mode=mode, out_branch=outb)
+            crit = briefing.parse_prompt(prompt)
+            self.store.agent_run_update(run_id, project_id=pid, branch=branch, workdir=wd, prompt=prompt, mode=mode, out_branch=outb,
+                                        criteria=json.dumps(crit, ensure_ascii=False), ak="", result="")
             try:
                 if conn is None:
                     run_wd = self._local_prepare(a, run_id, prep) if mode != "shared" else wd
@@ -833,7 +890,7 @@ class Service:
                 raise
             self.store.agent_run_update(run_id, status="läuft", started=time.time(), note="")
             self._ev("agent.start", self.store.agent_run(run_id), prompt_hash=_audit.prompt_hash(prompt), prompt_chars=len(prompt),
-                     workdir=wd, branch=branch, out_branch=outb, max_minutes=int(a.get("max_minutes", DEFAULT_MAX_MINUTES) or 0))
+                     workdir=wd, branch=branch, out_branch=outb, criteria=len(crit), max_minutes=int(a.get("max_minutes", DEFAULT_MAX_MINUTES) or 0))
             log.info("Lauf %d gestartet: Agent %s, Ticket %s, %s", run_id, a["id"], r["ticket"], wd)
             return run_id
 
@@ -856,7 +913,7 @@ class Service:
                 (d / ("%d.%s" % (rid, ext))).unlink()
             except OSError:
                 pass
-        for f in list(d.glob("%d.answer.*" % rid)) + [d / ("%d.%s" % (rid, x)) for x in ("question.json", "qn", "checks", "summary.md")]:
+        for f in list(d.glob("%d.answer.*" % rid)) + [d / ("%d.%s" % (rid, x)) for x in ("question.json", "qn", "checks", "ak", "summary.md")]:
             try:
                 f.unlink()
             except OSError:
@@ -959,14 +1016,22 @@ class Service:
             if conn is None:
                 d = self.run_dir
                 rd = lambda ext: (d / ("%d.%s" % (r["id"], ext))).read_text(encoding="utf-8", errors="replace") if (d / ("%d.%s" % (r["id"], ext))).exists() else ""
-                summary, checks = rd("summary.md")[:20000], rd("checks")
+                summary, checks, ak = rd("summary.md")[:20000], rd("checks"), rd("ak")
             else:
                 rc, out, _ = run_remote(conn, remote_report_script(r["id"]), timeout=20)
                 if rc != 0 or "@@CHECKS" not in out:
                     return False
                 head, _, checks = out.partition("@@CHECKS")
+                checks, _, ak = checks.partition("@@AK")
                 summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
-            self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False))
+            self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False),
+                                        ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False))
+            cur = self.store.agent_run(r["id"]) or r
+            if cur.get("wt") and cur.get("mode") in ("worktree", "export"):      # was am Code geändert wurde; fehlt der Ordner schon, bleibt der alte Stand
+                rc, out, _ = self._sh(a, conn, result_script(cur["wt"], cur["mode"]), r["id"], timeout=25)
+                res = parse_result(out) if rc == 0 else None
+                if res is not None:
+                    self.store.agent_run_update(r["id"], result=json.dumps(res, ensure_ascii=False))
             return True
         except (AgentError, OSError) as e:
             log.debug("Bericht von Lauf %s nicht lesbar: %s", r.get("id"), e)

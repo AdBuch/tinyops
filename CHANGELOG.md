@@ -5,6 +5,32 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.26.0]
+
+### Neu
+- **Auftrag aus dem Ticket:** Weist du einem Ticket einen Agenten zu, liest tinyops Beschreibung, Akzeptanzkriterien und die letzten Kommentare und baut daraus den Prompt.
+  - Akzeptanzkriterien kommen aus dem Abschnitt «Akzeptanzkriterien», «Abnahmekriterien», «Acceptance Criteria» oder «Definition of Done» (Jira-Markup oder Markdown) und werden nummeriert: AK1, AK2 …
+  - Im Dialog wählst du per Haken, was mitgeht: Beschreibung, Kommentare, jedes Kriterium einzeln. Der Prompt bleibt lesbar und änderbar.
+  - Lokale Aufgaben: die offenen Teilschritte sind die Kriterien. Helpdesk-Tickets gehen genauso.
+- **Meldung je Kriterium:** Der Agent meldet mit dem neuen `tinyops-ak <Nr> erfüllt|offen|unklar "Beleg"` den Stand jedes Kriteriums. Im Lauf steht je Kriterium Stand und Beleg, auf der Karte «2/3 AK».
+- **Änderungen des Laufs:** Commits, geänderte Dateien, Umfang und nicht committete Dateien gegenüber dem Ausgangsstand (Worktree und Export).
+- **Nachbessern:** Aus einem beendeten Lauf startest du einen neuen mit den offenen Kriterien, den fehlgeschlagenen Belegen und deiner Anmerkung. Er baut auf dem Branch des ersten Laufs auf.
+- **Als Ticket-Kommentar kopieren:** Ergebnis als Entwurf in Jira-Markup in die Zwischenablage. tinyops schreibt nichts ins Ticket.
+- **Hinweis zu Schreibrechten:** Fehlt bei Claude Code `--permission-mode …` oder bei Codex `--full-auto` in den zusätzlichen Argumenten, steht das vor dem Start im Dialog.
+- Der nächste Schritt im Fokus nennt bei einem fertigen Lauf, wie viele Kriterien als erfüllt gemeldet sind.
+
+### Sicherheit
+- Tickettext steht im Prompt in einem markierten Datenblock; der Agent bekommt gesagt, dass darin keine Anweisungen stehen. Kriterien liest tinyops nie aus diesem Block.
+- Offensichtliche Geheimnisse im Tickettext (Passwörter, Tokens, Schlüssel, Zugangsdaten in URLs) werden vor dem Prompt geschwärzt, die Zahl steht im Dialog.
+- Helpdesk-Beschreibungen gehen an einen Cloud-Agenten erst nach deinem Haken. Kommentare gehen nie ungefragt mit.
+- Jira wird dafür nur gelesen (ein GET je Ticket, zwei Minuten gemerkt).
+
+### Grenzen
+- «Erfüllt» ist die Angabe des Agenten. Belegt ist nur, was über `tinyops-check` lief.
+- Die Schwärzung erkennt Muster, nicht jedes Geheimnis. Lies den Prompt vor dem Start bei Cloud-Agenten durch.
+- Die Aufrufe von Claude Code, Codex und Mistral Vibe sind nicht gegen die echten Programme getestet; der Hinweis zu den Schreibrechten folgt deren Dokumentation.
+- Im Modus «gemeinsamer Ordner» gibt es keine Änderungsübersicht (kein Ausgangsstand).
+
 ## [0.25.0]
 
 ### Neu

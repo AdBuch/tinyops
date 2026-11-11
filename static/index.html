@@ -243,11 +243,29 @@
   .agq { border: 1px solid var(--focus, #2b59d9); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--focus-bg); }
   .agq .opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
   .agq textarea { height: 70px; }
-  .agrep { margin-top: 8px; }
+  .agrep { margin-top: 8px; } .agrep > .small, .agrep > details { margin-top: 10px; }
   .agrep .md { white-space: pre-wrap; font-size: 13px; background: var(--raised); border-radius: 8px; padding: 8px 10px; max-height: 30vh; overflow: auto; }
   .agchk { list-style: none; padding: 0; margin: 6px 0; font-size: 12.5px; }
   .agchk li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
   .agchk code { overflow-wrap: anywhere; }
+  .agbrief { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
+  .agbrief h4 { margin: 0 0 6px; font-size: 13px; }
+  .agbrief label { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 2px 0; }
+  .agbrief label input { flex: none; }
+  .agbrief label span { min-width: 0; overflow-wrap: anywhere; }
+  .agbrief .opts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 6px; }
+  .aklist { list-style: none; padding: 0; margin: 6px 0; font-size: 13px; }
+  .aklist li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .aklist li:first-child { border-top: 0; }
+  .aklist .chip { justify-self: start; }
+  .aklist .txt { overflow-wrap: anywhere; }
+  .aklist .note { grid-column: 2; color: var(--quiet); font-size: 12.5px; overflow-wrap: anywhere; }
+  .agfiles { list-style: none; padding: 0; margin: 6px 0; font-size: 12.5px; max-height: 24vh; overflow: auto; }
+  .agfiles li { display: flex; gap: 8px; padding: 1px 0; } .agfiles b { width: 14px; flex: none; text-align: center; }
+  .agfiles code { overflow-wrap: anywhere; }
+  .agfollow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .agfollow input { flex: 1 1 220px; min-width: 0; }
+  @media (max-width: 600px) { .aklist li { grid-template-columns: minmax(0, 1fr); } .aklist .note { grid-column: 1; } }
   .aud { list-style: none; margin: 6px 0 0; padding: 0; }
   .aud li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 12px; padding: 7px 4px; border-top: 1px solid var(--line); font-size: 13px; }
   .aud li:first-child { border-top: 0; }
@@ -1718,7 +1736,7 @@ function agentRow(ticket, key, title, url, items) {
   if (!ag.enabled || !ticket) return '';
   agCtx[ticket] = { key, title, url, items: items || [] };
   const chips = ag.runs.filter(r => r.ticket === ticket).slice(0, 4).map(r =>
-    `<button class="chip ${r.question ? 'warn' : AG_ST[r.status] || ''}" data-arun="${r.id}" title="${esc(r.agent_name)} · ${esc(r.where)}${r.question ? ' · fragt: ' + esc(r.question.question) : r.note ? ' · ' + esc(r.note) : ''}">${r.question ? ic('chat') : r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)} · ${r.question ? 'fragt' : esc(r.status)}</button>`).join('');
+    `<button class="chip ${r.question ? 'warn' : AG_ST[r.status] || ''}" data-arun="${r.id}" title="${esc(r.agent_name)} · ${esc(r.where)}${r.question ? ' · fragt: ' + esc(r.question.question) : r.note ? ' · ' + esc(r.note) : ''}">${r.question ? ic('chat') : r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)} · ${r.question ? 'fragt' : esc(r.status)}${!r.active && r.ak && r.ak.total && r.status !== 'zugewiesen' ? ` · ${r.ak.ok}/${r.ak.total} AK` : ''}</button>`).join('');
   const pid = (items && items[0]) ? items[0].project_id : null;
   const cls = (ag.projects.find(p => p.id === pid) || {}).data_class;
   return `<div class="bagent">${chips}<select data-aassign="1" data-ticket="${esc(ticket)}" aria-label="Agent zuweisen"><option value="">Agent zuweisen …</option>${ag.agents.map(a => {
@@ -1736,27 +1754,50 @@ async function openAgentDlg(o) {
   let pid = o.review ? o.review.project_id : o.pid ?? (ctx.items[0] ? ctx.items[0].project_id : (ag.projects[0] ? ag.projects[0].id : null));
   const branch = o.review ? o.review.branch : (ctx.items.find(x => x.project_id === pid) || ctx.items[0] || {}).branch || '';
   const box = $('agBody');
+  let bopt = null, dirty = false;
   async function draw() {
     let info;
-    try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined }); }
+    try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined,
+      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined }); }
     catch (e) { toast(e.message); return; }
+    dirty = false;
+    if (info.followup) pid = info.project_id;
+    const bf = info.brief;
+    const briefBox = !bf ? '' : `<div class="agbrief"><h4>Auftrag aus ${bf.source === 'lokal' ? 'der Aufgabe' : bf.source === 'helpdesk' ? 'dem Helpdesk-Ticket' : 'dem Ticket'} ${esc(bf.key)}</h4>
+      ${bf.error ? `<div class="small quiet">${esc(bf.error)} Der Prompt enthält nur Key und Titel.</div>` : `
+      <div class="opts">${bf.desc_chars ? `<label><input type="checkbox" data-bf="desc" ${bf.desc ? 'checked' : ''}><span>Beschreibung mitschicken (${bf.desc_chars} Zeichen)</span></label>` : '<span class="small quiet">Keine Beschreibung.</span>'}
+        ${bf.comments_n ? `<label><input type="checkbox" data-bf="comments" ${bf.comments ? 'checked' : ''}><span>${bf.comments_n === 1 ? 'Letzten Kommentar' : 'Letzte ' + bf.comments_n + ' Kommentare'} mitschicken</span></label>` : ''}</div>
+      ${bf.careful ? '<div class="small quiet">Helpdesk-Texte enthalten oft Kundendaten. Bei einem Cloud-Agenten ist die Beschreibung deshalb erst nach deinem Haken dabei.</div>' : ''}
+      ${bf.criteria.length ? `<div class="small"><b>Akzeptanzkriterien</b> <span class="quiet">(der Agent meldet jedes einzeln zurück)</span></div>${bf.criteria.map(c => `<label><input type="checkbox" data-bfc="${c.n}" ${c.on ? 'checked' : ''}><span>${esc(c.text)}</span></label>`).join('')}`
+        : `<div class="small quiet">${bf.source === 'lokal' ? 'Keine offenen Teilschritte: Lege Teilschritte an, dann werden sie zu Kriterien.' : 'Im Ticket steht kein Abschnitt «Akzeptanzkriterien». Der Agent bekommt gesagt, dass er nachfragen soll.'}</div>`}
+      ${bf.masked ? `<div class="small quiet">${bf.masked} mögliche${bf.masked === 1 ? 's Geheimnis' : ' Geheimnisse'} (Passwort, Token) geschwärzt. Lies den Prompt trotzdem durch.</div>` : ''}`}</div>`;
     const projSel = ag.projects.length > 1 && !o.review ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(ctx.key || 'Aufgabe')} an ${esc(a.name)}</strong><span class="quiet small">${esc(info.kind)}</span></div>
       <div class="quiet small" style="margin:4px 0 8px">${esc(ctx.title)}</div>
       <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Repository: <code>${esc(info.workdir || '—')}</code><br>Datenklasse: <b>${esc(info.data_class || '?')}</b></div>
         <div class="quiet small">${info.mode === 'export' ? `Arbeitet in einem <b>Export</b> nur dieser Pfade: <code>${esc(info.cloud_paths.join(', '))}</code>. Eigenes Git ohne den Rest des Repos. Ergebnis per «Übernehmen» als Branch.` : info.mode === 'worktree' ? 'Arbeitet in einem <b>eigenen Worktree</b> auf Branch <code>agent/…</code>; dein Checkout bleibt unberührt.' : 'Arbeitet im <b>gemeinsamen Ordner</b> (ohne Isolation).'}</div></div></div>
       ${(info.review_skipped || []).length ? `<div class="banner warn">Nicht im Prompt, weil ausserhalb der freigegebenen Pfade (Export): ${esc(info.review_skipped.join(', '))}. Diese Punkte selbst oder mit einem lokalen Agenten bearbeiten.</div>` : ''}
-      ${info.cloud ? `<div class="banner ${info.allowed ? 'warn' : 'bad'}">${info.allowed ? `Dieser Agent sendet Prompt und Code an ${esc(info.provider)}. Das Projekt ist dafür freigegeben.` : esc(info.reason)}</div>` : (!info.allowed ? `<div class="banner bad">${esc(info.reason)}</div>` : '')}
-      <label class="sm" for="agPrompt">${o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code> (Kommentare als Zitat, du kannst ihn ändern)` : 'Prompt (nur Ticketangaben, du kannst ihn ändern)'}</label>
+      ${info.cloud ? `<div class="banner ${info.allowed ? 'warn' : 'bad'}">${info.allowed ? `Dieser Agent sendet Prompt und Code an ${esc(info.provider)}${bf && (bf.desc || bf.comments) ? ', auch den Tickettext unten' : ''}. Das Projekt ist dafür freigegeben.` : esc(info.reason)}</div>` : (!info.allowed ? `<div class="banner bad">${esc(info.reason)}</div>` : '')}
+      ${(info.hints || []).map(h => `<div class="banner warn">${esc(h)}</div>`).join('')}
+      ${briefBox}
+      <label class="sm" for="agPrompt">${o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code> (Kommentare als Zitat, du kannst ihn ändern)` : info.followup ? `Prompt: Nachbesserung zu Lauf ${info.followup}, Ausgang <code>${esc(info.branch || 'Hauptbranch')}</code> (du kannst ihn ändern)` : 'Prompt (so geht er an den Agenten, du kannst ihn ändern)'}</label>
       <textarea id="agPrompt" spellcheck="false" style="height:230px">${esc(info.prompt)}</textarea>
       <div class="row" style="margin-top:8px;justify-content:flex-end"><button id="agCancel">Abbrechen</button>${o.run ? '' : '<button id="agAssign">Nur zuweisen</button>'}<button class="primary" id="agStart" ${info.allowed ? '' : 'disabled'}>${o.run ? 'Starten' : 'Zuweisen &amp; starten'}</button></div>`;
     if ($('agProj')) $('agProj').onchange = ev => { pid = +ev.target.value; draw(); };
+    $('agPrompt').oninput = () => { dirty = true; };
+    box.querySelectorAll('[data-bf],[data-bfc]').forEach(c => c.onchange = () => {
+      if (dirty && !confirm('Der Prompt wird neu aufgebaut. Deine Änderungen am Text gehen verloren.')) { c.checked = !c.checked; return; }
+      bopt = { desc: !!(box.querySelector('[data-bf=desc]') || {}).checked, comments: !!(box.querySelector('[data-bf=comments]') || {}).checked,
+        off: [...box.querySelectorAll('[data-bfc]')].filter(x => !x.checked).map(x => +x.dataset.bfc) };
+      draw();
+    });
     $('agCancel').onclick = agClose;
     const go = async start => {
       try {
         let run = o.run;
-        if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title })).id;
-        if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch });
+        const br = info.followup ? info.branch : branch;
+        if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch: br, title: ctx.title })).id;
+        if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch: br });
         agClose(); toast(start ? 'Gestartet' : 'Zugewiesen'); await load();
       } catch (e) { toast(e.message); await load(); }
     };
@@ -1776,14 +1817,25 @@ function agQuestionHtml(r) {
 function agReportHtml(r) {
   const qa = (r.qa || []).map(x => `<li><span class="quiet">Frage ${x.id}:</span> ${esc(x.q)}<br><span class="quiet">Antwort:</span> ${esc(x.a)}</li>`).join('');
   const ck = (r.checks || []).map(c => `<li><span class="chip ${c.exit === 0 ? 'sq-ok' : 'sq-bad'}">Exit ${c.exit}</span><code>${esc(c.cmd)}</code><span class="quiet">${c.secs} s</span></li>`).join('');
-  if (r.active && !qa && !ck) return '';
+  const AKS = { ok: ['sq-ok', 'erfüllt'], open: ['sq-bad', 'offen'], unclear: ['warn', 'unklar'], '': ['sq-none', 'nicht gemeldet'] };
+  const crit = r.criteria || [];
+  const ak = crit.map(c => `<li><span class="chip ${AKS[c.state][0]}">${AKS[c.state][1]}</span><span class="txt"><b>AK${c.n}</b> ${esc(c.text)}</span>${c.note ? `<span class="note">${esc(c.note)}</span>` : ''}</li>`).join('');
+  if (r.active && !qa && !ck && !ak) return '';
   const parts = [];
-  if (!r.active) parts.push(`<div class="row" style="justify-content:space-between"><h3 style="margin:0">Ergebnis</h3><button class="quiet-btn" id="agRep" title="Bericht und Belege neu vom Zielrechner lesen">Neu lesen</button></div>`);
+  if (!r.active) parts.push(`<div class="row" style="justify-content:space-between"><h3 style="margin:0">Ergebnis</h3><button class="quiet-btn" id="agRep" title="Bericht, Belege und Änderungen neu vom Zielrechner lesen">Neu lesen</button></div>`);
+  if (ak) parts.push(`<div class="small"><b>Akzeptanzkriterien</b> <span class="quiet">${r.active ? '(Stand bei Abschluss)' : `${r.ak.ok} von ${r.ak.total} als erfüllt gemeldet. Das sind Angaben des Agenten: Beleg prüfen.`}</span><ul class="aklist">${ak}</ul></div>`);
+  const res = r.result;
+  if (!r.active && res) parts.push(`<div class="small"><b>Änderungen</b> <span class="quiet">${res.stat ? esc(res.stat) : 'keine gegenüber dem Ausgangsstand'} · ${res.commits.length} Commit${res.commits.length === 1 ? '' : 's'}${res.dirty ? ` · ${res.dirty} Datei${res.dirty === 1 ? '' : 'en'} nicht committet` : ''}</span>
+    ${res.commits.length ? `<ul class="agfiles">${res.commits.map(c => `<li><code>${esc(c.sha)}</code><span>${esc(c.subject)}</span></li>`).join('')}</ul>` : ''}
+    ${res.files.length ? `<details><summary class="quiet">${res.files.length} Datei${res.files.length === 1 ? '' : 'en'}</summary><ul class="agfiles">${res.files.map(f => `<li><b title="A neu, M geändert, D gelöscht, R umbenannt">${esc(f.st)}</b><code>${esc(f.path)}</code></li>`).join('')}</ul></details>` : ''}</div>`);
   parts.push(ck ? `<div class="small"><b>Belege</b> <span class="quiet">(mit tinyops-check gelaufen, Exit-Code zählt)</span><ul class="agchk">${ck}</ul></div>`
     : (!r.active ? '<div class="small quiet">Keine Belege: Der Agent hat keine Tests über <code>tinyops-check</code> laufen lassen. Was er im Bericht «getestet» nennt, ist nicht belegt.</div>' : ''));
   if (!r.active) parts.push(r.summary ? `<div class="small"><b>Bericht des Agenten</b> <span class="quiet">(seine Angaben, nicht geprüft)</span><div class="md">${esc(r.summary)}</div></div>`
     : '<div class="small quiet">Kein Bericht (<code>tinyops-report</code> nicht benutzt). Das Log unten zeigt, was passiert ist.</div>');
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
+  if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow"><input type="text" id="agNote" maxlength="1000" placeholder="Was soll nachgebessert werden? (optional)" aria-label="Anmerkung für die Nachbesserung">
+    <button id="agFollow" title="Neuer Lauf desselben Agenten: offene Kriterien, fehlgeschlagene Belege und deine Anmerkung. Er baut auf dem Branch dieses Laufs auf.">Nachbessern …</button>
+    <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button></div>`);
   return `<div class="agrep">${parts.join('')}</div>`;
 }
 
@@ -2151,6 +2203,8 @@ async function openRunDlg(id) {
     if ($('agRep')) $('agRep').onclick = async () => { try { await post('/api/agents/report', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
+    if ($('agComment')) $('agComment').onclick = async () => { try { copyText((await post('/api/agents/comment', { run: id })).text, 'Kommentar-Entwurf'); } catch (e) { toast(e.message); } };
+    if ($('agFollow')) $('agFollow').onclick = () => { const note = $('agNote').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note, pid: r.project_id }); };
     if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agTake')) $('agTake').onclick = async () => { try { const t = await post('/api/agents/takeover', { run: id }); toast(`Übernommen: Branch ${t.branch} (${t.files.length} Dateien)`); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agRemove')) $('agRemove').onclick = async () => {

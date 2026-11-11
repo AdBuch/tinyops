@@ -255,7 +255,7 @@ class _SnapMixin:
 class _AgentMixin:
     """Zuweisungen und Läufe von Coding-Agenten an Tickets (siehe agents.py). Der Prompt wird mitgespeichert, damit man sieht, was beauftragt wurde."""
     _COLS = ("agent", "ticket", "project_id", "branch", "title", "status", "workdir", "prompt", "note", "exit_code", "created", "started", "finished",
-             "mode", "out_branch", "wt", "taken", "question", "answered", "qa", "summary", "checks", "ack")
+             "mode", "out_branch", "wt", "taken", "question", "answered", "qa", "summary", "checks", "ack", "criteria", "ak", "result")
 
     def agent_run_add(self, agent, ticket, project_id, branch, title):
         with self._conn(True) as c:
@@ -531,7 +531,8 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 conn.execute("create index if not exists agent_runs_ticket on agent_runs(ticket)")
                 have = {r[1] for r in conn.execute("pragma table_info(agent_runs)")}
                 for col in ("mode", "out_branch", "wt", "taken",        # 0.16: Isolation je Lauf
-                            "question", "answered", "qa", "summary", "checks", "ack"):   # 0.18: Rückfragen und Bericht
+                            "question", "answered", "qa", "summary", "checks", "ack",   # 0.18: Rückfragen und Bericht
+                            "criteria", "ak", "result"):                                 # 0.26: Akzeptanzkriterien und Änderungen je Lauf
                     if col not in have:
                         try:
                             conn.execute("alter table agent_runs add column %s text not null default ''" % col)

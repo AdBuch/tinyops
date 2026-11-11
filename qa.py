@@ -126,13 +126,13 @@ def check_static(base, version, checklist_text, helpers, step):
         def __missing__(self, k):
             return "x"
     bad = []
-    for name in ("agent-task", "agent-tools", "review-topics"):
+    for name in ("agent-task", "agent-followup", "agent-tools", "review-topics"):
         f = base / "prompts" / ("%s.md" % name)
         try:
             f.read_text(encoding="utf-8").format_map(D())
         except (OSError, ValueError, KeyError, IndexError) as e:
             bad.append("%s (%s)" % (f.name, e))
-    step("prompts", "Prompt-Vorlagen", "fail" if bad else "ok", ", ".join(bad) or "agent-task, agent-tools, review-topics lesbar")
+    step("prompts", "Prompt-Vorlagen", "fail" if bad else "ok", ", ".join(bad) or "agent-task, agent-followup, agent-tools, review-topics lesbar")
     sh = shutil.which("sh")
     if not sh:
         step("helpers", "Hilfsskripte für Agenten", "warn", "kein sh auf diesem Rechner (Windows ohne Git for Windows?). Remote laufen sie trotzdem.")

@@ -289,6 +289,9 @@ def report_line(run):
         out = "%d Beleg%s, %s. " % (len(checks), "" if len(checks) == 1 else "e", "alle Exit 0" if not bad else "%d mit Fehler" % len(bad))
     else:
         out = "Keine Belege (tinyops-check nicht benutzt). "
+    ak = run.get("ak") or {}
+    if ak.get("total"):
+        out = "%d von %d Akzeptanzkriterien als erfüllt gemeldet. " % (ak.get("ok", 0), ak["total"]) + out
     return out + ("Bericht liegt vor. " if run.get("summary") else "Kein Bericht. ")
 
 

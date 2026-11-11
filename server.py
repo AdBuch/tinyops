@@ -34,6 +34,7 @@ import audit
 import focusplan
 import helpdesk
 import workspaces
+import briefing
 import qa
 import review
 import timesheet
@@ -53,7 +54,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.25.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.26.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -930,6 +931,15 @@ class JiraClient:
         res = self.http.get("/search", {"jql": jql, "fields": ",".join(fields), "maxResults": limit})
         return res.get("issues", []), int(res.get("total", 0))
 
+    def brief(self, key):
+        """Ein Ticket für den Auftrag an einen Agenten: Beschreibung und die letzten Kommentare. Nur GET."""
+        d = self.http.get("/issue/" + urllib.parse.quote(key), {"fields": "summary,status,issuetype,description,comment"})
+        f = d.get("fields") or {}
+        rows = (f.get("comment") or {}).get("comments") or []
+        return {"title": f.get("summary") or "", "kind": (f.get("issuetype") or {}).get("name", ""), "status": (f.get("status") or {}).get("name", ""),
+                "description": f.get("description") or "", "url": self.base + "/browse/" + key,
+                "comments": [{"author": (c.get("author") or {}).get("displayName", ""), "body": c.get("body") or ""} for c in rows[-briefing.MAX_COMMENTS:]][::-1]}
+
     def jql_in_progress(self):
         return sprint.effective_jql(self.jc["jql_in_progress"], self.jc.get("only_active_sprints", True))
 
@@ -1257,6 +1267,14 @@ class DemoJira:
     def lookup(self, keys):
         return {k: self._issue(k) for k in keys if k in self._DATA}
 
+    def brief(self, key):
+        summary, status = self._DATA[key]
+        return {"title": summary, "kind": "Story", "status": status, "url": "%s/browse/%s" % (self.base, key),
+                "description": "h3. Ausgangslage\nDer Adapter bricht bei HTTP 429 sofort ab. Test-Zugang: token=demo-geheim-123\n\n"
+                               "h3. Akzeptanzkriterien\n* Bei 429 wird mit Backoff erneut versucht\n* Höchstens 5 Versuche, dann ein klarer Fehler\n"
+                               "* Ein Test deckt den Retry ab\n\nh3. Offene Fragen\n* Backoff fix oder exponentiell?",
+                "comments": [{"author": "Mara", "body": "Bitte exponentiell, Start bei 500 ms."}]}
+
     def helpdesk(self):
         return {"open": 7, "oldest_hours": 52, "over_hours": 3, "sla_hours": 24, "truncated": False,
                 "url": self.base + "/issues/?jql=project%3DHELP"}
@@ -1411,6 +1429,7 @@ class App:
         self._by_key = {}
         self.problems = []
         self.client, self.jira, self.github = None, None, None
+        self._briefs = {}                     # Ticket-Rohdaten für Aufträge an Agenten (0.26), kurz gemerkt
         self.hdj = None                       # Helpdesk-Jira (0.23)
         self.hdc = helpdesk.cfg(cfg)
         self.ghc = github_cfg(cfg)
@@ -2992,8 +3011,24 @@ class App:
                                            b.get("title") or "", b.get("key") or "", mr["url"], template="review-topics", extra=extra)
                     info["review_skipped"] = skipped
                     return info
-                return svc.prompt_info(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
-                                       b.get("title") or "", b.get("key") or "", b.get("url") or "")
+                aid = str(b.get("agent") or "")
+                if b.get("followup") not in (None, ""):     # Nachbesserung: offene Kriterien des alten Laufs, Ausgang ist sein Branch
+                    old = svc.store.agent_run(self._rid({"run": b.get("followup")}))
+                    if not old or old["status"] in ("zugewiesen", "läuft"):
+                        raise UserError("Nachbessern geht erst, wenn der Lauf beendet ist.")
+                    ov = svc.run_view(old)
+                    base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "") or ov.get("branch") or ""
+                    info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
+                                           template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"))})
+                    info.update(branch=base, project_id=ov["project_id"], followup=ov["id"])
+                    return info
+                key = str(b.get("key") or "")
+                br = self.ticket_brief(key, b.get("title") or "")
+                opts = briefing.options(br, b.get("brief"), bool(svc.agent(aid).get("cloud", True)))
+                info = svc.prompt_info(aid, b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
+                                       b.get("title") or "", key, b.get("url") or "", extra={"brief": briefing.block(br, opts)})
+                info["brief"] = briefing.view(br, opts)
+                return info
             if action == "assign":
                 rid = svc.assign(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch"), b.get("title"))
                 return {"id": rid}
@@ -3026,9 +3061,43 @@ class App:
             if action == "ack":
                 svc.ack(self._rid(b))
                 return {"ok": True}
+            if action == "comment":          # Entwurf eines Ticket-Kommentars, nur zum Kopieren: tinyops schreibt ihn nirgends hin
+                r = svc.store.agent_run(self._rid(b))
+                if not r or r["status"] in ("zugewiesen", "läuft"):
+                    raise UserError("Erst wenn der Lauf beendet ist.")
+                return {"text": briefing.comment(svc.run_view(r))}
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,30}-\d{1,9}$")
+
+    def ticket_brief(self, key, title=""):
+        """Rohdaten für den Auftrag: lokale Aufgabe (Teilschritte), Helpdesk-Ticket oder Jira-Ticket. Zwei Minuten gemerkt, Fehler stehen im Ergebnis."""
+        key = str(key or "").strip()
+        hit = self._briefs.get(key)
+        if hit and time.time() - hit[0] < 120:
+            return hit[1]
+        hd = (self.cache or {}).get("helpdesk_jira") or {}
+        try:
+            if key.startswith(links.LOCAL_PREFIX + "-"):
+                steps = [c["text"] for c in (self.store.checklists().get(key) or []) if not c.get("done")]
+                b = briefing.make("lokal", key, title, items=steps)
+            elif self.hdj is not None and any(t["key"] == key for k in ("assigned", "queue", "watched") for t in hd.get(k) or []):
+                d = self.hdj.detail(key) if hasattr(self.hdj, "detail") else helpdesk.detail(self.hdj, key)
+                b = briefing.make("helpdesk", key, d.get("title") or title, d.get("type") or "", d.get("status") or "", d.get("description") or "",
+                                  d.get("comments") or [], url=d.get("url") or "")
+            elif self.jira is not None and self.JIRA_KEY.match(key):
+                d = self.jira.brief(key)
+                b = briefing.make("jira", key, d["title"] or title, d["kind"], d["status"], d["description"], d["comments"], url=d["url"])
+            else:
+                b = briefing.empty("", key, "" if not key else "Zu dieser Karte gibt es kein Ticket mit Beschreibung.")
+        except (UserError, HttpStatus, KeyError, ValueError) as e:
+            b = briefing.empty("jira", key, "Ticket nicht lesbar: %s" % scrub(e))
+        if len(self._briefs) > 200:
+            self._briefs.clear()
+        self._briefs[key] = (time.time(), b)
+        return b
 
     @staticmethod
     def _pid(v):
@@ -4260,6 +4329,10 @@ def run_selftest(cfg):
         w = a.workspaces_state()
         step("ws", "Workspaces", "ok" if w["totals"]["todo"] == 3 and a.overview()["workspaces"]["repos"] == 4 else "fail",
              "%d Repos, %d mit lokaler Arbeit" % (w["totals"]["repos"], w["totals"]["todo"]))
+        br = a.ticket_brief("DLP-101")
+        txt = briefing.block(br, briefing.options(br, None))
+        ok = len(briefing.parse_prompt(txt)) == 3 and br["masked"] >= 1 and "demo-geheim" not in txt
+        step("brief", "Auftrag aus dem Ticket", "ok" if ok else "fail", "%d Akzeptanzkriterien, %d Geheimnis geschwärzt" % (len(br["criteria"]), br["masked"]))
         q = a.qa_view()
         step("qa", "Prüfliste lesen", "ok" if q["sections"] else "warn", "%d Abschnitte" % len(q["sections"]))
     except Exception as e:      # der Selbsttest meldet, statt abzustürzen
