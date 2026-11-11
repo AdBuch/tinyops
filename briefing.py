@@ -216,6 +216,28 @@ def followup(run, note=""):
     return "\n".join(parts).strip() + "\n"
 
 
+def prereview(run):
+    """Abschnitt für die Vorprüfung durch einen zweiten Agenten: was der erste Lauf geliefert hat und woran es gemessen wird."""
+    res = run.get("result") or {}
+    parts = ["Vorprüfung von Lauf %s (%s). Der Stand liegt auf deinem Ausgangs-Branch; du arbeitest auf einer Kopie davon." % (run.get("id"), run.get("agent_name") or "Agent")]
+    commits = res.get("commits") or []
+    if commits:
+        parts += ["", "Commits des Laufs (ältester zuletzt):"] + ["- %s %s" % (c["sha"], c["subject"]) for c in commits[:30]]
+        parts += ["Sieh sie dir an mit `git show <sha>` oder zusammen mit `git diff %s^ HEAD`." % commits[-1]["sha"]]
+    else:
+        parts += ["", "Der Lauf hat keine Commits gemeldet. Sieh mit `git log -5` und `git status` nach, was da ist."]
+    rows = run.get("criteria") or []
+    if rows:
+        parts += ["", "Akzeptanzkriterien. Der erste Agent hat sie so gemeldet; prüf jedes selbst am Code und melde dein Urteil mit `tinyops-ak`:"]
+        for i, r in enumerate(rows, 1):
+            parts.append("AK%d: %s" % (i, r["text"]))
+            parts.append("  gemeldet: %s%s" % (STATE_LABEL[r["state"]], ", " + r["note"] if r["note"] else ""))
+    secrets = res.get("secrets") or []
+    if secrets:
+        parts += ["", "Der Geheimnis-Scan von tinyops hat angeschlagen. Sieh dir diese Stellen an:"] + ["- %s:%s (%s)" % (f["file"], f["line"], f["rule"]) for f in secrets[:10]]
+    return "\n".join(parts).strip() + "\n"
+
+
 def comment(run):
     """Entwurf eines Ticket-Kommentars zum Ergebnis (Jira-Wiki-Markup). tinyops schreibt ihn nicht selbst: Er ist zum Kopieren."""
     out = ["Ergebnis von %s (Lauf %s, %s)" % (run.get("agent_name") or "Agent", run.get("id"), run.get("status") or "")]

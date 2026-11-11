@@ -215,6 +215,8 @@ class AppFocus(unittest.TestCase):
         a.focus_action("activity", {"activity": "Aufgaben reviewen"})
         self.assertEqual(a.time_state()["running"]["activity"], "Aufgaben reviewen")
         ses = a.timebook.session()
+        for m in (10, 20):                                   # das Panel fragt ab: die Sitzung selbst ist das Lebenszeichen
+            self.assertIsNotNone(a.focus_state(ses["start"] + m * 60)["session"])
         end = a.focus_action("end", {"result": "erledigt"}, now=ses["start"] + 30 * 60)
         self.assertEqual((end["ended"]["minutes"], end["ended"]["xp"]), (30, 15))
         self.assertIsNone(end["session"])

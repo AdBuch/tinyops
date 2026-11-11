@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import briefing
+import secretscan
 import secretstore as store
 import tlog
 import audit as _audit
@@ -37,6 +38,15 @@ DIR_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,198}$")
 PROMPT = "\0PROMPT\0"
 PROMPT_FILE = "\0PROMPT_FILE\0"
 MODEL = "\0MODEL\0"
+PROVIDER = "\0PROVIDER\0"
+PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+PROVIDERS = ("ollama", "openai", "litellm", "openrouter")      # Vorschläge; Goose kennt weitere
+# Modellnamen, die nach einem Cloud-Modell aussehen. Offene Gewichte wie gpt-oss laufen lokal und zählen nicht.
+CLOUD_MODEL_RE = re.compile(r"(?i)(?:^|[/:._-])(?:claude|sonnet|opus|haiku|gpt(?!-oss)|chatgpt|o[134](?:-|$)|gemini|grok)")
+
+
+def looks_cloud(model):
+    return bool(model and CLOUD_MODEL_RE.search(model))
 MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$")
 CLASSES = ("restricted", "internal", "public")
 CLASS_LABEL = {"restricted": "restricted (nur lokale Agenten)", "internal": "internal (Cloud mit Freigabe)", "public": "public"}
@@ -53,9 +63,10 @@ KINDS = {
               "write_flags": ("--full-auto", "--sandbox", "-s", "--dangerously-bypass-approvals-and-sandbox"), "write_hint": "--full-auto"},
     "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral"},
     # Lokale Agenten: Aufrufe aus der Dokumentation der CLIs abgeleitet, nicht gegen die echten Programme getestet.
+    # Anbieter und Modell je Agent (0.27): Laufen alle Modelle über denselben Proxy, sagt nur der Agent-Eintrag, ob ein Modell lokal ist.
     "goose": {"label": "Goose", "bin": "goose", "argv": ["goose", "run", "-i", PROMPT_FILE], "provider": "dem in Goose eingestellten Anbieter",
-              "env": {"GOOSE_PROVIDER": "ollama", "GOOSE_MODEL": MODEL}, "local": True},
-    "opencode": {"label": "opencode", "bin": "opencode", "argv": ["opencode", "run", "--model", "ollama/" + MODEL, PROMPT],
+              "env": {"GOOSE_PROVIDER": PROVIDER, "GOOSE_MODEL": MODEL}, "local": True},
+    "opencode": {"label": "opencode", "bin": "opencode", "argv": ["opencode", "run", "--model", PROVIDER + "/" + MODEL, PROMPT],
                  "provider": "dem in opencode eingestellten Anbieter", "local": True},
     "custom": {"label": "Eigener Befehl", "bin": "", "argv": None, "provider": "dem Anbieter des Befehls", "local": True},
 }
@@ -260,20 +271,48 @@ def clean_agents(raw, conn_ids, existing, errors):
         if KINDS[kind].get("local") and kind != "custom":
             if not MODEL_RE.fullmatch(model or "x"):
                 errors[k + "model"] = "Modellname: Buchstaben, Ziffern und . _ : / -"
-            elif not model:
-                errors[k + "model"] = "Welches lokale Modell (z. B. qwen2.5-coder:32b)?"
+            elif not model and (kind == "opencode" or str(a.get("provider", "ollama") or "")):
+                errors[k + "model"] = "Welches Modell (z. B. qwen2.5-coder:32b)? Bei Goose ohne Anbieter darf es leer bleiben."
         iso = a.get("isolation") if a.get("isolation") in ISOLATION else "worktree"
         # Cloud: Claude, Codex, Vibe immer; lokale Arten nur, wenn du es so einstellst (Standard: lokal)
         cloud = True if not KINDS[kind].get("local") else bool(a.get("cloud", False))
         entry = {"id": aid, "name": str(a.get("name") or aid).strip()[:40] or aid, "kind": kind, "connection": conn, "workspace_root": root, "max_minutes": mx,
                  "extra_args": extra, "cloud": cloud, "isolation": iso}
-        if model and KINDS[kind].get("local") and kind != "custom":
-            entry["model"] = model
+        if KINDS[kind].get("local") and kind != "custom":
+            if model:
+                entry["model"] = model
+            prov = str(a.get("provider", "ollama") or "").strip().lower()
+            if prov and not PROVIDER_RE.fullmatch(prov):
+                errors[k + "provider"] = "Anbieter: Kleinbuchstaben, Ziffern, - und _ (z. B. ollama, openai, litellm)."
+            elif not prov and kind == "opencode":
+                errors[k + "provider"] = "opencode braucht einen Anbieter (z. B. ollama)."
+            else:
+                entry["provider"] = prov
+        via = a.get("clone_via")
+        entry["clone_via"] = via if via in ("ssh", "https") else "ssh"
         cmd = (old.get(aid) or {}).get("command")
         if kind == "custom" and cmd:
             entry["command"] = str(cmd)
         out.append(entry)
     return out
+
+
+CLONE_URL_RE = re.compile(r"^(?:https://[A-Za-z0-9.-]+(?::\d+)?/|ssh://(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+(?::\d+)?/|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:)[A-Za-z0-9._~/+-]+$")
+
+
+def clone_hint(msg, url):
+    """Fehlermeldung von git clone, mit dem nächsten Schritt in einfachen Worten."""
+    low = msg.lower()
+    host = (re.search(r"@([A-Za-z0-9.-]+)", url) or re.search(r"//([A-Za-z0-9.-]+)", url) or [None, "dem Git-Server"])[1]
+    if "host key verification failed" in low:
+        return msg + "\nDer Zielrechner kennt %s noch nicht. Einmal dort von Hand: ssh -T git@%s" % (host, host)
+    if "permission denied" in low or "could not read from remote" in low:
+        return msg + "\nDer Benutzer auf dem Zielrechner hat keinen Schlüssel, den %s für dieses Projekt akzeptiert (Deploy-Key oder SSH-Schlüssel des Benutzers hinterlegen)." % host
+    if "could not read username" in low or "authentication failed" in low or "terminal prompts disabled" in low:
+        return msg + "\nFür HTTPS fehlen auf dem Zielrechner gespeicherte Zugangsdaten (git credential helper). Einfacher: beim Agenten «Klonen über SSH»."
+    if "not found" in low and "repository" in low:
+        return msg + "\nDas Repository gibt es unter dieser Adresse nicht, oder der Benutzer darf es nicht sehen."
+    return msg
 
 
 def data_class(p):
@@ -324,8 +363,34 @@ def _extra(agent):
     return shlex.split(agent.get("extra_args") or "")
 
 
-def _sub_model(a, model):
-    return a.replace(MODEL, model or "")
+def _sub_model(a, model, provider="ollama"):
+    return a.replace(MODEL, model or "").replace(PROVIDER, provider or "")
+
+
+def provider_of(agent):
+    """Anbieter für Goose/opencode. Alte Einträge ohne Angabe: ollama. Leer: Goose nimmt, was in seiner eigenen Konfiguration steht."""
+    return agent.get("provider", "ollama") or ""
+
+
+def agent_env(agent):
+    """Umgebungsvariablen der Art, ohne leere Werte (leerer Anbieter oder leeres Modell: die eigene Konfiguration der CLI gilt)."""
+    out = {}
+    for k, v in (KINDS[agent["kind"]].get("env") or {}).items():
+        v = _sub_model(v, agent.get("model", ""), provider_of(agent))
+        if v:
+            out[k] = v
+    return out
+
+
+def agent_args(agent):
+    """Feste Argumente der Art mit Anbieter/Modell. opencode ohne Anbieter: nur der Modellname."""
+    out = []
+    for a in KINDS[agent["kind"]]["argv"]:
+        if a in (PROMPT, PROMPT_FILE):
+            out.append(a)
+        else:
+            out.append(_sub_model(a, agent.get("model", ""), provider_of(agent)).lstrip("/"))
+    return out
 
 
 def remote_cmdline(agent):
@@ -335,10 +400,9 @@ def remote_cmdline(agent):
         if not cmd:
             raise AgentError("Für diesen eigenen Agenten steht kein «command» in der config.json (die Oberfläche kann ihn nicht setzen).")
         return cmd.replace("{prompt_file}", '"$R/$ID.prompt"')
-    spec, model = KINDS[agent["kind"]], agent.get("model", "")
-    parts = ["%s=%s" % (k, shlex.quote(_sub_model(v, model))) for k, v in (spec.get("env") or {}).items()]
-    for a in spec["argv"] + _extra(agent):
-        parts.append('"$(cat "$R/$ID.prompt")"' if a == PROMPT else '"$R/$ID.prompt"' if a == PROMPT_FILE else shlex.quote(_sub_model(a, model)))
+    parts = ["%s=%s" % (k, shlex.quote(v)) for k, v in agent_env(agent).items()]
+    for a in agent_args(agent) + _extra(agent):
+        parts.append('"$(cat "$R/$ID.prompt")"' if a == PROMPT else '"$R/$ID.prompt"' if a == PROMPT_FILE else shlex.quote(a))
     return " ".join(parts)
 
 
@@ -353,11 +417,10 @@ def local_spec(agent, prompt, prompt_file, workdir):
     exe = shutil.which(spec["bin"])
     if not exe:
         raise AgentError("«%s» wurde im PATH dieses Rechners nicht gefunden." % spec["bin"])
-    model = agent.get("model", "")
-    argv = [exe] + [prompt if a == PROMPT else str(prompt_file) if a == PROMPT_FILE else _sub_model(a, model) for a in spec["argv"][1:] + _extra(agent)]
+    argv = [exe] + [prompt if a == PROMPT else str(prompt_file) if a == PROMPT_FILE else a for a in agent_args(agent)[1:] + _extra(agent)]
     out = {"argv": argv, "cwd": workdir}
-    if spec.get("env"):
-        out["env"] = {k: _sub_model(v, model) for k, v in spec["env"].items()}
+    if agent_env(agent):
+        out["env"] = agent_env(agent)
     return out
 
 
@@ -491,13 +554,15 @@ def result_script(wt, mode):
             'echo "@@COMMITS"; git log --format="%%h %%s" "$B..HEAD" 2>/dev/null | head -n 30; '
             'echo "@@STAT"; git diff --shortstat "$B" 2>/dev/null; '
             'echo "@@FILES"; git diff --name-status "$B" 2>/dev/null | head -n 80; '
-            'echo "@@DIRTY"; git status --porcelain 2>/dev/null | wc -l; true') % (shlex.quote(wt), base)
+            'echo "@@DIRTY"; git status --porcelain 2>/dev/null | wc -l; '
+            'echo "@@DIFF"; git diff -U0 --no-color "$B" 2>/dev/null | head -c 400000; true') % (shlex.quote(wt), base)
 
 
 def parse_result(out):
     """Ausgabe von result_script lesen."""
-    sec, cur = {}, None
-    for line in (out or "").splitlines():
+    head, _, diff = (out or "").partition("@@DIFF")      # im Diff beginnen Hunk-Köpfe mit @@: er steht deshalb am Ende und wird vorher abgetrennt
+    sec, cur = {"DIFF": diff.splitlines()}, None
+    for line in head.splitlines():
         if line.startswith("@@"):
             cur = line[2:].strip()
             sec[cur] = []
@@ -516,7 +581,8 @@ def parse_result(out):
         dirty = int("".join(sec.get("DIRTY") or ["0"]).strip() or 0)
     except ValueError:
         dirty = 0
-    return {"commits": commits, "files": files, "stat": clean_text(stat, 200), "dirty": dirty}
+    secrets = secretscan.scan_diff("\n".join(sec.get("DIFF") or []), "Ergebnis des Laufs")[:20]
+    return {"commits": commits, "files": files, "stat": clean_text(stat, 200), "dirty": dirty, "secrets": secrets}
 
 
 def answer_script(rid, qid, text):
@@ -625,6 +691,7 @@ class Service:
         self.cfg, self.store = cfg, store_
         self.run_dir, self.base = Path(run_dir), Path(base_dir)
         self.lock = threading.RLock()
+        self._access, self._clones = {}, {}       # Zugriff je Agent (kurz gemerkt) und laufende Klone
         self.poll_t = 0.0
         self.audit = lambda *a, **k: None          # setzt die App: audit(action, target, ok, actor, **detail)
 
@@ -700,6 +767,10 @@ class Service:
             prov = KINDS[agent["kind"]]["provider"]
             return False, ("Projekt «%s» ist restricted: nur lokale Agenten. %s sendet Prompt und Code an %s. "
                            "Ändern unter Einstellungen → Projekte → Datenklasse (internal oder public)." % (p.get("name"), KINDS[agent["kind"]]["label"], prov))
+        if cls == "restricted" and looks_cloud(agent.get("model", "")):
+            return False, ("Projekt «%s» ist restricted, und das Modell «%s» sieht nach einem Cloud-Modell aus, obwohl der Agent als lokal eingetragen ist. "
+                           "Laufen alle Modelle über denselben Proxy, erkennt tinyops den Unterschied nur am Eintrag: Für ein wirklich lokales Modell dem "
+                           "Proxy-Alias einen eindeutigen Namen geben (z. B. qwen-lokal)." % (p.get("name"), agent.get("model")))
         return True, ""
 
     def mode(self, agent, pid):
@@ -708,6 +779,80 @@ class Service:
         if agent.get("cloud", True) and data_class(p) == "internal" and p.get("cloud_paths"):
             return "export"
         return "shared" if agent.get("isolation") == "shared" else "worktree"
+
+    # -- Zugriff: Welche Projekte liegen beim Agenten? (0.27)
+    def access(self, aid, fresh=False):
+        """Je Projekt: liegt das Repository im Arbeitsordner des Agenten? {pid: {"state": git|dir|missing, "remote": …, "path": …}}. Eine Minute gemerkt."""
+        a = self.agent(aid)
+        hit = self._access.get(aid)
+        if hit and not fresh and time.time() - hit[0] < 60:
+            return hit[1]
+        conn = self.conn_of(a)
+        rows = []
+        for p in self.projects():
+            try:
+                rows.append((p["id"], self.workdir(a, p["id"])))
+            except AgentError:
+                pass
+        parts = ['export GIT_OPTIONAL_LOCKS=0']
+        for pid, wd in rows:
+            q = _sh_path(wd) if conn is not None else shlex.quote(wd)
+            parts.append('if [ -d %s/.git ] || [ -f %s/.git ]; then echo "%d|git|$(git -C %s config --get remote.origin.url 2>/dev/null)"; '
+                         'elif [ -e %s ]; then echo "%d|dir|"; else echo "%d|missing|"; fi' % (q, q, pid, q, q, pid, pid))
+        rc, out, err = self._sh(a, conn, "; ".join(parts), 0, timeout=25)
+        if rc != 0 and not out.strip():
+            raise AgentError("Der Arbeitsordner des Agenten ist nicht lesbar: %s" % (clean_text(err, 300).strip() or "Exit %s" % rc))
+        paths, res = dict(rows), {}
+        for line in out.splitlines():
+            f = line.split("|", 2)
+            if len(f) == 3 and f[0].isdigit() and f[1] in ("git", "dir", "missing"):
+                res[int(f[0])] = {"state": f[1], "remote": re.sub(r"//[^/@\s]+@", "//", clean_text(f[2], 300).strip()), "path": paths.get(int(f[0]), "")}
+        self._access[aid] = (time.time(), res)
+        return res
+
+    def clone_state(self, aid, pid):
+        return dict(self._clones.get((aid, pid)) or {"state": ""})
+
+    def clone(self, aid, pid, url):
+        """Das Projekt im Arbeitsordner des Agenten klonen (im Hintergrund). Nur lesend gegenüber dem Server; Zugangsdaten sind die des Zielrechners."""
+        a = self.agent(aid)
+        p = self.project(pid)
+        if p is None:
+            raise AgentError("Projekt fehlt.")
+        ok, why = self.allowed(a, pid)
+        if not ok:
+            raise AgentError(why)
+        if not CLONE_URL_RE.fullmatch(url or "") or ".." in url:
+            raise AgentError("Die Adresse zum Klonen ist ungültig.")
+        st = self.access(aid, fresh=True).get(pid) or {}
+        if st.get("state") != "missing":
+            raise AgentError("Unter %s liegt schon etwas. tinyops überschreibt nichts." % (st.get("path") or "dem Zielpfad"))
+        with self.lock:
+            if (self._clones.get((aid, pid)) or {}).get("state") == "läuft":
+                raise AgentError("Dieses Projekt wird gerade geklont.")
+            self._clones[(aid, pid)] = {"state": "läuft", "msg": "", "ts": time.time(), "url": url}
+        conn, wd = self.conn_of(a), self.workdir(a, pid)
+        q = _sh_path(wd) if conn is not None else shlex.quote(wd)
+        script = ('D=%s; [ -e "$D" ] && { echo "Zielordner existiert schon" >&2; exit 3; }; mkdir -p "$(dirname "$D")" || exit 4; '
+                  'GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" git clone --quiet -- %s "$D" 2>&1 | tail -n 6; '
+                  '[ -d "$D/.git" ] || exit 5') % (q, shlex.quote(url))
+        self.audit("agent.clone.start", "%s → %s" % (p.get("name"), a["id"]), agent=a["id"], project=pid, url=url, path=wd)
+
+        def work():
+            t0 = time.time()
+            try:
+                rc, out, err = self._sh(a, conn, script, 0, timeout=1200)
+                msg = clean_text((out or "") + (err or ""), 1500).strip()
+            except AgentError as e:
+                rc, msg = 1, str(e)
+            msg = re.sub(r"//[^/@\s]+@", "//", msg)
+            ok_ = rc == 0
+            self._clones[(aid, pid)] = {"state": "fertig" if ok_ else "fehler", "msg": "" if ok_ else (clone_hint(msg, url) or "Exit %s" % rc), "ts": time.time(), "url": url}
+            self._access.pop(aid, None)
+            self.audit("agent.clone", "%s → %s" % (p.get("name"), a["id"]), ok=ok_, agent=a["id"], project=pid, url=url, path=wd, seconds=int(time.time() - t0),
+                       error="" if ok_ else msg[:300])
+        threading.Thread(target=work, name="tinyops-clone", daemon=True).start()
+        return self.clone_state(aid, pid)
 
     def out_branch(self, ticket, rid):
         return "agent/%s-%d" % (slug(ticket).replace("_", "-") or "lauf", int(rid))
@@ -780,8 +925,11 @@ class Service:
         if spec.get("write_flags") and not any(x.split("=")[0] in spec["write_flags"] for x in _extra(a)):
             hints.append("%s läuft hier ohne Rückfrage-Fenster. Ohne «%s» in den zusätzlichen Argumenten (Einstellungen → Agenten) darf es laut Dokumentation "
                          "der CLI keine Dateien ändern und endet dann ohne Ergebnis." % (spec["label"], spec["write_hint"]))
+        if KINDS[a["kind"]].get("local") and not a.get("cloud", True) and looks_cloud(a.get("model", "")):
+            hints.append("Das Modell «%s» sieht nach einem Cloud-Modell aus, der Agent ist aber als lokal eingetragen. Stimmt das nicht, unter "
+                         "Einstellungen → Agenten «sendet Daten an einen Cloud-Anbieter» anhaken." % a.get("model"))
         return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or [], template, extra), "workdir": wd,
-                "hints": hints,
+                "hints": hints, "model": a.get("model", ""),
                 "where": "lokal auf diesem Rechner" if conn is None else "%s (%s)" % (conn["name"], ("%s@%s" % (conn["user"], conn["host"])) if conn["user"] else conn["host"]),
                 "cloud": bool(a.get("cloud", True)), "provider": KINDS[a["kind"]]["provider"], "kind": KINDS[a["kind"]]["label"],
                 "allowed": ok, "reason": why, "data_class": data_class(p), "mode": self.mode(a, pid) if p else "",
@@ -815,7 +963,7 @@ class Service:
 
     def view(self):
         agents = [{"id": a["id"], "name": a["name"], "kind": a["kind"], "label": KINDS[a["kind"]]["label"], "cloud": a.get("cloud", True),
-                   "isolation": a.get("isolation", "worktree"),
+                   "isolation": a.get("isolation", "worktree"), "model": a.get("model", ""),
                    "where": "lokal" if a["connection"] == "local" else (self.conns().get(a["connection"]) or {}).get("name", "?"),
                    "workspace_root": a["workspace_root"]} for a in self.agent_list()]
         projects = [{"id": p["id"], "name": p.get("name") or str(p["id"]), "data_class": data_class(p)} for p in self.projects()]

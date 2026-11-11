@@ -54,7 +54,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.26.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.27.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -617,11 +617,19 @@ def classify_commits(commits, ident):
 
 
 class GitLabClient:
+    def clone_urls(self, pid):
+        """Adressen zum Klonen eines Projekts, wie GitLab sie nennt. Nur GET."""
+        if pid not in self._urls:
+            d = self.http.get("/projects/%s" % int(pid), {"simple": "true"}) or {}
+            self._urls[pid] = {"ssh": d.get("ssh_url_to_repo") or "", "https": d.get("http_url_to_repo") or "", "full": d.get("path_with_namespace") or ""}
+        return self._urls[pid]
+
     def __init__(self, cfg, token, ctx):
         self.cfg = cfg
         self.http = Http("GitLab", cfg["gitlab_url"].rstrip("/") + "/api/v4",
                          {"PRIVATE-TOKEN": token, "Accept": "application/json"}, ctx)
         self.proj_cfg = {p["id"]: p for p in cfg["projects"]}
+        self._urls = {}
         self._bcache = {}   # (Projekt, Branch, Commit) -> Ergebnis; ein neuer Commit ergibt einen neuen Eintrag
 
     def _pipeline(self, project_id, ref):
@@ -1133,7 +1141,9 @@ def demo_workspaces():
              "remotes": [{"name": "origin", "url": "https://" + remote + ".git", "host": remote.split("/")[0], "path": remote.split("/", 1)[1], "kind": host}] if remote else [],
              "project": {"pid": pid, "name": name, "host": host} if pid else None, "branches": branches,
              "dirty": {"staged": dirty[0], "changed": dirty[1], "new": dirty[2], "total": sum(dirty)}, "stashes": stashes, "stash_age_days": stash_age,
-             "worktrees": list(wts), "fetched_days": fetched}
+             "worktrees": list(wts), "fetched_days": fetched,
+             "secrets": [{"file": "src/main/resources/application-dev.yml", "line": 14, "rule": "Passwort oder Token im Klartext", "excerpt": "… (18 Zeichen)",
+                          "where": "Commit 4f2a9c1"}] if name == "dlp-core" else []}
         r.update(workspaces.summary(r))
         return r
     repos = [
@@ -3020,7 +3030,19 @@ class App:
                     base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "") or ov.get("branch") or ""
                     info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
                                            template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"))})
-                    info.update(branch=base, project_id=ov["project_id"], followup=ov["id"])
+                    info.update(branch=base, project_id=ov["project_id"], followup=ov["id"], repo=self._repo_access(svc, aid, ov["project_id"]))
+                    return info
+                if b.get("prereview") not in (None, ""):    # Vorprüfung: ein zweiter Agent liest das Ergebnis, ändert nichts, meldet je Kriterium sein Urteil
+                    old = svc.store.agent_run(self._rid({"run": b.get("prereview")}))
+                    if not old or old["status"] in ("zugewiesen", "läuft"):
+                        raise UserError("Vorprüfen geht erst, wenn der Lauf beendet ist.")
+                    ov = svc.run_view(old)
+                    base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "")
+                    if not base:
+                        raise UserError("Dieser Lauf hat keinen eigenen Branch, den ein zweiter Agent prüfen könnte.")
+                    info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
+                                           template="agent-prereview", extra={"brief": briefing.prereview(ov)})
+                    info.update(branch=base, project_id=ov["project_id"], prereview=ov["id"], repo=self._repo_access(svc, aid, ov["project_id"]))
                     return info
                 key = str(b.get("key") or "")
                 br = self.ticket_brief(key, b.get("title") or "")
@@ -3028,7 +3050,21 @@ class App:
                 info = svc.prompt_info(aid, b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
                                        b.get("title") or "", key, b.get("url") or "", extra={"brief": briefing.block(br, opts)})
                 info["brief"] = briefing.view(br, opts)
+                info["repo"] = self._repo_access(svc, aid, self._pid(b.get("project_id")))
+                try:                               # für die Projektauswahl: was liegt beim Agenten, was fehlt (derselbe kurz gemerkte Blick)
+                    info["access"] = {str(k): v["state"] for k, v in svc.access(aid).items()}
+                except agents.AgentError:
+                    info["access"] = {}
                 return info
+            if action == "access":            # liegt das Projekt beim Agenten? (frisch nachsehen)
+                return {"repo": self._repo_access(svc, str(b.get("agent") or ""), self._pid(b.get("project_id")), fresh=bool(b.get("fresh")))}
+            if action == "clone":             # Projekt beim Agenten klonen: nur auf deinen Klick, im Hintergrund, im Protokoll
+                aid, pid = str(b.get("agent") or ""), self._pid(b.get("project_id"))
+                if pid is None:
+                    raise UserError("Bitte ein Projekt wählen.")
+                via = b.get("via") if b.get("via") in ("ssh", "https") else svc.agent(aid).get("clone_via", "ssh")
+                svc.clone(aid, pid, self.clone_url(pid, via))
+                return {"repo": self._repo_access(svc, aid, pid)}
             if action == "assign":
                 rid = svc.assign(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch"), b.get("title"))
                 return {"id": rid}
@@ -3069,6 +3105,47 @@ class App:
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    def clone_url(self, pid, via="ssh"):
+        """Adresse, von der der Agent ein Projekt klont: GitLab laut API, GitHub aus dem Repo-Namen. Ohne Zugangsdaten in der Adresse."""
+        via = via if via in ("ssh", "https") else "ssh"
+        if self.demo:
+            raise UserError("In der Demo wird nichts geklont.")
+        if pid >= 10 ** 12:
+            r = next((x for x in self.ghc.get("repos") or [] if x.get("id") and github.pid_of(x["id"]) == pid), None)
+            if not r or not r.get("full"):
+                raise UserError("Dieses GitHub-Repo ist nicht eingerichtet.")
+            host = (self._ws_hosts()["github"] or ["github.com"])[-1]
+            host = "github.com" if host in ("api.github.com", "") else host
+            return ("git@%s:%s.git" if via == "ssh" else "https://%s/%s.git") % (host, r["full"])
+        u = {}
+        if self.client is not None and hasattr(self.client, "clone_urls"):
+            try:
+                u = self.client.clone_urls(pid)
+            except (HttpStatus, UserError) as e:
+                raise UserError("GitLab nennt für dieses Projekt keine Adresse: %s" % scrub(e))
+        url = workspaces.safe_url(u.get(via) or "")
+        if not url:
+            raise UserError("Für dieses Projekt ist keine %s-Adresse bekannt." % via.upper())
+        return url
+
+    def _repo_access(self, svc, aid, pid, fresh=False):
+        """Liegt das Projekt beim Agenten? Für den Zuweisen-Dialog. Fehler beim Nachsehen stehen im Ergebnis, sie blockieren nichts."""
+        if pid is None:
+            return None
+        try:
+            st = dict(svc.access(aid, fresh).get(pid) or {"state": "", "remote": "", "path": ""})
+        except agents.AgentError as e:
+            return {"state": "", "error": str(e), "clone": svc.clone_state(aid, pid)}
+        st["clone"] = svc.clone_state(aid, pid)
+        st["via"] = svc.agent(aid).get("clone_via", "ssh")
+        if st["state"] == "git" and st.get("remote"):
+            want = next((p for p in self._ws_projects() if p["pid"] == pid), None)
+            host, path = workspaces.parse_remote(st["remote"])
+            st["remote"] = "%s/%s" % (host, path) if host else path
+            if want and want.get("full") and path and want["full"].lower() != path.lower():
+                st["mismatch"] = "Im Ordner liegt %s, erwartet ist %s." % (path, want["full"])
+        return st
 
     JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,30}-\d{1,9}$")
 
@@ -3400,8 +3477,10 @@ class App:
         ws = focusplan.week_start(now).timestamp()
         segs = self.timebook.range_segments(ws, now + 1, now, self.tc["idle_minutes"])
         rep = focusplan.week_report(self.fc, segs, now)
+        self._focus_expire(now)
         ses = self.timebook.session()
         if ses:
+            ses["grace_secs"] = self.FOCUS_GRACE
             ses["left_secs"] = int(ses["start"] + ses["planned_min"] * 60 - now)
             a = focusplan.area(self.fc, ses["area"])
             ses["area_name"] = a["name"] if a else ses["area"]
@@ -3410,13 +3489,51 @@ class App:
         return {"week": rep, "session": ses, "block": focusplan.current_block(self.fc, now), "next_block": focusplan.next_block(self.fc, now),
                 "areas": [{"id": a["id"], "name": a["name"], "activities": a.get("activities") or [], "ticket": a.get("ticket") or "",
                            "target_pct": a.get("target_pct", 0)} for a in self.fc["areas"]],
-                "today": {"sessions": len(done), "minutes": int(sum((x["end"] - x["start"]) for x in done) // 60)}}
+                "today": {"sessions": len(done), "minutes": int(sum((x["end"] - x["start"]) for x in done) // 60)},
+                "last_ended": ({"id": done[-1]["id"], "result": done[-1]["result"], "title": done[-1]["title"],
+                                "minutes": int((done[-1]["end"] - done[-1]["start"]) // 60)} if done else None)}
+
+    FOCUS_GRACE = 600      # so lange darf eine Zeitbox überzogen sein, bevor die Sitzung von selbst endet
+
+    def _focus_finish(self, ses, result, end, now, note=""):
+        """Eine Sitzung abschliessen: Ende, Ergebnis, XP ab 20 Minuten. Gibt die Zusammenfassung zurück."""
+        end = max(ses["start"], min(end, now))
+        mins = int((end - ses["start"]) // 60)
+        self.timebook.session_update(ses["id"], end=end, result=result, note=(ses["note"] + "\n" + str(note or "")[:500]).strip()[-2000:])
+        xp = 0
+        if mins >= 20 and result in ("erledigt", "weiter", "abgelaufen"):
+            xp = 15
+            self.store.flow_event_once("focus:%d" % ses["id"], ses["key"], ses["title"], "focus", 0, xp,
+                                       "Fokus %d min%s" % (mins, (" · " + ses["activity"]) if ses["activity"] else ""), now)
+        self.audit("focus.end", ses["key"], area=ses["area"], minutes=mins, planned=ses["planned_min"], result=result, parked=ses["parked"])
+        return {"minutes": mins, "result": result, "xp": xp, "parked": ses["parked"], "title": ses["title"]}
+
+    def _focus_expire(self, now):
+        """Eine Sitzung läuft nur, solange du dran bist. Sie endet von selbst, wenn die Zeit auf eine andere Aufgabe wechselt, das Panel länger als
+        idle_minutes nicht mehr abgefragt hat (Browser zu, Rechner im Ruhezustand), oder die Zeitbox mehr als zehn Minuten überzogen ist.
+        Solange sie läuft, gilt sie als Lebenszeichen: Die Zeit zählt auch, wenn du im Editor arbeitest und das Panel nicht anfasst."""
+        ses = self.timebook.session()
+        if not ses:
+            return None
+        cur, idle = self.timebook.current(), self.tc["idle_minutes"]
+        if not cur:
+            return self._focus_finish(ses, "pausiert", now, now)
+        if cur["key"] != ses["key"]:
+            return self._focus_finish(ses, "abgelöst", cur["start"], now)
+        if now - cur["last_seen"] > idle * 60:
+            return self._focus_finish(ses, "pausiert", cur["last_seen"], now)
+        over = ses["start"] + ses["planned_min"] * 60
+        if now > over + self.FOCUS_GRACE:
+            return self._focus_finish(ses, "abgelaufen", over, now)      # die Zeit auf der Aufgabe läuft weiter, nur die Zeitbox ist zu
+        self.timebook.ping(now, idle)
+        return None
 
     def focus_action(self, action, b, now=None):
         now = now or time.time()
         if not self.tc["enabled"]:
             raise UserError("Die Zeiterfassung ist ausgeschaltet (Einstellungen → Zeiterfassung).")
         tb, idle = self.timebook, self.tc["idle_minutes"]
+        self._focus_expire(now)
         ses = tb.session()
         if action == "start":
             try:
@@ -3464,19 +3581,26 @@ class App:
             tb.start(ses["key"], ses["title"], now=now, idle=idle, area=ses["area"], activity=activity)
             tb.session_update(ses["id"], activity=activity)
             return self.focus_state(now)
+        if action == "extend":
+            try:
+                add = int(b["minutes"]) if b.get("minutes") not in (None, "") else 15
+            except (TypeError, ValueError):
+                add = 0
+            if not 5 <= add <= 60:
+                raise UserError("Verlängern um 5 bis 60 Minuten.")
+            passed = int((now - ses["start"]) // 60)
+            new = max(ses["planned_min"], passed) + add          # ab jetzt gerechnet, wenn die Zeitbox schon vorbei ist
+            if new > 480:
+                raise UserError("Eine Sitzung dauert höchstens 8 Stunden. Schliess sie ab und starte eine neue.")
+            tb.session_update(ses["id"], planned_min=new)
+            tb.ping(now, idle)
+            return self.focus_state(now)
         if action == "end":
             result = b.get("result") if b.get("result") in ("erledigt", "weiter", "abgelenkt", "abgebrochen") else "abgebrochen"
-            mins = int((now - ses["start"]) // 60)
-            tb.session_update(ses["id"], end=now, result=result, note=(ses["note"] + "\n" + str(b.get("note") or "")[:500]).strip()[-2000:])
+            ended = self._focus_finish(ses, result, now, now, b.get("note"))
             if result != "weiter":
                 tb.stop(now, idle)
-            xp = 0
-            if mins >= 20 and result in ("erledigt", "weiter"):
-                xp = 15
-                self.store.flow_event_once("focus:%d" % ses["id"], ses["key"], ses["title"], "focus", 0, xp,
-                                           "Fokus %d min%s" % (mins, (" · " + ses["activity"]) if ses["activity"] else ""), now)
-            self.audit("focus.end", ses["key"], area=ses["area"], minutes=mins, planned=ses["planned_min"], result=result, parked=ses["parked"])
-            return dict(self.focus_state(now), ended={"minutes": mins, "result": result, "xp": xp, "parked": ses["parked"]})
+            return dict(self.focus_state(now), ended=ended)
         raise UserError("Unbekannte Aktion.")
 
     # -- Hinweis vom Starter (0.21): «Aktualisiert auf …» einmal im Panel zeigen
@@ -4323,6 +4447,8 @@ def run_selftest(cfg):
         step("idea", "Idee bewerten und Ticket-Entwurf", "ok" if ok else "fail", "Bewertung gespeichert, Entwurf mit Story und Akzeptanzkriterien")
         hd = (a.overview().get("flow") or {}).get("helpdesk") or []
         st = a.focus_action("start", {"area": "bb", "activity": "Betreuung Lernende", "minutes": 25})
+        for m_ in (10, 20):            # das Panel fragt ab: Die Sitzung gilt als Lebenszeichen
+            a.focus_state(st["session"]["start"] + m_ * 60)
         en = a.focus_action("end", {"result": "erledigt"}, now=st["session"]["start"] + 25 * 60)
         ok = len(hd) == 3 and en["ended"]["xp"] == 15 and any(x["id"] == "bb" for x in en["week"]["areas"])
         step("focus", "Helpdesk und Fokus-Sitzung", "ok" if ok else "fail", "%d Helpdesk-Tickets, Sitzung %d min, +%d XP" % (len(hd), en["ended"]["minutes"], en["ended"]["xp"]))

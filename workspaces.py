@@ -67,6 +67,11 @@ def roots_of(c):
     return out
 
 
+import secretscan
+
+SCAN_BYTES = 2_000_000     # so viel Diff je Repo liest der Geheimnis-Scan höchstens
+
+
 def _git(repo, *args, timeout=GIT_TIMEOUT):
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0", LC_ALL="C")
     try:
@@ -159,6 +164,26 @@ def match_project(path, remotes, projects):
     return None
 
 
+def secrets_of(path, unpushed, dirty):
+    """Geheimnis-Scan vor dem Push: neue Zeilen in Commits, die auf keinem Remote liegen, und in offenen Änderungen. Nur lesend, Ausgabe begrenzt."""
+    found = []
+    if unpushed:
+        rc, out, _ = _git(path, "log", "-p", "-U0", "--no-color", "--no-ext-diff", "--max-count=200", "--format=commit:%h", "--branches", "--not", "--remotes")
+        if rc == 0:
+            found += secretscan.scan_diff(out[:SCAN_BYTES])
+    if dirty:
+        rc, out, _ = _git(path, "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff")
+        if rc == 0:
+            found += secretscan.scan_diff(out[:SCAN_BYTES], "nicht committet")
+    seen, uniq = set(), []
+    for f in found:
+        k = (f["file"], f["rule"], f["excerpt"])
+        if k not in seen:
+            seen.add(k)
+            uniq.append(f)
+    return uniq[:20]
+
+
 def _count(repo, *args):
     rc, out, _ = _git(repo, "rev-list", "--count", *args)
     try:
@@ -238,6 +263,7 @@ def inspect(path, hosts=None, projects=(), now=None):
     info["unique_unpushed"] = _count(path, "--branches", "--not", "--remotes") if info["branches"] else 0
     st = status_of(path)
     info["dirty"] = st or {"staged": 0, "changed": 0, "new": 0, "total": 0}
+    info["secrets"] = secrets_of(path, info["unique_unpushed"], info["dirty"]["total"])
     rc, out, _ = _git(path, "stash", "list", "--format=%ct")
     ts = [int(x) for x in out.split() if x.isdigit()]
     if ts:
@@ -280,7 +306,8 @@ def summary(r):
     wt_dirty = sum(1 for w in r["worktrees"] if w.get("dirty"))
     todo = bool(commits or r["dirty"]["total"] or r["stashes"] or wt_dirty)
     return {"unpushed_branches": len(unpushed), "unpushed_commits": commits, "no_upstream": sum(1 for b in unpushed if not b["upstream"]),
-            "agent_branches": sum(1 for b in unpushed if b["agent"]), "oldest_days": max(ages) if ages else None, "wt_dirty": wt_dirty, "todo": todo}
+            "agent_branches": sum(1 for b in unpushed if b["agent"]), "oldest_days": max(ages) if ages else None, "wt_dirty": wt_dirty, "todo": todo,
+            "secret_count": len(r.get("secrets") or [])}
 
 
 def scan(roots, hosts=None, projects=(), depth=3, limit=200, now=None, budget=25.0):
@@ -335,6 +362,7 @@ def totals(res, stale_days=2):
     return {"repos": len(repos), "todo": len(todo), "commits": sum(r["unpushed_commits"] for r in todo), "dirty": sum(1 for r in repos if r["dirty"]["total"]),
             "stashes": sum(r["stashes"] for r in repos), "agent_branches": sum(r["agent_branches"] for r in repos),
             "plain": len((res or {}).get("plain") or []), "unknown": sum(1 for r in repos if not r.get("project")),
+            "secrets": sum(len(r.get("secrets") or []) for r in repos), "secret_repos": [r["name"] for r in repos if r.get("secrets")][:5],
             "stale": [{"name": r["name"], "days": r.get("oldest_days") or r.get("stash_age_days"), "commits": r["unpushed_commits"]} for r in stale[:5]],
             "oldest_days": max([r.get("oldest_days") or 0 for r in todo] or [0]), "ts": (res or {}).get("ts"), "partial": bool((res or {}).get("partial"))}
 

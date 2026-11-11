@@ -117,6 +117,23 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.27.0
+
+- [ ] `r27-01` Agent über SSH zuweisen, Projekt liegt im Arbeitsordner → im Dialog «Repository liegt beim Agenten» mit der Remote-Adresse
+- [ ] `r27-02` Projekt wählen, das beim Agenten fehlt → in der Auswahl «fehlt beim Agenten», Banner «Jetzt klonen», «Zuweisen & starten» ist gesperrt
+- [ ] `r27-03` «Jetzt klonen» über SSH → nach kurzer Zeit «Projekt beim Agenten geklont», der Ordner liegt auf dem Zielrechner, im Log stehen «Klonen gestartet» und «Projekt geklont»
+- [ ] `r27-04` Klonen ohne Zugriff (Schlüssel des Zielrechners fehlt bei GitLab) → verständliche Meldung mit dem nächsten Schritt, kein halber Ordner bleibt liegen
+- [ ] `r27-05` Goose-Agent mit Modell `qwen…`, Anbieter leer, ohne Cloud-Haken → Lauf startet auf dem Zielrechner mit diesem Modell (im Lauf-Dialog unter «Prompt»/Ausgabe sichtbar)
+- [ ] `r27-06` Zweiter Goose-Agent mit einem Cloud-Modell und Cloud-Haken → an einem `restricted`-Projekt gesperrt, an `internal` erlaubt
+- [ ] `r27-07` Goose-Agent ohne Cloud-Haken, Modellname enthält «claude» oder «gpt» → Warnung im Dialog, `restricted` bleibt gesperrt
+- [ ] `r27-08` In einem lokalen Repo ein Passwort committen (nicht pushen) → Workspaces zeigt «1 Geheimnis?» mit Datei und Zeile, ohne den Wert; nach dem Entfernen des Commits ist der Hinweis weg
+- [ ] `r27-09` Beendeter Lauf → «Vorprüfen lassen …» mit dem lokalen Agenten: Auftrag nennt die Commits und Kriterien, der Lauf ändert keine Dateien und meldet je Kriterium ein Urteil
+- [ ] `r27-10` Ohne Fokus-Sitzung ist oben keine Leiste. Sitzung starten → Leiste mit Uhr; Fokus-Modus schliessen → Leiste bleibt
+- [ ] `r27-11` Zeitbox ablaufen lassen → Leiste zeigt «vorbei», «+15 min» und «Abschliessen»; ohne Klick endet die Sitzung nach zehn Minuten mit einer Meldung, die Zeit auf der Aufgabe läuft weiter
+- [ ] `r27-12` «+15 min» → die Uhr läuft wieder rückwärts
+- [ ] `r27-13` Während einer Sitzung 20 Minuten im Editor arbeiten, Panel im Hintergrund → die Zeit zählt durch, keine Lücke
+- [ ] `r27-14` Einstellungen: Jeder Abschnitt hat «Hilfe: so richtest du das ein»; bei den Agenten steht die SSH-Anleitung
+
 ## 0.26.0
 
 - [ ] `r26-01` Jira-Ticket mit Abschnitt «Akzeptanzkriterien»: Agent zuweisen → der Dialog zeigt «Auftrag aus dem Ticket» mit den Kriterien als Haken, der Prompt enthält «AK1: …»

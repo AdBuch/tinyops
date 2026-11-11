@@ -310,6 +310,12 @@
   .sset h2 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.015em; }
   .sset h3 { font-size: 14px; margin: 22px 0 6px; }
   .lead { color: var(--quiet); margin: 0; max-width: 62ch; }
+  details.help { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-width: 86ch; }
+  details.help > summary { cursor: pointer; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--quiet); }
+  details.help[open] > summary { color: inherit; border-bottom: 1px solid var(--line); }
+  .helpbody { padding: 4px 14px 10px; font-size: 13.5px; line-height: 1.5; }
+  .helpbody ol { padding-left: 20px; margin: 8px 0; } .helpbody li { margin: 4px 0; } .helpbody p { margin: 8px 0; }
+  .helpbody pre { margin: 4px 0; padding: 6px 10px; border-radius: 6px; background: var(--bg); overflow-x: auto; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .field { display: grid; gap: 4px; margin-bottom: 12px; }
   .field > label { font-size: 13px; font-weight: 650; }
   .field .help { font-size: 12.5px; color: var(--quiet); max-width: 70ch; }
@@ -742,9 +748,7 @@
   #fbar button { white-space: nowrap; }
   #fbar button.go { background: var(--ac); color: var(--surface); border-color: transparent; font-weight: 650; }
   #fbar .prog { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ac); transition: width 1s linear; }
-  #fbar.soll-only { background: var(--surface); border-bottom-style: dashed; }
-  #fbar.soll-only::before { background: repeating-linear-gradient(180deg, var(--ac) 0 6px, transparent 6px 10px); }
-  #fbar.idle .clock { color: var(--warn); }
+  #fbar.over .clock { font-size: 17px; }
   @media (max-width: 800px) { #fbar .now span, #fbar .tag { display: none; } #fbar { gap: 8px; padding-right: 10px; } #fbar .clock { font-size: 19px; } }
   .hdtxt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.5; max-height: 42vh; overflow: auto; padding: 10px 12px; background: var(--raised); border-radius: 10px; }
   .hdcm { display: grid; gap: 8px; } .hdcm > div { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
@@ -1334,11 +1338,56 @@ function renderAside() {
   $('viewOverview').classList.toggle('withaside', on);
 }
 
+// Hilfe zu den Einstellungen (0.27): je Abschnitt eine kurze Anleitung zum Aufklappen. Texte sind fest, ohne Daten aus der Konfiguration.
+const HELP = {
+  gitlab: `<ol><li>In GitLab oben rechts auf dein Bild, dann «Einstellungen» und «Zugriffstoken».</li><li>Neues Token mit dem Recht <code>read_api</code> anlegen. Mehr braucht tinyops nicht.</li>
+    <li>Adresse (z. B. <code>https://gitlab.firma.ch</code>) und Token hier eintragen, «Verbindung testen».</li><li>Unter «Projekte» die Projekte wählen, die du sehen willst.</li></ol>
+    <p>tinyops liest nur. Es gibt keine Funktion, die in GitLab freigibt, mergt oder pusht. <b>Datenklasse</b> je Projekt: <code>restricted</code> = nur lokale Agenten, <code>internal</code> und <code>public</code> = auch Cloud-Agenten.</p>`,
+  identity: `<p>tinyops zeigt Branches ohne MR nur, wenn ein Commit von dir darauf liegt. Trag hier die Namen und Mail-Adressen ein, mit denen du committest (<code>git config user.email</code>), und die deiner Agenten.</p>`,
+  filters: `<p>Muster für Branches, die nie erscheinen sollen (z. B. <code>renovate/*</code>), und das Alter, ab dem ein Branch als liegengeblieben gilt.</p>`,
+  jira: `<ol><li>Adresse eintragen (z. B. <code>https://jira.firma.ch</code>).</li><li>Zugangsdaten passend zur Anmeldeart eintragen (persönliches Zugriffstoken aus dem Jira-Profil, sonst Benutzername und Passwort).</li><li>«Verbindung testen».</li></ol>
+    <p>Die JQL bestimmt, was «in Arbeit» ist. Geschrieben wird nur, wenn «Tickets anlegen» an ist, und dann erst nach deiner Bestätigung im Dialog.</p>
+    <p><b>Agenten und Tickets:</b> Steht im Ticket ein Abschnitt «Akzeptanzkriterien» mit Aufzählung, übernimmt tinyops die Punkte in den Auftrag an den Agenten.</p>`,
+  github: `<ol><li>Auf github.com unter Settings → Developer settings ein «Fine-grained token» anlegen, nur lesend: Contents, Pull requests, Metadata.</li><li>Token eintragen, Repos wählen.</li></ol>
+    <p>Für GitHub Enterprise die API-Adresse anpassen (<code>https://github.firma.ch/api/v3</code>).</p>`,
+  sonar: `<p>Adresse und ein Benutzer-Token eintragen. Den Sonar-Schlüssel je Projekt trägst du bei den Projekten ein. tinyops fragt nur das Quality Gate ab.</p>`,
+  agents: `<p><b>Agent auf einem anderen Rechner (SSH), Schritt für Schritt</b></p>
+    <ol><li>Auf <em>diesem</em> Rechner einen Schlüssel ohne Passphrase anlegen (tinyops kann keine Passphrase abfragen):<pre>ssh-keygen -t ed25519 -C tinyops -f ~/.ssh/tinyops_agent -N ""</pre></li>
+    <li>Den öffentlichen Teil auf den Zielrechner bringen:<pre>ssh-copy-id -i ~/.ssh/tinyops_agent.pub benutzer@zielrechner</pre></li>
+    <li>Einmal von Hand verbinden und den Fingerabdruck bestätigen. Wichtig: <code>-i</code> bekommt die Datei <em>ohne</em> <code>.pub</code>:<pre>ssh -i ~/.ssh/tinyops_agent benutzer@zielrechner</pre></li>
+    <li>Auf dem Zielrechner: <code>sudo apt install tmux git</code>. Das Programm des Agenten muss in einer Login-Shell gefunden werden:<pre>bash -lc "which claude goose codex"</pre>Kommt nichts, den Ordner in <code>~/.profile</code> in den PATH eintragen.</li>
+    <li>Hier unter «SSH-Verbindungen»: Rechner, Benutzer, Port 22, Schlüsseldatei <code>~/.ssh/tinyops_agent</code>.</li>
+    <li>Beim Agenten die Verbindung wählen und als Arbeitsordner den Ordner angeben, in dem die Repos liegen (absolut, z. B. <code>/home/benutzer/workspace/projects</code>). «Testen».</li></ol>
+    <p><b>Häufige Fehler:</b> «Permission denied» = der öffentliche Schlüssel fehlt in <code>~/.ssh/authorized_keys</code> des Zielrechners, oder die Rechte sind zu offen (<code>chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys</code>). «UNPROTECTED PRIVATE KEY FILE» = <code>chmod 600 ~/.ssh/tinyops_agent</code>, und nicht die <code>.pub</code>-Datei angeben.</p>
+    <p><b>Projekte beim Agenten:</b> Ein Projekt liegt unter Arbeitsordner/Projektname (oder dem «Agenten-Ordner» des Projekts). Fehlt es, bietet der Zuweisen-Dialog «Jetzt klonen» an. Geklont wird mit den Git-Zugangsdaten des Zielrechners: Für SSH muss dessen Schlüssel bei GitLab oder GitHub hinterlegt sein (prüfen mit <code>ssh -T git@gitlab.firma.ch</code> auf dem Zielrechner).</p>
+    <p><b>Schreibrechte der Cloud-CLIs:</b> Claude Code braucht in «Zusätzliche Argumente» <code>--permission-mode acceptEdits</code>, Codex <code>--full-auto</code>. Sonst ändern sie im Lauf keine Dateien.</p>
+    <p><b>Goose mit Qwen oder anderen Modellen:</b> Art «Goose», Modell = der Name, unter dem dein Proxy oder Ollama das Modell führt. Anbieter leer lassen, wenn Goose auf dem Zielrechner schon eingerichtet ist (<code>goose configure</code>); tinyops setzt dann nur <code>GOOSE_MODEL</code>.
+      Laufen alle Modelle über denselben Proxy, leg je Modell einen Agenten an und setz den Haken «sendet Daten an einen Cloud-Anbieter» bei jedem, das nicht im eigenen Netz rechnet. Nur Agenten ohne den Haken dürfen an <code>restricted</code>-Projekte.</p>
+    <p><b>Eigener Befehl:</b> steht nur in der config.json (<code>"command"</code>, mit <code>{prompt_file}</code>), damit niemand über die Oberfläche Befehle einschleusen kann.</p>`,
+  ide: `<p>Der Befehl, der IntelliJ mit einem Ordner startet, z. B. <code>idea {path}</code> oder <code>/opt/idea/bin/idea.sh {path}</code>. Darunter trägst du je Projekt ein, wo dein lokaler Klon liegt.</p>`,
+  time: `<p>Die Zeit läuft auf dem angehefteten Vorhaben, solange du das Panel benutzt. Nach <b>Leerlauf-Minuten</b> ohne Aktivität endet der Abschnitt, und tinyops fragt später, wohin die Lücke gehört.</p>
+    <p>Eine <b>Fokus-Sitzung</b> zählt als Aktivität, auch wenn du im Editor arbeitest. Sie endet von selbst zehn Minuten nach der Zeitbox, wenn du nicht verlängerst. Gebucht wird nichts automatisch: Du bestätigst die Entwürfe.</p>`,
+  focusareas: `<p>Je Bereich ein Wochenziel in Prozent (z. B. Berufsbildung 30) und optional feste Blöcke (Tag, von, bis). Ein Bereich ohne Ticket bucht auf seinen Namen. Die Tätigkeiten erscheinen als Schnellwahl in der Fokus-Sitzung.</p>`,
+  workspaces: `<p>Trag die Ordner ein, in denen deine Projekte liegen (z. B. <code>~/work</code>). tinyops sucht darunter bis zur eingestellten Tiefe nach Git-Repos und zeigt, was nur auf deinem Rechner liegt.</p>
+    <p>Der <b>Geheimnis-Scan</b> prüft ungepushte Commits und offene Änderungen auf Passwörter und Tokens. tinyops pusht nie selbst; «Abholen» macht nur <code>git fetch</code>.</p>`,
+  helpdesk: `<ol><li>Adresse des Helpdesk-Jira eintragen und die Anmeldeart wählen: Jira 8.5 kennt nur Benutzername und Passwort (basic), ab 8.14 geht ein persönliches Zugriffstoken (bearer).</li>
+    <li>Die drei JQL prüfen: «mir zugewiesen», «Queue», «ich beobachte». Die Knöpfe darunter setzen gängige Vorlagen.</li><li>«Verbindung testen» zeigt je JQL die Trefferzahl.</li></ol><p>Dieses Jira wird nur gelesen.</p>`,
+  usage: `<p>Claude und Codex: tinyops nimmt das Token aus der Anmeldedatei der jeweiligen CLI auf diesem Rechner und fragt damit das freie Kontingent ab. Die Schnittstelle ist inoffiziell und kann sich ändern. Mistral: Der Stand kommt über ein Lesezeichen aus deinem Browser.</p>`,
+  llm: `<p>Für Ticket-Entwürfe und Bewertungen im Panel (nicht für Agenten). Ollama: Adresse <code>http://127.0.0.1:11434</code>, Modell wie in <code>ollama list</code>. OpenAI-kompatibel (llama.cpp, LiteLLM, vLLM): Basisadresse mit oder ohne <code>/v1</code> und der Modellname.</p>
+    <p>Adressen ausserhalb des eigenen Netzes sind gesperrt, solange «entfernte Adresse erlauben» aus ist.</p>`,
+  where: `<p>Die config.json enthält keine Geheimnisse: Tokens liegen im Schlüsselbund des Systems oder in der Datei daneben mit Rechten nur für dich. Das Protokoll zeigt jede schreibende Aktion.</p>`,
+};
 let firstLoad = true, pollT = null;
 async function load() {
   clearTimeout(pollT);
   try {
+    const prevSes = state && state.focus && state.focus.session ? state.focus.session.id : null;
     state = await api('GET', '/api/overview');
+    const le = state.focus && !state.focus.session && state.focus.last_ended;
+    if (prevSes && le && le.id === prevSes && FOCUS_AUTO[le.result]) {      // die Sitzung hat sich selbst beendet: sagen, warum
+      FM_OPEN = false; document.title = 'tinyops';
+      toast(`Fokus-Sitzung beendet (${le.minutes} min): ${FOCUS_AUTO[le.result]}`);
+    }
     renderHeader(); renderLeft(); renderAside(); renderBoard(); renderFocus(); loadUsage(false); wsBadge();
     if (view === 'time') loadTime();
     if (state.features.ideas) renderIdeas();
@@ -1745,7 +1794,8 @@ function agentRow(ticket, key, title, url, items) {
 }
 const fmtSecs = n => n >= 3600 ? Math.floor(n / 3600) + ' h ' + Math.floor(n % 3600 / 60) + ' min' : n >= 60 ? Math.floor(n / 60) + ' min ' + (n % 60) + ' s' : n + ' s';
 let agTimer = null;
-function agClose() { clearInterval(agTimer); agTimer = null; $('agDlg').close(); }
+let agCloneT = null;
+function agClose() { clearInterval(agTimer); agTimer = null; clearTimeout(agCloneT); $('agDlg').close(); }
 $('agDlg').addEventListener('close', () => { clearInterval(agTimer); agTimer = null; });
 async function openAgentDlg(o) {
   const ag = AG(), ctx = agCtx[o.ticket] || { key: '', title: '', url: '', items: [] };
@@ -1758,10 +1808,31 @@ async function openAgentDlg(o) {
   async function draw() {
     let info;
     try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined,
-      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined }); }
+      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, prereview: o.prereview || undefined }); }
     catch (e) { toast(e.message); return; }
     dirty = false;
-    if (info.followup) pid = info.project_id;
+    if (info.followup || info.prereview) pid = info.project_id;
+    clearTimeout(agCloneT);
+    const repoBox = rp => { const cl = rp && rp.clone || {};
+      return !rp || !pid ? '' : rp.error ? `<div class="small quiet">Ob das Projekt beim Agenten liegt, liess sich nicht prüfen: ${esc(rp.error)}</div>`
+      : cl.state === 'läuft' ? '<div class="banner warn">Das Projekt wird beim Agenten geklont … Bei grossen Repos dauert das einige Minuten. Du kannst den Dialog offen lassen.</div>'
+      : rp.state === 'git' ? `<div class="small"><span class="okk">Repository liegt beim Agenten</span>${rp.remote ? ` <span class="quiet">(${esc(rp.remote)})</span>` : ''}${rp.mismatch ? ` <b style="color:var(--bad)">${esc(rp.mismatch)}</b>` : ''}</div>`
+      : rp.state === 'dir' ? '<div class="banner bad">Am Zielpfad liegt ein Ordner, aber kein Git-Repository. tinyops überschreibt nichts: Ordner prüfen oder beim Projekt einen anderen Agenten-Ordner eintragen.</div>'
+      : rp.state === 'missing' ? `<div class="banner warn"><b>Das Projekt liegt beim Agenten noch nicht.</b>${cl.state === 'fehler' ? `<div class="small" style="white-space:pre-wrap;margin:6px 0">Klonen fehlgeschlagen: ${esc(cl.msg)}</div>` : ''}
+          <div class="row" style="margin-top:6px"><button id="agClone" class="primary">Jetzt klonen</button><select id="agVia" aria-label="Klonen über"><option value="ssh" ${rp.via !== 'https' ? 'selected' : ''}>über SSH</option><option value="https" ${rp.via === 'https' ? 'selected' : ''}>über HTTPS</option></select>
+          <span class="small">nach <code>${esc(rp.path || info.workdir)}</code>, mit den Git-Zugangsdaten des Zielrechners. tinyops gibt kein Token weiter.</span></div></div>` : ''; };
+    const repoReady = rp => !rp || !pid || !!rp.error || rp.state === 'git';
+    const wireRepo = rp => {
+      $('agRepo').innerHTML = repoBox(rp);
+      $('agStart').disabled = !info.allowed || !repoReady(rp);
+      if ($('agClone')) $('agClone').onclick = async () => { try { wireRepo((await post('/api/agents/clone', { agent: a.id, project_id: pid, via: $('agVia').value })).repo); } catch (e) { toast(e.message); } };
+      if (rp && (rp.clone || {}).state === 'läuft') agCloneT = setTimeout(async () => {      // nachsehen, bis der Klon fertig ist; der Prompt bleibt unberührt
+        if (!$('agDlg').open || !$('agRepo')) return;
+        let x = rp; try { x = (await post('/api/agents/access', { agent: a.id, project_id: pid })).repo; } catch (e) { /* nächstes Mal */ }
+        if (x !== rp && (x.clone || {}).state !== 'läuft' && x.state === 'git') toast('Projekt beim Agenten geklont');
+        wireRepo(x);
+      }, 2500);
+    };
     const bf = info.brief;
     const briefBox = !bf ? '' : `<div class="agbrief"><h4>Auftrag aus ${bf.source === 'lokal' ? 'der Aufgabe' : bf.source === 'helpdesk' ? 'dem Helpdesk-Ticket' : 'dem Ticket'} ${esc(bf.key)}</h4>
       ${bf.error ? `<div class="small quiet">${esc(bf.error)} Der Prompt enthält nur Key und Titel.</div>` : `
@@ -1771,20 +1842,22 @@ async function openAgentDlg(o) {
       ${bf.criteria.length ? `<div class="small"><b>Akzeptanzkriterien</b> <span class="quiet">(der Agent meldet jedes einzeln zurück)</span></div>${bf.criteria.map(c => `<label><input type="checkbox" data-bfc="${c.n}" ${c.on ? 'checked' : ''}><span>${esc(c.text)}</span></label>`).join('')}`
         : `<div class="small quiet">${bf.source === 'lokal' ? 'Keine offenen Teilschritte: Lege Teilschritte an, dann werden sie zu Kriterien.' : 'Im Ticket steht kein Abschnitt «Akzeptanzkriterien». Der Agent bekommt gesagt, dass er nachfragen soll.'}</div>`}
       ${bf.masked ? `<div class="small quiet">${bf.masked} mögliche${bf.masked === 1 ? 's Geheimnis' : ' Geheimnisse'} (Passwort, Token) geschwärzt. Lies den Prompt trotzdem durch.</div>` : ''}`}</div>`;
-    const projSel = ag.projects.length > 1 && !o.review ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
+    const projSel = ag.projects.length > 1 && !o.review ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => { const st = (info.access || {})[p.id]; return `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}${st === 'missing' ? ' · fehlt beim Agenten' : st === 'dir' ? ' · kein Git-Repo' : ''}</option>`; }).join('')}</select></label>` : '';
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(ctx.key || 'Aufgabe')} an ${esc(a.name)}</strong><span class="quiet small">${esc(info.kind)}</span></div>
       <div class="quiet small" style="margin:4px 0 8px">${esc(ctx.title)}</div>
-      <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Repository: <code>${esc(info.workdir || '—')}</code><br>Datenklasse: <b>${esc(info.data_class || '?')}</b></div>
+      <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Repository: <code>${esc(info.workdir || '—')}</code><br>Datenklasse: <b>${esc(info.data_class || '?')}</b>${info.model ? `<br>Modell: <code>${esc(info.model)}</code>` : ''}</div>
         <div class="quiet small">${info.mode === 'export' ? `Arbeitet in einem <b>Export</b> nur dieser Pfade: <code>${esc(info.cloud_paths.join(', '))}</code>. Eigenes Git ohne den Rest des Repos. Ergebnis per «Übernehmen» als Branch.` : info.mode === 'worktree' ? 'Arbeitet in einem <b>eigenen Worktree</b> auf Branch <code>agent/…</code>; dein Checkout bleibt unberührt.' : 'Arbeitet im <b>gemeinsamen Ordner</b> (ohne Isolation).'}</div></div></div>
       ${(info.review_skipped || []).length ? `<div class="banner warn">Nicht im Prompt, weil ausserhalb der freigegebenen Pfade (Export): ${esc(info.review_skipped.join(', '))}. Diese Punkte selbst oder mit einem lokalen Agenten bearbeiten.</div>` : ''}
       ${info.cloud ? `<div class="banner ${info.allowed ? 'warn' : 'bad'}">${info.allowed ? `Dieser Agent sendet Prompt und Code an ${esc(info.provider)}${bf && (bf.desc || bf.comments) ? ', auch den Tickettext unten' : ''}. Das Projekt ist dafür freigegeben.` : esc(info.reason)}</div>` : (!info.allowed ? `<div class="banner bad">${esc(info.reason)}</div>` : '')}
+      <div id="agRepo"></div>
       ${(info.hints || []).map(h => `<div class="banner warn">${esc(h)}</div>`).join('')}
       ${briefBox}
-      <label class="sm" for="agPrompt">${o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code> (Kommentare als Zitat, du kannst ihn ändern)` : info.followup ? `Prompt: Nachbesserung zu Lauf ${info.followup}, Ausgang <code>${esc(info.branch || 'Hauptbranch')}</code> (du kannst ihn ändern)` : 'Prompt (so geht er an den Agenten, du kannst ihn ändern)'}</label>
+      <label class="sm" for="agPrompt">${o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code> (Kommentare als Zitat, du kannst ihn ändern)` : info.followup ? `Prompt: Nachbesserung zu Lauf ${info.followup}, Ausgang <code>${esc(info.branch || 'Hauptbranch')}</code> (du kannst ihn ändern)` : info.prereview ? `Prompt: Vorprüfung von Lauf ${info.prereview} auf <code>${esc(info.branch)}</code> (der Agent ändert nichts)` : 'Prompt (so geht er an den Agenten, du kannst ihn ändern)'}</label>
       <textarea id="agPrompt" spellcheck="false" style="height:230px">${esc(info.prompt)}</textarea>
       <div class="row" style="margin-top:8px;justify-content:flex-end"><button id="agCancel">Abbrechen</button>${o.run ? '' : '<button id="agAssign">Nur zuweisen</button>'}<button class="primary" id="agStart" ${info.allowed ? '' : 'disabled'}>${o.run ? 'Starten' : 'Zuweisen &amp; starten'}</button></div>`;
     if ($('agProj')) $('agProj').onchange = ev => { pid = +ev.target.value; draw(); };
     $('agPrompt').oninput = () => { dirty = true; };
+    wireRepo(info.repo);
     box.querySelectorAll('[data-bf],[data-bfc]').forEach(c => c.onchange = () => {
       if (dirty && !confirm('Der Prompt wird neu aufgebaut. Deine Änderungen am Text gehen verloren.')) { c.checked = !c.checked; return; }
       bopt = { desc: !!(box.querySelector('[data-bf=desc]') || {}).checked, comments: !!(box.querySelector('[data-bf=comments]') || {}).checked,
@@ -1795,7 +1868,7 @@ async function openAgentDlg(o) {
     const go = async start => {
       try {
         let run = o.run;
-        const br = info.followup ? info.branch : branch;
+        const br = info.followup || info.prereview ? info.branch : branch;
         if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch: br, title: ctx.title })).id;
         if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch: br });
         agClose(); toast(start ? 'Gestartet' : 'Zugewiesen'); await load();
@@ -1825,6 +1898,7 @@ function agReportHtml(r) {
   if (!r.active) parts.push(`<div class="row" style="justify-content:space-between"><h3 style="margin:0">Ergebnis</h3><button class="quiet-btn" id="agRep" title="Bericht, Belege und Änderungen neu vom Zielrechner lesen">Neu lesen</button></div>`);
   if (ak) parts.push(`<div class="small"><b>Akzeptanzkriterien</b> <span class="quiet">${r.active ? '(Stand bei Abschluss)' : `${r.ak.ok} von ${r.ak.total} als erfüllt gemeldet. Das sind Angaben des Agenten: Beleg prüfen.`}</span><ul class="aklist">${ak}</ul></div>`);
   const res = r.result;
+  if (!r.active && res && res.secrets && res.secrets.length) parts.push(secretList(res.secrets, 'Vor dem Übernehmen ansehen'));
   if (!r.active && res) parts.push(`<div class="small"><b>Änderungen</b> <span class="quiet">${res.stat ? esc(res.stat) : 'keine gegenüber dem Ausgangsstand'} · ${res.commits.length} Commit${res.commits.length === 1 ? '' : 's'}${res.dirty ? ` · ${res.dirty} Datei${res.dirty === 1 ? '' : 'en'} nicht committet` : ''}</span>
     ${res.commits.length ? `<ul class="agfiles">${res.commits.map(c => `<li><code>${esc(c.sha)}</code><span>${esc(c.subject)}</span></li>`).join('')}</ul>` : ''}
     ${res.files.length ? `<details><summary class="quiet">${res.files.length} Datei${res.files.length === 1 ? '' : 'en'}</summary><ul class="agfiles">${res.files.map(f => `<li><b title="A neu, M geändert, D gelöscht, R umbenannt">${esc(f.st)}</b><code>${esc(f.path)}</code></li>`).join('')}</ul></details>` : ''}</div>`);
@@ -1835,6 +1909,7 @@ function agReportHtml(r) {
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
   if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow"><input type="text" id="agNote" maxlength="1000" placeholder="Was soll nachgebessert werden? (optional)" aria-label="Anmerkung für die Nachbesserung">
     <button id="agFollow" title="Neuer Lauf desselben Agenten: offene Kriterien, fehlgeschlagene Belege und deine Anmerkung. Er baut auf dem Branch dieses Laufs auf.">Nachbessern …</button>
+    ${r.out_branch && r.mode === 'worktree' && state.agents.agents.length ? `<select id="agPre" aria-label="Vorprüfen lassen" title="Ein zweiter Agent liest das Ergebnis, ändert nichts und meldet je Kriterium sein eigenes Urteil. Gut für ein lokales Modell."><option value="">Vorprüfen lassen …</option>${state.agents.agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>` : ''}
     <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button></div>`);
   return `<div class="agrep">${parts.join('')}</div>`;
 }
@@ -2204,6 +2279,7 @@ async function openRunDlg(id) {
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
     if ($('agComment')) $('agComment').onclick = async () => { try { copyText((await post('/api/agents/comment', { run: id })).text, 'Kommentar-Entwurf'); } catch (e) { toast(e.message); } };
+    if ($('agPre')) $('agPre').onchange = ev => { const aid = ev.target.value; if (!aid) return; agClose(); openAgentDlg({ ticket: r.ticket, agent: aid, prereview: r.id, pid: r.project_id }); };
     if ($('agFollow')) $('agFollow').onclick = () => { const note = $('agNote').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note, pid: r.project_id }); };
     if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agTake')) $('agTake').onclick = async () => { try { const t = await post('/api/agents/takeover', { run: id }); toast(`Übernommen: Branch ${t.branch} (${t.files.length} Dateien)`); await load(); await draw(); } catch (e) { toast(e.message); } };
@@ -2547,7 +2623,7 @@ async function loadSettings() {
   P = S.projects.map(p => ({ ...p }));
   const g = S.gitlab, j = S.jira, b = S.branch_filter;
   const glTokenUrl = g.url ? esc(g.url.replace(/\/+$/, '')) + '/-/user_settings/personal_access_tokens' : '';
-  const sect = (id, title, lead, body) => `<section class="sset" id="s-${id}"><header><h2>${title}</h2><p class="lead">${lead}</p></header>${body}</section>`;
+  const sect = (id, title, lead, body) => `<section class="sset" id="s-${id}"><header><h2>${title}</h2><p class="lead">${lead}</p></header>${HELP[id] ? `<details class="help" data-help="${id}" ${LS.get('help.' + id, false) ? 'open' : ''}><summary>Hilfe: so richtest du das ein</summary><div class="helpbody">${HELP[id]}</div></details>` : ''}${body}</section>`;
   box.innerHTML = `
   ${S.demo ? '<div class="banner warn">Demo-Modus: Tests funktionieren, Speichern ist ausgeschaltet.</div>' : ''}
   ${!S.configured && !S.demo ? `<div class="banner warn"><strong>Erst verbinden.</strong> Trage unten GitLab (und, wenn du magst, Jira) ein, drücke jeweils «Verbindung testen» und dann «Speichern».</div>` : ''}
@@ -3125,14 +3201,16 @@ function renderAgentCfg() {
       <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/adrian/work"></label>
       <label class="sm">Zusätzliche Argumente<input type="text" data-ag="${i}" data-f="extra_args" value="${esc(a.extra_args || '')}" placeholder="--model opus"></label>
       <label class="sm" title="Danach wird der Lauf beendet (Prozesse und tmux-Sitzung). 0 = kein Limit">Zeitlimit in Minuten<input type="number" min="0" max="1440" data-ag="${i}" data-f="max_minutes" value="${esc(a.max_minutes ?? 60)}"></label>
-      ${['goose', 'opencode'].includes(a.kind) ? `<label class="sm" title="Lokales Modell, z. B. über Ollama">Modell<input type="text" data-ag="${i}" data-f="model" value="${esc(a.model || '')}" placeholder="qwen2.5-coder:32b"></label>` : ''}
+      ${['goose', 'opencode'].includes(a.kind) ? `<label class="sm" title="Modellname, wie ihn der Anbieter oder Proxy kennt. Laufen alle Modelle über denselben Proxy: je Modell einen eigenen Agenten anlegen.">Modell<input type="text" data-ag="${i}" data-f="model" value="${esc(a.model || '')}" placeholder="qwen2.5-coder:32b"></label>
+      <label class="sm" title="Anbieter, wie ${a.kind === 'goose' ? 'Goose (GOOSE_PROVIDER)' : 'opencode'} ihn nennt. ${a.kind === 'goose' ? 'Leer: Goose nimmt den Anbieter aus seiner eigenen Konfiguration (goose configure), tinyops setzt nur das Modell.' : ''}">Anbieter<input type="text" data-ag="${i}" data-f="provider" list="agProviders" value="${esc(a.provider ?? 'ollama')}" placeholder="${a.kind === 'goose' ? 'leer = wie in Goose eingestellt' : 'ollama'}"></label>` : ''}
+      <label class="sm" title="Fehlt ein Projekt beim Agenten, bietet der Zuweisen-Dialog das Klonen an. SSH braucht einen Schlüssel des Zielrechners bei GitLab/GitHub, HTTPS dort gespeicherte Zugangsdaten.">Klonen über<select data-ag="${i}" data-f="clone_via"><option value="ssh" ${a.clone_via !== 'https' ? 'selected' : ''}>SSH</option><option value="https" ${a.clone_via === 'https' ? 'selected' : ''}>HTTPS</option></select></label>
       <label class="sm" title="Worktree: jeder Lauf bekommt einen eigenen Ordner und Branch agent/<key>-<nr>; der Hauptcheckout bleibt unberührt">Isolation<select data-ag="${i}" data-f="isolation"><option value="worktree" ${a.isolation !== 'shared' ? 'selected' : ''}>Worktree je Lauf (empfohlen)</option><option value="shared" ${a.isolation === 'shared' ? 'selected' : ''}>gemeinsamer Ordner (wie bis 0.15)</option></select></label>
     </div>
-    ${['goose', 'opencode'].includes(a.kind) ? `<div class="quiet small"><label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label> · Aus lassen nur, wenn ${esc(a.kind === 'goose' ? 'Goose' : 'opencode')} wirklich mit einem lokalen Modell (Ollama) läuft. Nur dann darf er an restricted-Projekte.</div>` : ''}
+    ${['goose', 'opencode'].includes(a.kind) ? `<div class="quiet small"><label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label> · Aus lassen nur, wenn dieses Modell wirklich im eigenen Netz läuft. Nur dann darf der Agent an restricted-Projekte. Läuft alles über denselben Proxy, sieht tinyops den Unterschied nicht: Du sagst es hier je Agent.</div><datalist id="agProviders"><option value="ollama"><option value="openai"><option value="litellm"><option value="openrouter"></datalist>` : ''}
     ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
     <div class="row"><button data-agtest="${i}">Testen</button><button data-agdel="${i}">Entfernen</button><span class="quiet small">Prüft Verbindung, tmux, Arbeitsordner und Programm. Gespeichert wird erst mit «Speichern».</span></div>
     <div id="ag-res-${i}"></div>
-    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div><div class="ferr" data-err="agents.${i}.model"></div></div>`).join('')
+    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div><div class="ferr" data-err="agents.${i}.model"></div><div class="ferr" data-err="agents.${i}.provider"></div></div>`).join('')
     : '<div class="quiet small" style="margin-bottom:8px">Noch kein Agent.</div>';
 }
 $('viewSettings').addEventListener('input', ev => {
@@ -3646,6 +3724,7 @@ async function fQuickAdd() {
 $('fAddBtn').onclick = fQuickAdd;
 $('fAdd').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); fQuickAdd(); } });
 document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.fgrp) LS.set('fopen.' + d.dataset.fgrp, d.open); }, true);
+document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.help) LS.set('help.' + d.dataset.help, d.open); }, true);
 document.addEventListener('click', async ev => {
   const t = ev.target;
   const go = t.closest('[data-fgo]');
@@ -3701,6 +3780,7 @@ async function hdLoad(key) {
   const w = ((state.flow || {}).hd_watch || []).find(x => x.key === key); if (w && w.new) { w.new = false; renderFocus(); }
 }
 const FOC = () => state && state.focus;
+const FOCUS_AUTO = { abgelaufen: 'Zeitbox vorbei, die Zeit läuft auf der Aufgabe weiter', pausiert: 'das Panel war länger nicht erreichbar', 'abgelöst': 'Zeit läuft auf einer anderen Aufgabe' };
 const arCls = id => ['dev', 'hd', 'bb'].includes(id) ? 'ar-' + id : 'ar-x';
 function hdRows(list) {
   return list.map(x => `<div class="q ${x.new ? 'new' : ''}" data-fopen="hdw:${esc(x.key)}" role="button" tabindex="0" title="Im Panel lesen"><i></i><span class="fkey">${esc(x.key)}</span><span class="tt" title="${esc(x.title)}">${esc(x.title)}</span>
@@ -3725,41 +3805,30 @@ function blockBanner() { return ''; }   // seit 0.24 steht das in der Fokus-Leis
 function fbarModel() {
   const f = FOC();
   if (!f) return null;
-  const ses = f.session, blk = f.block, run = state.time && state.time.running;
-  const areaName = id => (f.areas.find(a => a.id === id) || { name: id }).name;
-  if (ses) {
+  const ses = f.session, blk = f.block;
+  if (ses) {      // die Leiste gibt es nur, solange eine Fokus-Sitzung läuft
     if (FM_OPEN) return null;
     return { kind: 'ses', area: ses.area, tag: ses.area_name, title: ses.title, sub: [ses.key !== ses.title ? ses.key : '', ses.activity].filter(Boolean).join(' · '),
              soll: blk && blk.area !== ses.area ? `Soll: ${blk.name}-Block bis ${blk.until}` : '', ses };
   }
-  if (blk) {
-    const other = run && !run.idle && run.area !== blk.area;
-    return { kind: 'soll', area: blk.area, tag: 'Jetzt wäre', title: `${blk.name}-Block bis ${blk.until}`,
-             sub: other ? `du bist an ${run.key} (${areaName(run.area)})` : run && !run.idle ? `Zeit läuft auf ${run.key}, ohne Zeitbox` : 'gerade läuft keine Zeit', warn: other, start: 'area:' + blk.area, startLabel: 'Block starten' };
-  }
-  if (run) {
-    return { kind: 'run', area: run.area, tag: areaName(run.area), title: run.title && run.title !== run.key ? `${run.key} ${run.title}` : run.key,
-             sub: [run.activity, run.idle ? 'pausiert: keine Aktivität im Panel' : 'Zeit läuft, ohne Zeitbox'].filter(Boolean).join(' · '), run,
-             start: state.flow && state.flow.pinned ? state.flow.pinned : '', startLabel: 'Fokus-Sitzung' };
-  }
   return null;
+}
+function fbAutoText(ses) {
+  const rest = Math.max(0, Math.ceil((fmLeft(ses) + (ses.grace_secs || 600)) / 60));
+  return rest > 0 ? `endet von selbst in ${rest} min` : 'wird beendet …';
 }
 function renderFbar() {
   const el = $('fbar'), m = fbarModel();
   document.body.classList.toggle('hasbar', !!m);
   el.hidden = !m;
   if (!m) return;
-  el.className = arCls(m.area) + (m.kind === 'soll' ? ' soll-only' : '') + (m.run && m.run.idle ? ' idle' : '');
-  let right = '';
-  if (m.kind === 'ses') {
-    const left = fmLeft(m.ses);
-    right = `<span class="clock ${left < 0 ? 'over' : ''}" id="fbClock" title="${left < 0 ? 'Zeitbox vorbei' : 'Rest der Zeitbox'}">${mmss(left)}</span>
-      <button class="go" data-fbopen="1" title="Fokus-Modus öffnen: Uhr, Gedanken parken, abschliessen">Fokus-Modus</button>
+  const left = fmLeft(m.ses), over = left < 0;
+  el.className = arCls(m.area) + (over ? ' over' : '');
+  el.dataset.over = over ? '1' : '';
+  const right = `<span class="clock ${over ? 'over' : ''}" id="fbClock" title="${over ? 'Zeitbox vorbei' : 'Rest der Zeitbox'}">${over ? 'vorbei' : mmss(left)}</span>
+      ${over ? `<span class="soll" id="fbAuto">${fbAutoText(m.ses)}</span><button data-fbext="15" title="Zeitbox um 15 Minuten ab jetzt verlängern">+15 min</button><button class="go" data-fbopen="1">Abschliessen</button>`
+        : '<button class="go" data-fbopen="1" title="Fokus-Modus öffnen: Uhr, Gedanken parken, abschliessen">Fokus-Modus</button>'}
       <i class="prog" id="fbProg" style="width:${Math.max(0, Math.min(100, 100 * (1 - left / (m.ses.planned_min * 60)))).toFixed(1)}%"></i>`;
-  } else {
-    right = (m.run ? `<span class="clock" id="fbClock" title="Heute auf dieser Aufgabe">${hm(m.run.today_secs)} h</span>` : '')
-      + `<button class="go" data-fsess="${esc(m.start || '')}">${ic('clock')} ${esc(m.startLabel)}</button>`;
-  }
   el.innerHTML = `<span class="tag">${esc(m.tag)}</span><div class="now"><b title="${esc(m.title)}">${esc(m.title)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div>
     ${m.soll ? `<span class="soll" title="Der feste Block gehört zu einem anderen Bereich als diese Sitzung">${esc(m.soll)}</span>` : ''}${m.warn ? '<span class="soll">anderer Bereich</span>' : ''}${right}`;
 }
@@ -3845,7 +3914,7 @@ function renderFmode() {
       ${area.activities.length ? `<div class="acts" aria-label="Tätigkeit wechseln">${area.activities.map(a => `<button data-fmact="${esc(a)}" class="${ses.activity === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>` : ''}
       <div class="park"><input id="fmPark" maxlength="500" autocomplete="off" placeholder="Was dir gerade durch den Kopf geht: parken und weitermachen (Enter)" aria-label="Gedanken parken"><button data-fmpark="1">Parken</button></div>
       <div class="fmhint" id="fmHint">${left < 0 ? 'Zeitbox vorbei. Abschliessen oder bewusst weitermachen.' : 'Nur diese eine Sache. Mail, Teams und das Board warten.'}</div></div>
-    <div class="bot"><button class="primary big" data-fmend="erledigt">${ic('check')} Erledigt</button><button class="big" data-fmend="weiter" title="Die Zeitbox endet, die Zeit läuft auf der Aufgabe weiter">Beenden, Zeit läuft weiter</button><button class="big quiet-btn" data-fmend="abgelenkt" title="Ehrlich notieren: hilft beim Planen der nächsten Blöcke">Abgelenkt worden</button><button class="big quiet-btn" data-fmend="abgebrochen">Abbrechen</button></div>`;
+    <div class="bot"><button class="primary big" data-fmend="erledigt">${ic('check')} Erledigt</button><button class="big" data-fmend="weiter" title="Die Zeitbox endet, die Zeit läuft auf der Aufgabe weiter">Beenden, Zeit läuft weiter</button><button class="big quiet-btn" data-fmend="abgelenkt" title="Ehrlich notieren: hilft beim Planen der nächsten Blöcke">Abgelenkt worden</button><button class="big quiet-btn" data-fmend="abgebrochen">Abbrechen</button><button class="big quiet-btn" data-fmext="15" title="Zeitbox um 15 Minuten verlängern (ab jetzt, wenn sie schon vorbei ist)">+15 min</button></div>`;
   if (keep) $('fmPark').value = keep;
   if (had) $('fmPark').focus();
 }
@@ -3858,10 +3927,13 @@ setInterval(() => {
   const f = FOC(), ses = f && f.session;
   if (!ses) return;
   const left = fmLeft(ses), t = mmss(left);
-  if (!FM_OPEN && $('fbClock')) { $('fbClock').textContent = t; $('fbClock').classList.toggle('over', left < 0); if ($('fbProg')) $('fbProg').style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%'; }
+  if (!FM_OPEN && $('fbar').dataset.over !== (left < 0 ? '1' : '') && !$('fbar').hidden) renderFbar();      // Wechsel zu «vorbei»: Leiste neu zeichnen
+  if (left < 0 && $('fbAuto')) $('fbAuto').textContent = fbAutoText(ses);
+  if (left < -(ses.grace_secs || 600) - 5 && !FB_RELOAD) { FB_RELOAD = true; load().finally(() => { FB_RELOAD = false; }); }
+  if (!FM_OPEN && $('fbClock')) { $('fbClock').textContent = left < 0 ? 'vorbei' : t; $('fbClock').classList.toggle('over', left < 0); if ($('fbProg')) $('fbProg').style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%'; }
   const c = $('fmClock'); if (c) { c.textContent = t; c.classList.toggle('over', left < 0); }
   const l = $('fmLine'); if (l) l.style.width = Math.max(0, Math.min(100, 100 * (1 - left / (ses.planned_min * 60)))).toFixed(1) + '%';
-  if (left < 0 && left > -1.2 && $('fmHint')) $('fmHint').textContent = 'Zeitbox vorbei. Abschliessen oder bewusst weitermachen.';
+  if (left < 0 && left > -1.2 && $('fmHint')) $('fmHint').textContent = 'Zeitbox vorbei. Abschliessen oder verlängern, sonst endet die Sitzung in zehn Minuten von selbst.';
   document.title = FM_OPEN ? `${t} · ${ses.area_name}` : 'tinyops';
 }, 1000);
 async function fmPark() {
@@ -3869,11 +3941,18 @@ async function fmPark() {
   if (!v) return;
   try { const r = await post('/api/focus/park', { text: v }); i.value = ''; toast(r.to === 'ideen' ? 'Geparkt in der Ideenbox' : 'Geparkt in der Sitzungsnotiz'); state.focus.session.parked = r.parked; renderFmode(); $('fmPark').focus(); } catch (e) { toast(e.message); }
 }
-$('fbar').addEventListener('click', ev => { if (ev.target.closest('[data-fbopen]') || !ev.target.closest('button')) { if (FOC() && FOC().session) openFmode(); } });
+let FB_RELOAD = false;
+$('fbar').addEventListener('click', async ev => {
+  const x = ev.target.closest('[data-fbext]');
+  if (x) { try { state.focus = await post('/api/focus/extend', { minutes: +x.dataset.fbext }); renderFmode(); toast('Zeitbox verlängert'); } catch (e) { toast(e.message); } return; }
+  if (ev.target.closest('[data-fbopen]') || !ev.target.closest('button')) { if (FOC() && FOC().session) openFmode(); }
+});
 $('fmode').addEventListener('click', async ev => {
   const t = ev.target;
   if (t.closest('[data-fmmin]')) { closeFmode(); return; }
   if (t.closest('[data-fmpark]')) { fmPark(); return; }
+  const fx = t.closest('[data-fmext]');
+  if (fx) { try { state.focus = await post('/api/focus/extend', { minutes: +fx.dataset.fmext }); renderFmode(); toast('Zeitbox verlängert'); } catch (e) { toast(e.message); } return; }
   const a = t.closest('[data-fmact]');
   if (a) { try { state.focus = await post('/api/focus/activity', { activity: a.dataset.fmact }); renderFmode(); } catch (e) { toast(e.message); } return; }
   const en = t.closest('[data-fmend]');
@@ -3912,6 +3991,7 @@ async function loadWs(fresh) {
 function wsFacts(r) {
   if (!r.ok) return `<span class="chip bad">nicht lesbar: ${esc(r.error || '')}</span>`;
   const f = [], old = WS.stale_days;
+  if (r.secrets && r.secrets.length) f.push(`<span class="chip bad" title="Der Geheimnis-Scan hat in ungepushten Commits oder offenen Änderungen etwas gefunden, das nach Zugangsdaten aussieht. Vor dem Push ansehen.">${r.secrets.length} Geheimnis${r.secrets.length === 1 ? '' : 'se'}?</span>`);
   if (r.unpushed_commits) f.push(`<span class="chip ${r.oldest_days >= old ? 'bad' : 'warn'}" title="Commits, die auf keinem Remote liegen">${r.unpushed_commits} Commit${r.unpushed_commits === 1 ? '' : 's'} nicht gepusht${r.unpushed_branches > 1 ? ` auf ${r.unpushed_branches} Branches` : ''}${r.oldest_days != null ? ', ' + dAge(r.oldest_days) : ''}</span>`);
   if (r.no_upstream) f.push(`<span class="chip warn" title="Diese Branches gibt es nur auf diesem Rechner">${r.no_upstream} ohne Upstream</span>`);
   if (r.dirty.total) f.push(`<span class="chip warn" title="${r.dirty.changed} geändert, ${r.dirty.staged} vorgemerkt, ${r.dirty.new} neu">${r.dirty.total} Datei${r.dirty.total === 1 ? '' : 'en'} offen</span>`);
@@ -3922,6 +4002,12 @@ function wsFacts(r) {
   if (!f.length) f.push('<span class="okk">alles gepusht</span>');
   if (r.fetched_days != null && r.fetched_days >= 3) f.push(`<span class="quiet" title="Voraus und hinter beziehen sich auf den Stand des letzten Abholens">abgeholt vor ${Math.round(r.fetched_days)} d</span>`);
   return f.join('');
+}
+function secretList(list, lead) {
+  if (!list || !list.length) return '';
+  return `<div class="banner bad" style="margin:0"><b>${list.length} mögliche${list.length === 1 ? 's Geheimnis' : ' Geheimnisse'}.</b> ${esc(lead)}: Der Scan erkennt Muster, er kann sich irren.
+    <ul class="agfiles" style="max-height:none">${list.map(x => `<li><code>${esc(x.file)}:${x.line}</code><span>${esc(x.rule)} ${esc(x.excerpt)}${x.where ? ' · ' + esc(x.where) : ''}</span></li>`).join('')}</ul>
+    <span class="small">Sind es Testdaten: die Zeile mit <code>tinyops:allow-secret</code> kommentieren. Ist es echt: aus dem Commit entfernen und das Geheimnis wechseln.</span></div>`;
 }
 function wsRepo(r, i) {
   const [hk, hl] = WS_HOST[r.host] || WS_HOST.other;
@@ -3945,7 +4031,7 @@ function wsRepo(r, i) {
       <div class="wsname"><b>${esc(r.name)}</b><span class="st st-${hk}">${hl}</span>${known}<small title="${esc(r.path)}">${esc(r.rel || r.path)}${r.remote ? ' · ' + esc(r.remote) : ''}${r.head ? ' · auf ' + esc(r.head) : ''}</small></div>
       <div class="wsfacts">${wsFacts(r)}</div>
       <div class="wsact">${agents}${r.remotes && r.remotes.length ? `<button data-wsfetch="${i}" title="git fetch --prune: holt den Stand vom Remote, ändert nichts an deinen Branches">Abholen</button>` : ''}</div></summary>
-    <div class="wsbody">${r.ok ? `<div><h4>Branches</h4>${brs || '<div class="small quiet">Keine lokalen Branches.</div>'}</div>${wts ? `<div><h4>Worktrees</h4>${wts}</div>` : ''}
+    <div class="wsbody">${r.ok ? `${secretList(r.secrets, 'Vor dem Push ansehen')}<div><h4>Branches</h4>${brs || '<div class="small quiet">Keine lokalen Branches.</div>'}</div>${wts ? `<div><h4>Worktrees</h4>${wts}</div>` : ''}
       ${!r.remotes.length ? '<div class="banner warn" style="margin:0">Dieses Repo hat kein Remote: Alles liegt nur auf diesem Rechner.</div>' : ''}
       <div class="row"><button class="quiet-btn" data-wscopy="${esc(r.path)}">${ic('copy')} Pfad kopieren</button>${r.remotes.map(x => `<span class="quiet small">${esc(x.name)}: ${esc(x.url)}</span>`).join('')}</div>` : ''}</div></details>`;
 }
@@ -3981,7 +4067,8 @@ function wsRail() {
   if (!w || w.scanning || !w.todo) return '';
   const st = (w.stale || []).slice(0, 3).map(x => `<div class="small"><b>${esc(x.name)}</b> <span class="quiet">${x.commits ? x.commits + ' Commits, ' : ''}${dAge(x.days)}</span></div>`).join('');
   return `<section class="rcard" data-wsgo="1" style="cursor:pointer" role="button" tabindex="0"><h3>Nicht gepusht <small>${w.todo} Repo${w.todo === 1 ? '' : 's'}</small></h3>
-    <div class="small">${w.commits ? `${w.commits} Commits` : 'Offene Dateien oder Stashes'} liegen nur auf diesem Rechner${w.agent_branches ? `, ${w.agent_branches} Agent-Branch${w.agent_branches === 1 ? '' : 'es'}` : ''}.</div>${st}</section>`;
+    <div class="small">${w.commits ? `${w.commits} Commits` : 'Offene Dateien oder Stashes'} liegen nur auf diesem Rechner${w.agent_branches ? `, ${w.agent_branches} Agent-Branch${w.agent_branches === 1 ? '' : 'es'}` : ''}.</div>
+    ${w.secrets ? `<div class="small" style="color:var(--bad)"><b>${w.secrets} mögliche${w.secrets === 1 ? 's Geheimnis' : ' Geheimnisse'}</b> vor dem Push ansehen: ${esc((w.secret_repos || []).join(', '))}</div>` : ''}${st}</section>`;
 }
 function openWsTask(repo, agentId) {
   const a = WS.agents.find(x => x.id === agentId);

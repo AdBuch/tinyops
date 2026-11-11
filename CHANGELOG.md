@@ -5,6 +5,33 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.27.0]
+
+### Neu
+- **Projekte beim Agenten:** Der Zuweisen-Dialog sieht nach, ob das Projekt im Arbeitsordner des Agenten liegt (lokal oder über SSH). Die Projektauswahl zeigt «fehlt beim Agenten».
+  - **Jetzt klonen:** Fehlt ein Projekt, klont tinyops es auf deinen Klick beim Agenten, über SSH oder HTTPS (je Agent einstellbar: «Klonen über»). Der Klon läuft im Hintergrund, Start und Ergebnis stehen im Protokoll (`agent.clone.start`, `agent.clone`).
+  - Geklont wird mit den Git-Zugangsdaten des Zielrechners. tinyops gibt kein Token weiter und überschreibt keinen vorhandenen Ordner. Fehlermeldungen nennen den nächsten Schritt (Host-Schlüssel, Deploy-Key, Credential Helper).
+  - Liegt im Ordner ein anderes Repository als erwartet, steht das im Dialog.
+- **Goose mit Anbieter und Modell je Agent:** Neues Feld «Anbieter» (`GOOSE_PROVIDER`). Leer heisst: Goose nimmt seine eigene Konfiguration, tinyops setzt nur `GOOSE_MODEL`. So gehen mehrere Modelle über denselben Proxy: je Modell ein Agent.
+  - Ob ein Modell lokal ist, sagst du je Agent mit dem Haken «sendet Daten an einen Cloud-Anbieter». Nur Agenten ohne Haken dürfen an `restricted`-Projekte.
+  - Sieht der Modellname eines «lokalen» Agenten nach einem Cloud-Modell aus (claude, gpt, gemini …), warnt der Dialog, und `restricted`-Projekte bleiben gesperrt.
+- **Geheimnis-Scan vor dem Push:** Workspaces prüft ungepushte Commits und offene Änderungen auf Passwörter, Tokens und Schlüssel. Funde stehen am Repo («1 Geheimnis?»), in der Karte «Nicht gepusht» und im Ergebnis eines Agenten-Laufs. Gezeigt werden Datei, Zeile, Regel und Länge, nie der Wert.
+- **Vorprüfen lassen:** Aus einem beendeten Lauf startest du einen zweiten Agenten (gut: das lokale Modell), der das Ergebnis nur liest, die Akzeptanzkriterien selbst beurteilt und einen Befund schreibt.
+- **Hilfe in den Einstellungen:** Jeder Abschnitt hat eine aufklappbare Anleitung, darunter SSH für Agenten Schritt für Schritt mit den häufigen Fehlern.
+
+### Geändert
+- **Fokus-Leiste nur bei laufender Sitzung.** Ohne Fokus-Sitzung gibt es keine Leiste mehr («Jetzt wäre …» und «Zeit läuft» sind weg).
+- **Eine Fokus-Sitzung endet von selbst:** zehn Minuten nach der Zeitbox (die Zeit auf der Aufgabe läuft weiter), wenn die Zeit auf eine andere Aufgabe wechselt, oder wenn das Panel länger als die Leerlauf-Minuten nicht erreichbar war. Das Panel sagt dann, warum.
+- Ist die Zeitbox vorbei, zählt die Uhr nicht mehr ins Minus: Die Leiste zeigt «vorbei», «+15 min» und «Abschliessen».
+- Eine laufende Sitzung gilt als Lebenszeichen: Die Zeit zählt auch, wenn du im Editor arbeitest und das Panel nicht anfasst.
+
+### Grenzen
+- Klonen ist nur gegen ein lokales Test-Repository geprüft, nicht gegen dein GitLab und nicht über deine SSH-Verbindung.
+- Goose ist nicht mit dem echten Programm gestartet. Welche Anbieternamen dein Goose kennt, zeigt `goose configure`.
+- Der Geheimnis-Scan erkennt Muster. Ein Fund kann falsch sein, kein Fund ist kein Freibrief. Neue, noch nicht versionierte Dateien sieht er erst nach `git add`.
+- Die Cloud-Erkennung am Modellnamen ist ein Netz für Tippfehler, keine Garantie: Massgeblich bleibt dein Haken je Agent.
+- Die Vorprüfung ist ein zweiter Agentenlauf, kein Ersatz für dein Review.
+
 ## [0.26.0]
 
 ### Neu

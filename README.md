@@ -459,6 +459,32 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4y. Projekte beim Agenten, Goose mit eigenem Modell, Geheimnis-Scan, Hilfe (neu in 0.27.0)
+
+**Projekte beim Agenten.** Ein Projekt liegt unter `<Arbeitsordner des Agenten>/<Projektname>` (oder dem «Agenten-Ordner» des Projekts). Der Zuweisen-Dialog zeigt, ob es da ist. Fehlt es, klont «Jetzt klonen» es dort, mit den Git-Zugangsdaten des Zielrechners:
+
+    ssh -T git@gitlab.firma.ch        # auf dem Zielrechner: klappt das, klappt auch der Klon über SSH
+
+tinyops gibt kein Token weiter, überschreibt nichts und schreibt Start und Ergebnis ins Protokoll.
+
+**Goose und mehrere Modelle über einen Proxy.** Je Modell ein Agent:
+
+```json
+{"id": "qwen", "name": "Qwen lokal", "kind": "goose", "connection": "dev-vm", "workspace_root": "/home/benutzer/work",
+ "model": "qwen-lokal", "provider": "", "cloud": false, "clone_via": "ssh"}
+```
+
+- `provider` leer: Goose nimmt seine eigene Konfiguration (`goose configure`), tinyops setzt nur `GOOSE_MODEL`. Mit Wert (z. B. `ollama`, `openai`, `litellm`) setzt tinyops auch `GOOSE_PROVIDER`.
+- `cloud: false` nur für Modelle, die im eigenen Netz rechnen. Nur diese Agenten dürfen an `restricted`-Projekte. Über einen gemeinsamen Proxy sieht tinyops den Unterschied nicht: Du sagst es je Agent.
+
+**Geheimnis-Scan.** Workspaces prüft ungepushte Commits und offene Änderungen, der Lauf-Dialog das Ergebnis eines Agenten. Testdaten nimmst du mit dem Kommentar `tinyops:allow-secret` in derselben Zeile aus.
+
+**Vorprüfen lassen.** Im beendeten Lauf einen zweiten Agenten wählen: Er liest das Ergebnis, ändert nichts und meldet je Akzeptanzkriterium sein eigenes Urteil.
+
+**Fokus.** Die Leiste oben gibt es nur während einer Fokus-Sitzung. Die Sitzung endet von selbst zehn Minuten nach der Zeitbox, wenn du nicht «+15 min» wählst.
+
+**Hilfe.** Jeder Abschnitt der Einstellungen hat eine aufklappbare Anleitung, bei den Agenten auch SSH Schritt für Schritt.
+
 ## 4x. Agenten: Auftrag aus dem Ticket, Ergebnis je Kriterium (neu in 0.26.0)
 
 Beim Zuweisen eines Agenten baut tinyops den Auftrag aus dem Ticket: Beschreibung, nummerierte Akzeptanzkriterien (AK1, AK2 …) und auf Wunsch die letzten Kommentare.
