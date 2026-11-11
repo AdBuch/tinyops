@@ -36,6 +36,7 @@ import helpdesk
 import workspaces
 import briefing
 import m365
+import bcs
 from html import escape as html_escape
 import qa
 import review
@@ -56,7 +57,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.28.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.29.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1425,6 +1426,17 @@ class App:
         self.wsc = workspaces.cfg(cfg)
         self.ws_cache = None
         self.mcp_token = secrets.get("mcp_token", "")
+        self.bcsc = bcs.cfg(cfg)                 # BCS-Middleware (0.29)
+        self.bcs, self.bcs_error = None, ""
+        if self.demo and not time_cfg(cfg).get("mcp_url"):      # Demo: eigene Middleware, ausser eine Wrapper-API ist eingetragen
+            self.bcs = bcs.Demo()
+        elif self.bcsc["enabled"]:
+            try:
+                self.bcs = bcs.Client(self.bcsc["url"], secrets.get("bcs_token", ""))
+            except bcs.BcsError as e:
+                self.bcs_error = str(e)
+        self._bcs_prev = {}                      # draftId der Middleware → was tinyops dafür geprüft hat
+        self._bcs_lock = threading.Lock()
         self.ssl_ctx = ssl.create_default_context()
         if not hasattr(self, "_send_lock"):
             self._send_lock = threading.Lock()
@@ -3383,13 +3395,18 @@ class App:
         meta = self._time_meta()
         tb.sync_auto(d, timesheet.compose(d, tot, meta, events, accs, self.tc["round_minutes"], self.tc["min_minutes"]), now)
         drafts = tb.drafts(d)
+        tmap = tb.bcs_targets() if self.bcs is not None else {}
         for x in drafts:
             x["ticket_ok"] = not links.is_ref_key(x["ticket"])
             x["payload"] = timesheet.payload(x) if x["state"] != "verworfen" else None
+            if self.bcs is not None:
+                x["bcs_task"] = self._bcs_task(x["ticket"], tmap)
         return {"date": d, "segments": tb.segments(d, now, idle), "gaps": tb.gaps(d), "drafts": drafts,
                 "total_secs": sum(x["secs"] for x in tot.values()), "booked_minutes": sum(x["minutes"] for x in drafts if x["state"] == "gebucht"),
                 "draft_minutes": sum(x["minutes"] for x in drafts if x["state"] not in ("verworfen",)),
-                "mcp": bool(self.tc["mcp_url"]), "send_on_confirm": bool(self.tc["send_on_confirm"]), "round": self.tc["round_minutes"],
+                "mcp": bool(self.tc["mcp_url"]) and self.bcs is None, "send_on_confirm": bool(self.tc["send_on_confirm"]), "round": self.tc["round_minutes"],
+                "bcs": {"on": self.bcs is not None, "error": self.bcs_error, "demo": self.demo} if (self.bcs is not None or self.bcs_error) else None,
+                "llm": llm.ready(self.lc),
                 "earlier_open": sorted({x["date"] for x in tb.drafts(state="offen") if x["date"] < d})[-7:]}
 
     def _draft(self, did):
@@ -3421,6 +3438,8 @@ class App:
                 raise UserError("Diese Lücke ist schon erledigt.")
             self.audit("time.gap", g["key"], counted=bool(b.get("count")), minutes=int((g["end"] - g["start"]) // 60))
             return {"ok": True}
+        if action == "texts":                    # Buchungstexte vom lokalen Modell vorschlagen: nur Vorschläge, du übernimmst sie
+            return self.time_texts(str(b.get("date") or timesheet.today()))
         if action == "add":
             d = str(b.get("date") or timesheet.today())
             ticket = " ".join(str(b.get("ticket") or "").split()).upper() if not links.is_ref_key(str(b.get("ticket") or "")) else str(b.get("ticket"))
@@ -3432,6 +3451,8 @@ class App:
             self.audit("time.add", ticket, date=d, minutes=minutes)
             return {"id": did}
         dr = self._draft(b.get("id"))
+        if dr["state"] == "unklar":
+            raise UserError("Unklar, ob dieser Entwurf in BCS gebucht ist. Erst «Mit BCS abgleichen».")
         if dr["state"] in timesheet.LOCKED and action not in ("send",):
             raise UserError("Schon gebucht (%s). Ändern nur noch in Projectron." % (dr["reference"] or "ohne Referenz"))
         if action == "edit":
@@ -3477,7 +3498,7 @@ class App:
                 raise UserError("0 Minuten bucht man nicht. Verwerfen oder Zeit eintragen.")
             tb.update(dr["id"], state="bestätigt", message="")
             self.audit("time.confirm", dr["ticket"], draft=dr["id"], minutes=dr["minutes"], date=dr["date"])
-            if self.tc["mcp_url"] and self.tc["send_on_confirm"]:
+            if self.tc["mcp_url"] and self.tc["send_on_confirm"] and self.bcs is None:
                 return self.time_send(dr["id"])
             return {"state": "bestätigt"}
         if action == "send":
@@ -3549,6 +3570,189 @@ class App:
                        reference=ref, message=scrub(msg)[:200], http=code, key=body["idempotency_key"])
             log.info("Zeitentwurf %s → %s %s", dr["id"], state, ref or msg)
             return {"state": state, "reference": ref, "message": scrub(msg)}
+
+    # -- BCS (0.29)
+    def _bcs_client(self):
+        if self.bcs is None:
+            raise UserError(self.bcs_error or "BCS ist nicht eingerichtet (Einstellungen → Zeiterfassung → BCS).")
+        return self.bcs
+
+    @staticmethod
+    def _bcs_task(ticket, tmap):
+        """BCS-Aufgabe für ein Ticket: zuerst genau dieses Ticket (oder dieser Bereich), dann das Projekt («DLP-*»)."""
+        for pat in (ticket, bcs.prefix_of(ticket)):
+            if pat and pat in tmap:
+                t = tmap[pat]
+                return {"pattern": pat, "task_id": t["task_id"], "name": t["name"], "path": t["path"]}
+        return None
+
+    def _bcs_call(self, fn, *a):
+        try:
+            return fn(*a)
+        except bcs.BcsError as e:
+            raise UserError(str(e))
+
+    def bcs_day(self, d):
+        c = self._bcs_client()
+        day = self._bcs_call(c.day, d)
+        out = {"day": bcs.day_summary(day)}
+        try:
+            out["week"] = c.overview(d, "week")
+        except bcs.BcsError as e:
+            out["week_error"] = str(e)
+        return out
+
+    def _bcs_included(self, d):
+        """Welche Entwürfe eines Tages in die Vorschau gehen: bestätigt, mit Ticket, mit BCS-Aufgabe."""
+        tb = self.timebook
+        tmap = tb.bcs_targets()
+        inc, skip = [], []
+        for x in tb.drafts(d):
+            if x["state"] not in ("bestätigt", "fehlgeschlagen") or x["minutes"] <= 0:
+                continue
+            task = self._bcs_task(x["ticket"], tmap)
+            if not task:
+                skip.append({"id": x["id"], "ticket": x["ticket"], "why": "keine BCS-Aufgabe zugeordnet"})
+                continue
+            inc.append((x, bcs.change_for(x, task["task_id"])))
+        return inc, skip
+
+    @staticmethod
+    def _bcs_sig(inc):
+        return hashlib.sha256(json.dumps([[x["id"], c] for x, c in inc], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+    def bcs_action(self, action, b, now=None):
+        now = now or time.time()
+        c = self._bcs_client()
+        d = str(b.get("date") or timesheet.today(now))
+        if action == "targets":
+            return {"items": self._bcs_call(c.targets, d, b.get("query"))}
+        if action == "suggestions":
+            return self._bcs_call(c.suggestions, d)
+        if action == "map":                        # Ticket oder ganzes Projekt einer BCS-Aufgabe zuordnen (nur lokal gespeichert)
+            ticket = str(b.get("ticket") or "").strip()
+            pat = bcs.prefix_of(ticket) if b.get("scope") == "project" else ticket
+            if not pat or len(pat) > 120:
+                raise UserError("Für «ganzes Projekt» braucht es einen Jira-Key wie DLP-123." if b.get("scope") == "project" else "Ticket fehlt.")
+            tid = str(b.get("task_id") or "").strip()[:bcs.TASK_ID_MAX]
+            path = " › ".join(str(x) for x in b.get("path") or [])[:400] if isinstance(b.get("path"), list) else str(b.get("path") or "")[:400]
+            self.timebook.bcs_target_set(pat, tid, str(b.get("name") or "")[:200], path, now)
+            self.audit("bcs.map", pat, task=tid, name=str(b.get("name") or "")[:80])
+            return {"pattern": pat}
+        if action == "preview":
+            inc, skip = self._bcs_included(d)
+            if not inc:
+                raise UserError("Nichts zu prüfen: bestätige Entwürfe und ordne ihnen eine BCS-Aufgabe zu." + (" Ohne Aufgabe: %s." % ", ".join(s_["ticket"] for s_ in skip) if skip else ""))
+            r = self._bcs_call(c.preview, d, [ch for _, ch in inc])
+            st = r.get("status")
+            out = {"status": st, "message": r.get("message", ""), "warnings": r.get("warnings") or [], "entries": r.get("entries") or [], "deletions": r.get("deletions") or [],
+                   "dry_run": bool(r.get("dryRun")), "expires": r.get("expiresAt", ""), "draft_id": None, "skipped": skip,
+                   "included": [{"id": x["id"], "ticket": x["ticket"], "minutes": ch["durationMinutes"], "description": ch["description"]} for x, ch in inc]}
+            if st == "ready" and r.get("draftId"):
+                with self._bcs_lock:
+                    self._bcs_prev = {k: v for k, v in self._bcs_prev.items() if now - v["ts"] < 900}
+                    self._bcs_prev[r["draftId"]] = {"date": d, "ids": [x["id"] for x, _ in inc], "sig": self._bcs_sig(inc), "ts": now}
+                out["draft_id"] = r["draftId"]
+            self.audit("bcs.preview", d, ok=st == "ready", status=st, drafts=len(inc), minutes=sum(ch["durationMinutes"] for _, ch in inc), warnings=len(out["warnings"]))
+            return out
+        if action == "commit":
+            return self._bcs_commit(c, d, str(b.get("draft_id") or ""), now)
+        if action == "reconcile":
+            return self._bcs_reconcile(c, d, now)
+        if action == "apprentices":
+            if not self.bcsc.get("apprentices", True) and not self.demo:
+                raise UserError("Lernende sind in den Einstellungen ausgeblendet.")
+            lst = self._bcs_call(c.apprentices)
+            rows = []
+            for m in (lst.get("members") or [])[:20]:
+                try:
+                    db = c.dashboard(m.get("id", ""))
+                    wk = (db.get("currentWeek") or {}).get("days") or []
+                    rows.append({"id": m.get("id"), "name": m.get("name"), "status": db.get("status"), "ytd": (db.get("ytd") or {}).get("balanceMinutes"),
+                                 "week": sum((x.get("balanceMinutes") or 0) for x in wk) if wk else None, "vacation_left": (db.get("vacation") or {}).get("remainingDays"),
+                                 "as_of": db.get("asOf")})
+                except bcs.BcsError as e:
+                    rows.append({"id": m.get("id"), "name": m.get("name"), "error": str(e)})
+            return {"configured": lst.get("configured", False), "members": rows}
+        if action == "balance":
+            return self._bcs_call(c.time_balance)
+        raise UserError("Unbekannte Aktion.")
+
+    def _bcs_commit(self, c, d, did, now):
+        """Einmal bestätigen. Nie automatisch wiederholen; bei Abbruch werden die Entwürfe «unklar» und brauchen einen Abgleich."""
+        with self._bcs_lock:
+            p = self._bcs_prev.get(did)
+            if not p or p["date"] != d:
+                raise UserError("Diese Vorschau kennt tinyops nicht (mehr). Bitte neu «In BCS prüfen».")
+            if now - p["ts"] > 900:
+                self._bcs_prev.pop(did, None)
+                raise UserError("Die Vorschau ist älter als 15 Minuten. Bitte neu prüfen.")
+            inc, _ = self._bcs_included(d)
+            if [x["id"] for x, _ in inc] != p["ids"] or self._bcs_sig(inc) != p["sig"]:
+                self._bcs_prev.pop(did, None)
+                raise UserError("Seit der Vorschau hat sich ein Entwurf geändert. Bitte neu prüfen.")
+            self._bcs_prev.pop(did, None)                   # eine Vorschau wird höchstens einmal bestätigt
+        tb = self.timebook
+        mins = sum(ch["durationMinutes"] for _, ch in inc)
+        try:
+            r = c.commit(d, did)
+        except bcs.BcsError as e:
+            if e.uncertain:
+                for x, _ in inc:
+                    tb.update(x["id"], state="unklar", message="Bestätigen brach ab (%s). Unklar, ob gebucht: erst «Mit BCS abgleichen»." % str(e)[:150],
+                              attempts=int(x["attempts"] or 0) + 1, sent=now)
+                self.audit("bcs.commit", d, ok=False, status="unklar", drafts=len(inc), minutes=mins, error=str(e)[:200])
+                return {"status": "unklar", "message": str(e)}
+            raise UserError(str(e))
+        st, msg = r.get("status"), str(r.get("message") or "")[:300]
+        if st == "committed":
+            for x, _ in inc:
+                tb.update(x["id"], state="gebucht", reference="BCS %s" % d, message=msg, attempts=int(x["attempts"] or 0) + 1, sent=now)
+        elif st == "rejected":
+            for x, _ in inc:
+                tb.update(x["id"], state="abgelehnt", message=msg or "von BCS abgelehnt", attempts=int(x["attempts"] or 0) + 1, sent=now)
+        elif st == "dry_run":
+            msg = "Probelauf der Middleware: nichts geschrieben. %s" % msg
+        self.audit("bcs.commit", d, ok=st == "committed", status=st, drafts=len(inc), minutes=mins, message=msg[:200])
+        return {"status": st, "message": msg, "refresh": bool(r.get("refreshRequired")), "warnings": r.get("warnings") or []}
+
+    def _bcs_reconcile(self, c, d, now):
+        """Nach einem unklaren Bestätigen: Tag in BCS lesen. Was dort steht, gilt als gebucht; der Rest darf neu geprüft werden."""
+        tb = self.timebook
+        day = self._bcs_call(c.day, d)
+        tmap = tb.bcs_targets()
+        entries = list(day.get("entries") or [])
+        booked = back = 0
+        for x in tb.drafts(d):
+            if x["state"] != "unklar":
+                continue
+            task = self._bcs_task(x["ticket"], tmap)
+            ch = bcs.change_for(x, task["task_id"]) if task else None
+            hit = next((e for e in entries if ch and bcs.matches(e, ch)), None)
+            if hit:
+                entries.remove(hit)                         # ein Eintrag belegt höchstens einen Entwurf
+                tb.update(x["id"], state="gebucht", reference="BCS %s" % d, message="Beim Abgleich in BCS gefunden.")
+                booked += 1
+            else:
+                tb.update(x["id"], state="bestätigt", message="Beim Abgleich nicht in BCS gefunden: neu prüfen und bestätigen.")
+                back += 1
+        self.audit("bcs.reconcile", d, booked=booked, back=back)
+        return {"booked": booked, "back": back, "day": bcs.day_summary(day)}
+
+    def time_texts(self, d):
+        """Kurze Buchungstexte vom (lokalen) Modell. Nur Vorschläge: übernommen wird erst auf deinen Klick."""
+        if not llm.ready(self.lc):
+            raise UserError("Kein Sprachmodell eingerichtet (Einstellungen → Lokales Sprachmodell).")
+        rows = [x for x in self.timebook.drafts(d) if x["state"] in ("offen", "bestätigt", "fehlgeschlagen", "abgelehnt")][:20]
+        if not rows:
+            raise UserError("Keine offenen Entwürfe an diesem Tag.")
+        try:
+            out = llm.booking_texts(self.lc, self.llm_key, [{"id": x["id"], "ticket": x["ticket"], "title": x["title"], "minutes": x["minutes"],
+                                                            "text": x["text"], "evidence": x["evidence"][:8]} for x in rows], self.ssl_ctx)
+        except llm.LlmError as e:
+            raise UserError(str(e))
+        self.audit("time.texts", d, drafts=len(rows), suggested=len(out))
+        return {"texts": out}
 
     def time_export(self, state="bestätigt", d=None):
         """Für deinen MCP zum Abholen: Entwürfe im Vertragsformat."""
@@ -4178,6 +4382,10 @@ def make_handler(app):
                             '<p>%s</p><p><a href="/#settings">Zurück zu tinyops</a></p><script>setTimeout(()=>location.replace("/#settings"),%d)</script>'
                             % (html_escape(msg), 800 if ok else 8000))
                     return self._send(200 if ok else 400, page.encode("utf-8"), "text/html")
+                if method == "GET" and path == "/api/bcs/day":
+                    return self._send(200, app.bcs_day((urllib.parse.parse_qs(parsed.query).get("date") or [timesheet.today()])[0]))
+                if method == "POST" and path.startswith("/api/bcs/"):
+                    return self._send(200, app.bcs_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "GET" and path == "/api/m365":
                     return self._send(200, app.m365_state() or {"enabled": False})
                 if method == "POST" and path.startswith("/api/m365/"):
@@ -4427,6 +4635,8 @@ def resolve_secrets(cfg, demo, show=False):
         names.append("github_token")
     if time_cfg(cfg).get("mcp_url"):
         names.append("mcp_token")
+    if not demo and bcs.cfg(cfg).get("enabled"):
+        names.append("bcs_token")
     if not demo and helpdesk.cfg(cfg).get("enabled"):
         names.append(helpdesk.secret_name(helpdesk.cfg(cfg)))
     out = {}
@@ -4443,7 +4653,7 @@ def resolve_secrets(cfg, demo, show=False):
             log.info("Secret %s ← %s", name, src)
             if show:
                 print("  %-14s ← %s" % (name, src))
-        elif show and name not in ("access_token", "llm_key", "mcp_token"):
+        elif show and name not in ("access_token", "llm_key", "mcp_token", "bcs_token"):
             print("  %-14s nicht gesetzt (Einstellungen im Browser)" % name)
     return out
 
@@ -4616,6 +4826,17 @@ def run_selftest(cfg):
         w = a.workspaces_state()
         step("ws", "Workspaces", "ok" if w["totals"]["todo"] == 3 and a.overview()["workspaces"]["repos"] == 4 else "fail",
              "%d Repos, %d mit lokaler Arbeit" % (w["totals"]["repos"], w["totals"]["todo"]))
+        try:                                   # BCS (0.29): Demo-Middleware, Vorschau und einmal bestätigen
+            dd = timesheet.today()
+            did_ = a.timebook.add_manual(dd, "DLP-999", 15, "Selbsttest")
+            a.time_action("confirm", {"id": did_})
+            a.bcs_action("map", {"ticket": "DLP-999", "task_id": "T-100", "name": "Entwicklung DLP"})
+            pv = a.bcs_action("preview", {"date": dd})
+            cm_ = a.bcs_action("commit", {"date": dd, "draft_id": pv["draft_id"]})
+            ok = pv["status"] == "ready" and cm_["status"] == "committed" and a.timebook.draft(did_)["state"] == "gebucht"
+            step("bcs", "BCS: prüfen und buchen (Demo)", "ok" if ok else "fail", "%s → %s" % (pv["status"], cm_["status"]))
+        except Exception as e:     # Selbsttest: Fehler zeigen, nicht abbrechen
+            step("bcs", "BCS: prüfen und buchen (Demo)", "fail", str(e))
         br = a.ticket_brief("DLP-101")
         txt = briefing.block(br, briefing.options(br, None))
         ok = len(briefing.parse_prompt(txt)) == 3 and br["masked"] >= 1 and "demo-geheim" not in txt

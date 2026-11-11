@@ -23,6 +23,7 @@ import usage
 import focusplan
 import helpdesk
 import m365
+import bcs
 import workspaces
 import sprint
 import timesheet
@@ -34,7 +35,7 @@ _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Feh
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
 SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token", "mcp_token",
-                 "helpdesk_token", "helpdesk_password")
+                 "helpdesk_token", "helpdesk_password", "bcs_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "testenv", "ai")
 
@@ -1110,7 +1111,7 @@ def view(cfg, config_path, features_default=None):
         "agent_log_days": int(cfg.get("agent_log_days", 30)),
         "ux": dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {})),
         "ide_command": cfg.get("ide_command") or "idea {path}",
-        "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
+        "time": dict(timesheet.DEFAULTS, **dict(cfg.get("time") or {}, bcs=bcs.cfg(cfg))),
         "helpdesk": helpdesk.cfg(cfg),
         "m365": dict(m365.cfg(cfg), redirect="http://localhost:%d/api/m365/callback" % int(cfg.get("port") or 8765),
                      scopes=m365.scopes(m365.cfg(cfg))),
@@ -1432,6 +1433,19 @@ def build_config(current, p):
             elif not tc["allow_remote"] and not llm.is_local(url):
                 errors["time.mcp_url"] = "«%s» liegt nicht im eigenen Netz. Nur mit «Externe Adresse erlauben»." % u.hostname
         tc["mcp_url"] = url
+        if isinstance(t.get("bcs"), dict):            # 0.29: BCS-Middleware auf diesem Rechner
+            bb, bc = t["bcs"], bcs.cfg(cfg)
+            bc["enabled"] = bool(bb.get("enabled", bc["enabled"]))
+            bc["apprentices"] = bool(bb.get("apprentices", bc["apprentices"]))
+            u = str(bb.get("url", bc["url"]) or "").strip()
+            try:
+                bc["url"] = bcs.check_url(u) if u else ""
+            except bcs.BcsError as e:
+                errors["time.bcs.url"] = str(e)
+                bc["url"] = u
+            if bc["enabled"] and not bc["url"]:
+                errors["time.bcs.url"] = "Adresse der Middleware eintragen, z. B. http://127.0.0.1:3210."
+            tc["bcs"] = bc
         cfg["time"] = tc
     if isinstance(p.get("helpdesk"), dict):
         h, hc = p["helpdesk"], helpdesk.cfg(cfg)

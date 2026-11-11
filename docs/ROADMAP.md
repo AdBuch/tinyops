@@ -35,7 +35,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.26.0** ✓ | Agenten aus tinyops: Auftrag aus Ticket und Akzeptanzkriterien, Meldung je Kriterium (`tinyops-ak`), Änderungen des Laufs, Nachbessern, Kommentar-Entwurf, Hinweis zu Schreibrechten von Claude Code und Codex (geliefert 2026-11-11) | – | M–L |
 | **0.27.0** ✓ | Projekte beim Agenten prüfen und klonen, Goose mit Anbieter und Modell je Agent (Qwen über Proxy), Geheimnis-Scan vor dem Push, Vorprüfung durch zweiten Agenten, Fokus-Leiste nur bei laufender Sitzung, Hilfe in allen Einstellungen (geliefert 2026-11-11) | – | M |
 | **0.28.0** ✓ | Microsoft 365 über Graph (delegiert, Anmeldung im Browser mit 2FA oder Code): Termine heute, Mail und Teams «wartet auf dich», Termine als Zeit übernehmen, Fokuszeit im Kalender eintragen; Review-XP; Agenten-Streaming für Claude Code und Vibe (geliefert 2026-11-11) | – | L |
-| 0.29.0 | Buchungen und Berufsbildung: Warteschlange für das langsame Qwen (Buchungstexte, Wochenrückblick), Projectron-Vertrag | – | M |
+| **0.29.0** ✓ | BCS buchen über die lokale Middleware (Workflow-API): Aufgaben zuordnen, Tag gemeinsam prüfen, einmal bestätigen, Abgleich nach Abbruch; BCS-Tageskarte, Lernende (lesen), Buchungstexte vom lokalen Modell (geliefert 2026-11-11) | – | L |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.

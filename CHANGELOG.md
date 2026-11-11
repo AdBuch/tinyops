@@ -5,6 +5,31 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.29.0]
+
+### Neu
+- **In BCS buchen über deine Middleware** (Workflow-API `/api/v1`, nur auf diesem Rechner). Der Ablauf folgt der Middleware:
+  1. Entwürfe wie bisher **bestätigen**. Das bucht noch nichts.
+  2. Je Entwurf einmal **«BCS-Aufgabe wählen»**: Suche in BCS und «oft gebucht». Mit «für alle DLP-… merken» gilt die Zuordnung fürs ganze Projekt; Fokusbereiche wie «Berufsbildung» bekommen ihre eigene.
+  3. **«In BCS prüfen»**: Alle bestätigten Buchungen des Tages gehen gemeinsam in die Vorschau. Warnungen, Kandidaten und ein Probelauf der Middleware stehen im Dialog.
+  4. **«In BCS buchen»**: genau ein Versuch, nur mit der Vorschau, die tinyops selbst geprüft hat, und nur, wenn sich seither kein Entwurf geändert hat. Nur «committed» gilt als gebucht.
+- **Nie doppelt buchen:** Bricht die Verbindung beim Buchen ab, werden die Entwürfe **«unklar»** und gesperrt. tinyops wiederholt nie von selbst. «Mit BCS abgleichen» liest den Tag: Was dort steht, gilt als gebucht, der Rest geht zurück auf «bestätigt».
+- **BCS in der Zeit-Ansicht:** Anwesenheit, in BCS gebucht, nicht verteilt, Wochenstand, Warnungen der Middleware und die Einträge des Tages.
+- **Lernende** (nur lesen): Wochen- und Jahressaldo sowie Ferien übrig für die Lernenden, die BCS dir zeigt.
+- **Texte vorschlagen:** Das eingestellte Sprachmodell (z. B. Qwen lokal) schlägt kurze Buchungstexte vor. Übernommen wird nur, was du anklickst.
+- Selbsttest prüft den BCS-Ablauf gegen die Demo-Middleware.
+
+### Sicherheit
+- Nur Adressen auf 127.0.0.1 oder localhost, ohne Proxy. Mitgeschickt wird höchstens das `BCS_API_TOKEN` der Middleware, nie BCS-Zugangsdaten.
+- Löschungen schlägt tinyops nie vor. Würde eine Vorschau etwas löschen, bucht tinyops nicht.
+- Jeder Schritt steht im Protokoll: Zuordnung, Prüfen, Buchen, Abgleich.
+
+### Grenzen
+- Gegen deine echte Middleware ist das nicht gelaufen, nur gegen einen Nachbau nach der Spezifikation 0.7.7 und gegen die Demo.
+- tinyops bucht Arbeit als Dauer, ohne Von–bis. Braucht BCS Zeiten, meldet das die Vorschau.
+- Der Abgleich erkennt eine Buchung an Aufgabe, Dauer und Text. Wurde sie in BCS inzwischen geändert, gilt sie als nicht gefunden.
+- Der MCP-Zwilling der Middleware (`/mcp/v1`) wird nicht benutzt; er wäre der Weg für Agenten wie Goose.
+
 ## [0.28.0]
 
 ### Neu

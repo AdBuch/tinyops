@@ -117,6 +117,21 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.29.0
+
+- [ ] `r29-01` Einstellungen → Zeiterfassung → BCS-Middleware: Adresse `http://127.0.0.1:3210` (und Token, falls gesetzt) speichern → in der Zeit-Ansicht erscheint die Karte «BCS» mit Anwesenheit und den Einträgen des Tages
+- [ ] `r29-02` Eine Adresse ausserhalb von 127.0.0.1/localhost wird beim Speichern abgelehnt
+- [ ] `r29-03` Entwurf bestätigen → «BCS-Aufgabe wählen» → Suche findet die Aufgabe, «oft gebucht» zeigt Vorschläge; mit «für alle DLP-… merken» haben auch andere DLP-Entwürfe die Aufgabe
+- [ ] `r29-04` «In BCS prüfen» → Dialog zeigt die Buchungen mit Text «DLP-… …»; in BCS ist noch nichts gebucht
+- [ ] `r29-05` «In BCS buchen» → «In BCS gebucht», die Entwürfe sind «gebucht», in BCS stehen die Einträge genau einmal
+- [ ] `r29-06` Entwurf nach dem Prüfen ändern, dann buchen → tinyops verlangt eine neue Prüfung
+- [ ] `r29-07` Eine Warnung der Middleware (unbekannte Aufgabe, Konflikt) steht im Dialog, «In BCS buchen» fehlt dann
+- [ ] `r29-08` Middleware im Probelauf: «In BCS buchen» meldet «Probelauf», die Entwürfe bleiben bestätigt
+- [ ] `r29-09` Middleware während «In BCS buchen» stoppen → Entwürfe «unklar», gesperrt; nach dem Neustart «Mit BCS abgleichen» → gebucht oder zurück auf bestätigt, nichts doppelt
+- [ ] `r29-10` «Lernende» aufklappen → Wochen-, Jahressaldo und Ferien übrig wie in BCS
+- [ ] `r29-11` «Texte vorschlagen» mit dem lokalen Modell → Vorschläge je Entwurf, «Vorschlag übernehmen» setzt den Text, sonst bleibt er
+- [ ] `r29-12` Protokoll: «BCS: Aufgabe zugeordnet», «BCS: Buchungen geprüft», «BCS: Buchungen bestätigt»
+
 ## 0.28.0
 
 - [ ] `r28-01` Einstellungen → Microsoft 365: Tenant und Client-ID eintragen, speichern → «Anmelden» erscheint, die angefragten Rechte und die Rückleitung stehen darunter

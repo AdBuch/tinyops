@@ -17,7 +17,7 @@ import time
 from datetime import date as _date, datetime, timedelta
 from pathlib import Path
 
-STATES = ("offen", "bestätigt", "gebucht", "abgelehnt", "fehlgeschlagen", "verworfen")
+STATES = ("offen", "bestätigt", "gebucht", "abgelehnt", "fehlgeschlagen", "verworfen", "unklar")    # unklar (0.29): Bestätigen in BCS brach ab, erst abgleichen
 LOCKED = ("gebucht",)                       # nie mehr ändern
 SENDABLE = ("bestätigt", "fehlgeschlagen")
 CONTRACT = "tinyops.time-entry/1"
@@ -89,7 +89,30 @@ class TimeBook:
         c.execute("create table if not exists focus_session(id integer primary key autoincrement, key text not null, title text not null default '',"
                   " area text not null default '', activity text not null default '', planned_min integer not null, start real not null, end real,"
                   " parked integer not null default 0, result text not null default '', note text not null default '')")
+        c.execute("create table if not exists bcs_target(pattern text primary key, task_id text not null, name text not null default '',"
+                  " path text not null default '', updated real not null)")      # 0.29: Ticket oder Projekt → BCS-Aufgabe
         return c
+
+    # -- BCS-Ziele (0.29): exaktes Ticket vor Projekt-Präfix («DLP-*»)
+    def bcs_targets(self):
+        c = self._conn()
+        try:
+            return {r["pattern"]: dict(r) for r in c.execute("select * from bcs_target")}
+        finally:
+            c.close()
+
+    def bcs_target_set(self, pattern, task_id, name="", path="", now=None):
+        with self.lock:
+            c = self._conn()
+            try:
+                if task_id:
+                    c.execute("insert into bcs_target(pattern, task_id, name, path, updated) values(?,?,?,?,?) on conflict(pattern) do update set "
+                              "task_id=excluded.task_id, name=excluded.name, path=excluded.path, updated=excluded.updated", (pattern, task_id, name, path, now or time.time()))
+                else:
+                    c.execute("delete from bcs_target where pattern=?", (pattern,))
+                c.commit()
+            finally:
+                c.close()
 
     # -- Abschnitte
     def current(self):

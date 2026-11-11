@@ -459,6 +459,18 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5a. BCS buchen über die Middleware (neu in 0.29.0)
+
+Einstellungen → Zeiterfassung → BCS-Middleware: «In BCS buchen» einschalten, Adresse (Standard `http://127.0.0.1:3210`) und, falls die Middleware ein `BCS_API_TOKEN` verlangt, dieses als Token eintragen.
+
+```json
+"time": {"enabled": true, "bcs": {"enabled": true, "url": "http://127.0.0.1:3210", "apprentices": true}}
+```
+
+In der Zeit-Ansicht: Entwürfe bestätigen → je Entwurf «BCS-Aufgabe wählen» (einmal je Projekt reicht) → «In BCS prüfen» → «In BCS buchen». Nur was die Middleware als `committed` meldet, gilt als gebucht. Bricht die Verbindung ab, sind die Entwürfe «unklar», bis du «Mit BCS abgleichen» wählst; tinyops wiederholt nie von selbst.
+
+«Texte vorschlagen» lässt das eingestellte Sprachmodell kurze Buchungstexte formulieren; du übernimmst sie einzeln.
+
 ## 4z. Microsoft 365, Review-XP, Agenten mitlesen (neu in 0.28.0)
 
 **Microsoft 365.** Einmalig braucht es eine App-Registrierung in Entra ID (macht meist die IT):

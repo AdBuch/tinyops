@@ -70,7 +70,7 @@
   "sonar": {"enabled": false, "url": "https://sonar.example.intern", "cache_seconds": 300, "max_items": 40},
   "github": {"enabled": false, "api_url": "https://api.github.com", "repos": [{"full": "owner/repo", "id": 123456, "agent_dir": "", "allow_cloud_agents": false}]},
   "flow": {"daily_goal": 3},
-  "time": {"enabled": true, "round_minutes": 15, "min_minutes": 5, "idle_minutes": 15, "mcp_url": "", "allow_remote": false, "send_on_confirm": true},
+  "time": {"enabled": true, "round_minutes": 15, "min_minutes": 5, "idle_minutes": 15, "mcp_url": "", "allow_remote": false, "send_on_confirm": true, "bcs": {"enabled": false, "url": "http://127.0.0.1:3210", "apprentices": true}},
   "workspaces": {"enabled": true, "roots": ["~/work"], "depth": 3, "stale_days": 2, "scan_minutes": 5},
   "helpdesk": {"enabled": false, "name": "Helpdesk", "url": "https://helpdesk.example.intern", "auth": "basic", "username": "",
                "assigned_jql": "assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated ASC",

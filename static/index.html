@@ -315,6 +315,8 @@
   .mlist li > a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
   .mlist li small { color: var(--quiet); white-space: nowrap; } .mlist .t { font-variant-numeric: tabular-nums; color: var(--quiet); width: 4.6ch; flex: none; }
   .mlist .mev.past { opacity: .6; } .mlist .mev.now > a { font-weight: 650; } .mlist .chip, .mlist button { flex: none; padding: 1px 8px; font-size: 12px; }
+  .bcsappr { border-collapse: collapse; font-size: 13px; margin: 6px 0; } .bcsappr td, .bcsappr th { padding: 3px 12px 3px 0; text-align: left; font-variant-numeric: tabular-nums; }
+  .bcsappr th { color: var(--quiet); font-weight: 500; } label.bcst { padding: 4px 0; } .warn-btn { border-color: var(--warn); }
   details.help { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-width: 86ch; }
   details.help > summary { cursor: pointer; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--quiet); }
   details.help[open] > summary { color: inherit; border-bottom: 1px solid var(--line); }
@@ -1372,7 +1374,11 @@ const HELP = {
       Laufen alle Modelle über denselben Proxy, leg je Modell einen Agenten an und setz den Haken «sendet Daten an einen Cloud-Anbieter» bei jedem, das nicht im eigenen Netz rechnet. Nur Agenten ohne den Haken dürfen an <code>restricted</code>-Projekte.</p>
     <p><b>Eigener Befehl:</b> steht nur in der config.json (<code>"command"</code>, mit <code>{prompt_file}</code>), damit niemand über die Oberfläche Befehle einschleusen kann.</p>`,
   ide: `<p>Der Befehl, der IntelliJ mit einem Ordner startet, z. B. <code>idea {path}</code> oder <code>/opt/idea/bin/idea.sh {path}</code>. Darunter trägst du je Projekt ein, wo dein lokaler Klon liegt.</p>`,
-  time: `<p>Die Zeit läuft auf dem angehefteten Vorhaben, solange du das Panel benutzt. Nach <b>Leerlauf-Minuten</b> ohne Aktivität endet der Abschnitt, und tinyops fragt später, wohin die Lücke gehört.</p>
+  time: `<p><b>BCS buchen (über deine Middleware):</b> «In BCS buchen» einschalten, Adresse (Standard <code>http://127.0.0.1:3210</code>) und, falls gesetzt, das <code>BCS_API_TOKEN</code> eintragen. Dann in der Zeit-Ansicht:</p>
+    <ol><li>Entwürfe prüfen und «Bestätigen» (das bucht noch nichts).</li><li>Je Entwurf einmal «BCS-Aufgabe wählen». Mit «für alle DLP-… merken» gilt die Zuordnung fürs ganze Projekt.</li>
+    <li>«In BCS prüfen»: Die Middleware prüft alle bestätigten Buchungen des Tages gemeinsam und zeigt Warnungen.</li><li>«In BCS buchen»: genau ein Versuch. Nur «committed» gilt als gebucht.</li></ol>
+    <p>Bricht die Verbindung beim Buchen ab, werden die Entwürfe «unklar». tinyops wiederholt nie von selbst; «Mit BCS abgleichen» liest den Tag und markiert, was dort schon steht.</p>
+    <p>Die Zeit läuft auf dem angehefteten Vorhaben, solange du das Panel benutzt. Nach <b>Leerlauf-Minuten</b> ohne Aktivität endet der Abschnitt, und tinyops fragt später, wohin die Lücke gehört.</p>
     <p>Eine <b>Fokus-Sitzung</b> zählt als Aktivität, auch wenn du im Editor arbeitest. Sie endet von selbst zehn Minuten nach der Zeitbox, wenn du nicht verlängerst. Gebucht wird nichts automatisch: Du bestätigst die Entwürfe.</p>`,
   focusareas: `<p>Je Bereich ein Wochenziel in Prozent (z. B. Berufsbildung 30) und optional feste Blöcke (Tag, von, bis). Ein Bereich ohne Ticket bucht auf seinen Namen. Die Tätigkeiten erscheinen als Schnellwahl in der Fokus-Sitzung.</p>`,
   workspaces: `<p>Trag die Ordner ein, in denen deine Projekte liegen (z. B. <code>~/work</code>). tinyops sucht darunter bis zur eingestellten Tiefe nach Git-Repos und zeigt, was nur auf deinem Rechner liegt.</p>
@@ -2039,11 +2045,94 @@ document.addEventListener('click', async ev => {
 
 let TDAY = null, TDATA = null;
 async function loadTime() {
-  try { TDATA = await api('GET', '/api/time/day' + (TDAY ? '?date=' + TDAY : '')); TDAY = TDATA.date; renderTime(); }
+  try { TDATA = await api('GET', '/api/time/day' + (TDAY ? '?date=' + TDAY : '')); TDAY = TDATA.date; renderTime(); renderBcs(); }
   catch (e) { $('viewTime').innerHTML = `<div class="pview"><div class="banner bad">${esc(e.message)}</div></div>`; }
 }
 const T_ST = { offen: '', bestätigt: 'tk', gebucht: 'sq-ok', abgelehnt: 'sq-bad', fehlgeschlagen: 'warn', verworfen: 'sq-none' };
 function shiftDay(d, n) { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); }
+let TEXTS = {};
+async function renderBcs() {
+  const box = $('bcsCard'), d = TDATA;
+  if (!box || !d.bcs || !d.bcs.on) return;
+  let r;
+  try { r = await api('GET', '/api/bcs/day?date=' + d.date); } catch (e) { box.innerHTML = `<h3>BCS</h3><div class="banner bad">${esc(e.message)}</div>`; return; }
+  if (!$('bcsCard') || TDATA !== d) return;
+  const day = r.day, wk = r.week, H = m => m == null ? '–' : hm(m * 60);
+  const ready = d.drafts.filter(x => ['bestätigt', 'fehlgeschlagen'].includes(x.state) && x.bcs_task);
+  const noTask = d.drafts.filter(x => ['bestätigt', 'fehlgeschlagen'].includes(x.state) && !x.bcs_task);
+  const unclear = d.drafts.filter(x => x.state === 'unklar');
+  $('bcsCard').innerHTML = `<h3>BCS <span class="quiet small">${d.bcs.demo ? 'Demo-Middleware' : 'über deine Middleware'}${day.closed ? ' · Tag abgeschlossen' : ''}</span></h3>
+    <div class="psum" style="margin-bottom:8px"><span>Anwesenheit <b>${H(day.attendance_minutes)}</b></span><span>gebucht in BCS <b>${H(day.work_minutes)}</b></span><span>nicht verteilt <b>${H(day.unallocated_minutes)}</b></span>
+      ${wk && wk.targetMinutes != null ? `<span title="Woche bis heute, kein offizieller Saldo">Woche <b>${H(wk.actualMinutes)}</b> von ${H(wk.targetMinutes)}</span>` : ''}</div>
+    ${day.issues.length ? `<div class="banner warn">${day.issues.map(esc).join('<br>')}</div>` : ''}
+    ${unclear.length ? `<div class="banner bad">${unclear.length} Entw${unclear.length === 1 ? 'urf ist' : 'ürfe sind'} unklar: Das Bestätigen brach ab. tinyops wiederholt nie von selbst. <button class="primary" id="bcsRec">Mit BCS abgleichen</button></div>` : ''}
+    ${noTask.length ? `<div class="small" style="color:var(--warn)">${noTask.length} bestätigte${noTask.length === 1 ? 'r Entwurf hat' : ' Entwürfe haben'} noch keine BCS-Aufgabe.</div>` : ''}
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px">${ready.length ? `<button class="primary" id="bcsPrev">${ready.length} bestätigte in BCS prüfen (${hm(ready.reduce((a, x) => a + x.minutes * 60, 0))})</button>` : '<span class="quiet small">Bestätigte Entwürfe mit BCS-Aufgabe lassen sich hier prüfen und buchen.</span>'}</div>
+    <details style="margin-top:8px"><summary class="quiet small">${day.entries.length} Einträge in BCS an diesem Tag</summary><ul class="mlist">${day.entries.map(e => `<li><span class="t">${esc(e.start || '')}</span><a>${esc(e.kind === 'work' ? (e.task || 'Arbeit') : e.kind === 'pause' ? 'Pause' : e.kind === 'attendance' ? 'Anwesenheit' : e.kind)}${e.description ? ' · ' + esc(e.description) : ''}</a><small>${e.minutes != null ? H(e.minutes) : ''}</small></li>`).join('')}</ul></details>
+    ${state.focus || (S && S.time) ? '<details id="bcsAppr" style="margin-top:6px"><summary class="quiet small">Lernende</summary><div class="quiet small">lädt beim Aufklappen</div></details>' : ''}`;
+  if ($('bcsPrev')) $('bcsPrev').onclick = bcsPreview;
+  if ($('bcsRec')) $('bcsRec').onclick = async () => { try { const x = await post('/api/bcs/reconcile', { date: d.date }); toast(`${x.booked} gefunden, ${x.back} neu zu prüfen`); await loadTime(); } catch (e) { toast(e.message); } };
+  const ap = $('bcsAppr');
+  if (ap) ap.addEventListener('toggle', async () => {
+    if (!ap.open || ap.dataset.done) return;
+    try {
+      const x = await post('/api/bcs/apprentices', {}); ap.dataset.done = '1';
+      ap.querySelector('div').outerHTML = x.members.length ? `<table class="bcsappr"><tr><th>Name</th><th>Woche</th><th>Jahr</th><th>Ferien übrig</th></tr>${x.members.map(m => m.error ? `<tr><td>${esc(m.name)}</td><td colspan="3" class="quiet">${esc(m.error)}</td></tr>`
+        : `<tr><td>${esc(m.name)}</td><td>${m.week == null ? '–' : (m.week < 0 ? '−' : '+') + hm(Math.abs(m.week) * 60)}</td><td>${m.ytd == null ? '–' : (m.ytd < 0 ? '−' : '+') + hm(Math.abs(m.ytd) * 60)}</td><td>${m.vacation_left == null ? '–' : m.vacation_left + ' Tage'}</td></tr>`).join('')}</table><div class="quiet small">Nur lesen, Stand laut BCS${x.members[0] && x.members[0].as_of ? ' vom ' + esc(x.members[0].as_of) : ''}.</div>`
+        : `<div class="quiet small">${x.configured ? 'Keine Lernenden sichtbar.' : 'In der Middleware ist kein Lernendenbereich eingerichtet.'}</div>`;
+    } catch (e) { ap.querySelector('div').textContent = e.message; }
+  });
+}
+async function bcsPreview() {
+  const d = TDATA;
+  let r;
+  try { r = await post('/api/bcs/preview', { date: d.date }); } catch (e) { toast(e.message); return; }
+  const warn = r.warnings.map(w => `<li>${esc(w.message || '')}${w.candidates && w.candidates.length ? ': ' + w.candidates.map(c => esc(c.name)).join(', ') : ''}</li>`).join('');
+  $('wsDlgBody').innerHTML = `<div style="display:grid;gap:10px"><div><strong>${r.status === 'ready' ? 'Bereit zum Buchen' : 'Nicht buchbar'}</strong> <span class="quiet small">${esc(d.date)} · ${esc(r.message || '')}</span></div>
+    <ul class="mlist">${r.included.map(x => `<li><span class="t">${hm(x.minutes * 60)}</span><a>${esc(x.description)}</a></li>`).join('')}</ul>
+    ${r.skipped.length ? `<div class="small quiet">Nicht dabei (keine BCS-Aufgabe): ${r.skipped.map(x => esc(x.ticket)).join(', ')}</div>` : ''}
+    ${warn ? `<div class="banner warn"><ul style="margin:0;padding-left:18px">${warn}</ul></div>` : ''}
+    ${r.deletions.length ? `<div class="banner bad">Die Middleware würde ${r.deletions.length} Eintrag/Einträge löschen. tinyops bucht so nicht: bitte in BCS prüfen.</div>` : ''}
+    ${r.dry_run ? '<div class="banner warn">Die Middleware läuft im Probelauf: Bestätigen schreibt nichts.</div>' : ''}
+    <div class="row">${r.status === 'ready' && r.draft_id && !r.deletions.length ? `<button class="primary" id="bcsGo">In BCS buchen</button>` : ''}<button id="bcsNo">${r.status === 'ready' ? 'Abbrechen' : 'Schliessen'}</button>
+      ${r.expires ? `<span class="quiet small">Die Vorschau gilt bis ${hhmm(Date.parse(r.expires) / 1000)}.</span>` : ''}</div></div>`;
+  $('wsDlg').showModal();
+  $('bcsNo').onclick = () => $('wsDlg').close();
+  if ($('bcsGo')) $('bcsGo').onclick = async () => {
+    $('bcsGo').disabled = true;
+    try {
+      const x = await post('/api/bcs/commit', { date: d.date, draft_id: r.draft_id });
+      $('wsDlg').close();
+      toast(x.status === 'committed' ? 'In BCS gebucht' : x.status === 'unklar' ? 'Unklar, ob gebucht: bitte abgleichen' : `${x.status}: ${x.message}`);
+    } catch (e) { toast(e.message); $('wsDlg').close(); }
+    await loadTime();
+  };
+}
+async function bcsMap(id) {
+  const x = TDATA.drafts.find(y => y.id === id); if (!x) return;
+  let sug = [];
+  try { sug = ((await post('/api/bcs/suggestions', { date: TDATA.date })).suggestions || []).map(s => s.task).filter(Boolean); } catch (e) { /* ohne Vorschläge */ }
+  const isKey = /^[A-Z][A-Z0-9_]*-\d+$/.test(x.ticket);
+  const list = items => items.map(t => `<label class="check bcst"><input type="radio" name="bcsT" value="${esc(t.id)}" data-name="${esc(t.name)}" data-path="${esc((t.path || []).join(' › '))}"><span><b>${esc(t.name)}</b> <span class="quiet small">${esc((t.path || []).join(' › '))}</span>${t.favorite ? ' <span class="chip">Favorit</span>' : ''}</span></label>`).join('');
+  $('wsDlgBody').innerHTML = `<div style="display:grid;gap:10px"><div><strong>BCS-Aufgabe für ${esc(x.ticket)}</strong><div class="quiet small">${esc(x.title || x.text)}</div></div>
+    <div class="row"><input id="bcsQ" class="full" placeholder="In BCS suchen (Projekt, Aufgabe)" value="${esc(x.project_hint || '')}"><button id="bcsS">Suchen</button></div>
+    <div id="bcsList" style="max-height:40vh;overflow:auto">${sug.length ? '<div class="quiet small">Oft gebucht</div>' + list(sug) : ''}</div>
+    ${isKey ? `<label class="check"><input type="checkbox" id="bcsProj" checked><span>Für alle Tickets <b>${esc(x.ticket.split('-')[0])}-…</b> merken</span></label>` : ''}
+    <div class="row"><button class="primary" id="bcsSave">Zuordnen</button>${x.bcs_task ? '<button id="bcsDel" class="quiet-btn">Zuordnung entfernen</button>' : ''}<button id="bcsC">Abbrechen</button></div></div>`;
+  $('wsDlg').showModal();
+  const search = async () => {
+    try { const r = await post('/api/bcs/targets', { date: TDATA.date, query: $('bcsQ').value }); $('bcsList').innerHTML = r.items.length ? list(r.items) : '<div class="quiet small">Nichts gefunden.</div>'; }
+    catch (e) { toast(e.message); }
+  };
+  $('bcsS').onclick = search; $('bcsQ').onkeydown = e => { if (e.key === 'Enter') search(); };
+  $('bcsC').onclick = () => $('wsDlg').close();
+  const save = async (tid, name, path) => {
+    try { await post('/api/bcs/map', { ticket: x.ticket, task_id: tid, name, path, scope: $('bcsProj') && $('bcsProj').checked ? 'project' : 'ticket' }); $('wsDlg').close(); await loadTime(); }
+    catch (e) { toast(e.message); }
+  };
+  $('bcsSave').onclick = () => { const c = $('wsDlgBody').querySelector('input[name=bcsT]:checked'); if (!c) return toast('Bitte eine Aufgabe wählen.'); save(c.value, c.dataset.name, c.dataset.path); };
+  if ($('bcsDel')) $('bcsDel').onclick = () => { if ($('bcsProj')) $('bcsProj').checked = x.bcs_task.pattern.endsWith('*'); save('', '', ''); };
+}
 function renderTime() {
   const d = TDATA, box = $('viewTime');
   const dd = new Date(d.date + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -2052,7 +2141,11 @@ function renderTime() {
   const draft = x => {
     const lock = x.state === 'gebucht' || x.state === 'verworfen';
     const acts = [];
+    if (x.state === 'unklar') acts.push('<span class="chip warn">unklar, ob gebucht</span>');
     if (x.state === 'offen') acts.push(`<button class="primary" data-tconf="${esc(x.id)}" ${x.ticket_ok && x.minutes > 0 ? '' : 'disabled'} title="${x.ticket_ok ? (d.mcp && d.send_on_confirm ? 'Bestätigen und an deinen MCP senden' : 'Bestätigen; dein MCP holt es ab') : 'Erst ein Ticket eintragen'}">${d.mcp && d.send_on_confirm ? 'Bestätigen & buchen' : 'Bestätigen'}</button>`);
+    if (d.bcs && d.bcs.on && !lock) acts.push(x.bcs_task ? `<button class="quiet-btn" data-bcsmap="${esc(x.id)}" title="${esc(x.bcs_task.path || x.bcs_task.name)}${x.bcs_task.pattern.endsWith('*') ? ' (für ' + esc(x.bcs_task.pattern) + ')' : ''}">BCS: ${esc(short(x.bcs_task.name, 28))}</button>`
+      : `<button data-bcsmap="${esc(x.id)}" class="warn-btn" title="Ohne BCS-Aufgabe lässt sich dieser Entwurf nicht buchen">BCS-Aufgabe wählen</button>`);
+    if (TEXTS[x.id] && !lock) acts.push(`<button class="quiet-btn" data-ttext="${esc(x.id)}" title="${esc(TEXTS[x.id])}">Vorschlag übernehmen</button>`);
     if (['bestätigt', 'fehlgeschlagen'].includes(x.state) && d.mcp) acts.push(`<button class="primary" data-tsend="${esc(x.id)}">${x.state === 'fehlgeschlagen' ? 'Erneut senden' : 'Senden'}</button>`);
     if (x.state === 'offen' && sameDay(x.id).length) acts.push(`<select data-tmerge="${esc(x.id)}" title="In einen anderen Entwurf legen"><option value="">Zusammenlegen …</option>${sameDay(x.id).map(o => `<option value="${esc(o.id)}">mit ${esc(o.ticket)}</option>`).join('')}</select>`);
     if (!lock) acts.push(`<button class="quiet-btn" data-tdisc="${esc(x.id)}">Verwerfen</button>`);
@@ -2064,16 +2157,19 @@ function renderTime() {
       <input type="text" class="tx" data-tedit="${esc(x.id)}" data-f="text" value="${esc(x.text)}" maxlength="300" ${lock ? 'readonly' : ''} aria-label="Text">
       <div class="acts"><span class="chip ${T_ST[x.state] || ''}">${esc(x.state)}${x.edited && x.state === 'offen' ? ' · bearbeitet' : ''}${x.manual ? ' · von Hand' : ''}</span>${acts.join('')}</div>
       ${x.evidence.length || !x.ticket_ok ? `<div class="ev">${!x.ticket_ok ? '<span class="chip warn">kein Ticket: Branch ohne Ticket, erst ein Ticket eintragen</span>' : ''}${x.evidence.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : ''}
+      ${TEXTS[x.id] && !lock ? `<div class="msg quiet">Vorschlag: ${esc(TEXTS[x.id])}</div>` : ''}
       ${x.reference || x.message ? `<div class="msg ${x.state === 'gebucht' ? 'quiet' : ''}">${x.reference ? 'Referenz: <code>' + esc(x.reference) + '</code> ' : ''}${esc(x.message)}${x.attempts ? ` <span class="quiet">(${x.attempts}× gesendet)</span>` : ''}</div>` : ''}
     </div>`;
   };
   box.innerHTML = `<div class="phead"><button data-tday="-1" aria-label="Tag davor">‹</button><h1>${esc(dd)}</h1><button data-tday="1" aria-label="Tag danach">›</button>
       <button class="quiet-btn" data-tday="0">Heute</button><span class="sp"></span>
       <div class="psum"><span>gemessen <b>${hm(d.total_secs)}</b></span><span>Entwürfe <b>${hm(d.draft_minutes * 60)}</b></span><span>gebucht <b>${hm(d.booked_minutes * 60)}</b></span></div>
+      ${d.llm && d.drafts.some(x => !['gebucht', 'verworfen', 'unklar'].includes(x.state)) ? '<button id="tTexts" title="Das eingestellte Sprachmodell schlägt kurze Buchungstexte vor. Übernommen wird nur, was du anklickst.">Texte vorschlagen</button>' : ''}
       ${open.length ? `<button class="primary" id="tAll">Alle ${open.length} offenen bestätigen</button>` : ''}</div>
     ${d.earlier_open.length ? `<div class="banner warn">Offene Entwürfe an früheren Tagen: ${d.earlier_open.map(x => `<button class="quiet-btn" data-tgo="${x}">${new Date(x + 'T12:00:00').toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}</button>`).join(' ')}</div>` : ''}
+    ${d.bcs ? `<div class="pcard" id="bcsCard"><h3>BCS <span class="quiet small">${d.bcs.demo ? 'Demo-Middleware' : 'über deine Middleware'}</span></h3>${d.bcs.error ? `<div class="banner bad">${esc(d.bcs.error)}</div>` : '<div class="quiet small">lese den Tag …</div>'}</div>` : ''}
     ${d.gaps.length ? `<div class="pcard"><h3>Lücken <span class="quiet small">Pausen über der Leerlaufgrenze. Sie zählen erst, wenn du sie annimmst.</span></h3>${d.gaps.map(g => `<div class="tgap"><time>${g.from_}–${g.to}</time><b>${g.minutes} min</b><span class="sp">${esc(g.key)} ${esc(g.title)}</span><button data-tgap="${g.id}" data-c="1">Zählen</button><button class="quiet-btn" data-tgap="${g.id}" data-c="0">Verwerfen</button></div>`).join('')}</div>` : ''}
-    <div class="pcard"><h3>Entwürfe <span class="quiet small">je Ticket, auf ${d.round} min gerundet. Gebucht wird erst nach «Bestätigen»${d.mcp ? ', über deinen MCP' : '; dein MCP holt bestätigte Entwürfe über <code>GET /api/time/export</code> ab'}.</span></h3>
+    <div class="pcard"><h3>Entwürfe <span class="quiet small">je Ticket, auf ${d.round} min gerundet. Gebucht wird erst nach «Bestätigen»${d.bcs && d.bcs.on ? ' und dann oben «In BCS prüfen» und «In BCS buchen»' : d.mcp ? ', über deinen MCP' : '; dein MCP holt bestätigte Entwürfe über <code>GET /api/time/export</code> ab'}.</span></h3>
       ${d.drafts.length ? d.drafts.map(draft).join('') : '<div class="quiet small">Noch nichts. Zeit entsteht, solange ein Vorhaben als Fokus angeheftet ist.</div>'}
       <div class="tdraft" style="border-top:1px dashed var(--line)"><input type="text" id="tNewT" placeholder="Ticket, z. B. DLP-123" aria-label="Ticket"><span><input id="tNewM" type="number" min="0" max="1440" step="${d.round}" value="${d.round}" style="width:72px" aria-label="Minuten"> min</span><input type="text" id="tNewX" placeholder="Text (z. B. Meeting, Review)" maxlength="300" aria-label="Text"><div class="acts"><button id="tNew">Von Hand hinzufügen</button></div></div>
     </div>
@@ -2090,6 +2186,9 @@ $('viewTime').addEventListener('click', async ev => {
   const g = t.closest('[data-tgap]'); if (g) return run('/api/time/gap', { id: +g.dataset.tgap, count: g.dataset.c === '1' }, g.dataset.c === '1' ? 'Lücke zählt' : 'Lücke verworfen');
   const c = t.closest('[data-tconf]'); if (c) return run('/api/time/confirm', { id: c.dataset.tconf }, sendMsg);
   const sd = t.closest('[data-tsend]'); if (sd) return run('/api/time/send', { id: sd.dataset.tsend }, sendMsg);
+  const bm = t.closest('[data-bcsmap]'); if (bm) return bcsMap(bm.dataset.bcsmap);
+  const tt = t.closest('[data-ttext]'); if (tt) { const id = tt.dataset.ttext, v = TEXTS[id]; delete TEXTS[id]; return run('/api/time/edit', { id, text: v }, 'Text übernommen'); }
+  if (t.id === 'tTexts') { t.disabled = true; t.textContent = 'Modell denkt …'; try { TEXTS = (await post('/api/time/texts', { date: TDATA.date })).texts; toast(Object.keys(TEXTS).length + ' Vorschläge'); } catch (e) { toast(e.message); } return renderTime(); }
   const di = t.closest('[data-tdisc]'); if (di) return run('/api/time/discard', { id: di.dataset.tdisc }, 'Verworfen');
   const re = t.closest('[data-trest]'); if (re) return run('/api/time/restore', { id: re.dataset.trest });
   if (t.id === 'tNew') return run('/api/time/add', { date: TDATA.date, ticket: $('tNewT').value, minutes: $('tNewM').value, text: $('tNewX').value }, 'Hinzugefügt');
@@ -2776,7 +2875,14 @@ async function loadSettings() {
     <label class="check"><input type="checkbox" id="tm-send" ${S.time.send_on_confirm ? 'checked' : ''}><span>Beim Bestätigen sofort senden</span></label>
     <label class="check"><input type="checkbox" id="tm-remote" ${S.time.allow_remote ? 'checked' : ''}><span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(Tickets, Zeiten und Texte verlassen dann das Netz)</span></span></label>
     <div class="row"><button class="primary" id="tm-test">Verbindung testen</button><span class="quiet small">Testet mit GET, bucht nichts.</span></div>
-    <div id="tm-result"></div>`)}
+    <div id="tm-result"></div>
+    <h3 style="margin:18px 0 6px">BCS-Middleware</h3>
+    <label class="check"><input type="checkbox" id="bc-on" ${(S.time.bcs || {}).enabled ? 'checked' : ''}><span><strong>In BCS buchen</strong> <span class="quiet small">über deine Middleware auf diesem Rechner (Workflow-API). Ersetzt die Wrapper-API oben.</span></span></label>
+    <div class="grid2">
+      ${field('bc-url', 'Adresse der Middleware', (S.time.bcs || {}).url || 'http://127.0.0.1:3210', { ph: 'http://127.0.0.1:3210', err: 'time.bcs.url', help: 'Nur 127.0.0.1 oder localhost.' })}
+      ${field('bc-secret', 'BCS_API_TOKEN (nur falls gesetzt)', '', { type: 'password', err: 'bcs_token', ph: S.secrets.bcs_token && S.secrets.bcs_token.set ? '•••••••• gespeichert' : '', help: 'Das Token der Middleware, nicht dein BCS-Passwort.' })}
+    </div>
+    <label class="check"><input type="checkbox" id="bc-appr" ${(S.time.bcs || {}).apprentices !== false ? 'checked' : ''}><span>Lernende in der Zeit-Ansicht zeigen <span class="quiet small">(nur lesen, was BCS dir zeigt)</span></span></label>`)}
 
   ${sect('focusareas', 'Fokusbereiche', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
     <div class="grid3">
@@ -3321,12 +3427,14 @@ function collect() {
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
   if ($('tm-secret') && $('tm-secret').value.trim()) secrets.mcp_token = $('tm-secret').value;
+  if ($('bc-secret') && $('bc-secret').value.trim()) secrets.bcs_token = $('bc-secret').value;
   if ($('hd-secret') && $('hd-secret').value.trim()) secrets[val('hd-auth') === 'bearer' ? 'helpdesk_token' : 'helpdesk_password'] = $('hd-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), ide_command: val('ide-cmd'),
     time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), mcp_url: val('tm-url'),
-      send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked },
+      send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked,
+      bcs: { enabled: $('bc-on').checked, url: val('bc-url'), apprentices: $('bc-appr').checked } },
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
