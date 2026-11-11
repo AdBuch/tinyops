@@ -35,6 +35,8 @@ import focusplan
 import helpdesk
 import workspaces
 import briefing
+import m365
+from html import escape as html_escape
 import qa
 import review
 import timesheet
@@ -54,7 +56,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.27.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.28.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1442,6 +1444,9 @@ class App:
         self._briefs = {}                     # Ticket-Rohdaten für Aufträge an Agenten (0.26), kurz gemerkt
         self.hdj = None                       # Helpdesk-Jira (0.23)
         self.hdc = helpdesk.cfg(cfg)
+        self.mc = m365.cfg(cfg)                # Microsoft 365 über Graph (0.28)
+        self.m365 = m365.Client(self.mc, None, "http://localhost:%d/api/m365/callback" % int(cfg.get("port") or 8765), self._m365_store())
+        self.m365_cache, self.m365_t = None, 0.0
         self.ghc = github_cfg(cfg)
         self.cache, self.cache_t = None, 0.0
         self.hd_cache, self.hd_t = None, 0.0
@@ -1467,6 +1472,7 @@ class App:
             self.problems.append(str(e))
             ctx = ssl.create_default_context()
         self.ssl_ctx = ctx
+        self.m365.ctx = ctx
         if not cfg["gitlab_url"]:
             self.problems.append("GitLab-Adresse fehlt.")
         elif not secrets.get("gitlab_token"):
@@ -2055,6 +2061,8 @@ class App:
         data["sonar"] = self._sonar(data, step)
         if self.hdj:
             data["helpdesk_jira"] = self._helpdesk_fetch(step)
+        self._review_xp(data)
+        self._m365_fetch(step)
         now = time.time()
         src = []
         if self.client is not None:
@@ -2076,6 +2084,129 @@ class App:
                   self.refresh_no, time.time() - t0, len(data["mine"]), len(data["review"]), len(data["assigned"]),
                   len(data["errors"]))
         return data
+
+    # -- Review gibt XP (0.28): eine Freigabe von dir auf einem MR in deiner Review-Liste, einmal je MR
+    REVIEW_XP = 20
+
+    def _review_xp(self, data):
+        me = (data.get("me") or "").lower()
+        if not me:
+            return
+        for it in data.get("review") or []:
+            if me in [x.lower() for x in it.get("approved_by") or []] and it.get("iid"):
+                ref = "review:%s!%s" % (it["project_id"], it["iid"])
+                if self.store.flow_event_once(ref, it.get("key") or "!%s" % it["iid"], it.get("title") or "", "review", 0, self.REVIEW_XP,
+                                              "Review freigegeben: %s !%s" % ((self.proj_cfg.get(it["project_id"]) or {}).get("name") or it["project_id"], it["iid"])):
+                    self.audit("flow.review", ref, xp=self.REVIEW_XP)
+
+    # -- Microsoft 365 (0.28)
+    @staticmethod
+    def _m365_store():
+        def get():
+            try:
+                return store.resolve(m365.SECRET)[0] or ""
+            except store.SecretError:
+                return ""
+
+        def put(v):
+            store.register(v)
+            store.set_secret(m365.SECRET, v)
+
+        def drop():
+            try:
+                store.delete_secret(m365.SECRET)
+            except store.SecretError:
+                pass
+        return get, put, drop
+
+    def _m365_fetch(self, step=None, force=False):
+        """Mail, Kalender, Teams lesen: höchstens alle refresh_minutes. Fehler bleiben im Ergebnis, alte Daten bleiben stehen."""
+        if self.demo or not self.m365.ready() or not self.m365.has_login():
+            return
+        if not force and self.m365_cache and time.time() - self.m365_t < float(self.mc["refresh_minutes"]) * 60:
+            return
+        if step:
+            step("m365", "Microsoft 365: Mail, Kalender, Teams", "run")
+        try:
+            r = self.m365.fetch()
+            if step:
+                step("m365", "Microsoft 365: Mail, Kalender, Teams", "err" if r["errors"] else "ok", "; ".join("%s: %s" % kv for kv in r["errors"].items()))
+        except m365.GraphError as e:
+            log.warning("Microsoft 365: %s", scrub(e))
+            if step:
+                step("m365", "Microsoft 365: Mail, Kalender, Teams", "err", str(e))
+            r = dict(self.m365_cache or {}, ok=False, error=str(e), outdated=bool(self.m365_cache))
+        self.m365_cache, self.m365_t = r, time.time()
+
+    def m365_state(self):
+        if self.demo:
+            return self._m365_hide_booked(dict(m365.demo(), enabled=True, logged_in=True, calendar_write=True))
+        if not self.mc["enabled"]:
+            return None
+        st = {"enabled": True, "ready": self.m365.ready(), "logged_in": self.m365.has_login(), "calendar_write": bool(self.mc["calendar_write"]),
+              "login_error": self.m365.last_error}
+        if self.m365_cache:
+            st.update(self.m365_cache)
+        return self._m365_hide_booked(st)
+
+    def _m365_hide_booked(self, st):
+        """Termine, die schon als Zeit übernommen sind, nicht mehr zum Übernehmen anbieten."""
+        cal = st.get("calendar")
+        if cal and cal.get("past_unbooked"):
+            a = min(e["start"] for e in cal["past_unbooked"])
+            done = [x["start"] for x in self.timebook.range_segments(a - 1, time.time() + 1) if x.get("source") == "termin"]
+            st = dict(st, calendar=dict(cal, past_unbooked=[e for e in cal["past_unbooked"] if not any(abs(d - e["start"]) < 60 for d in done)]))
+        return st
+
+    def m365_action(self, action, b, now=None):
+        now = now or time.time()
+        if action == "login":
+            return {"url": self.m365.auth_url()}
+        if action == "device":
+            return self.m365.device_start()
+        if action == "device_state":
+            d = self.m365.device_state() or {"state": ""}
+            if d.get("state") == "fertig":
+                self._m365_fetch(force=True)
+            return d
+        if action == "logout":
+            self.m365.logout()
+            self.m365_cache = None
+            self.audit("m365.logout", "")
+            return {"ok": True}
+        if action == "refresh":
+            self._m365_fetch(force=True)
+            return self.m365_state() or {}
+        if action == "book":                     # vergangenen Termin als Zeit übernehmen: nur lokal, in die Zeiterfassung
+            if not self.tc["enabled"]:
+                raise UserError("Die Zeiterfassung ist ausgeschaltet.")
+            cal = ((self.m365_state() or {}).get("calendar") or {})
+            ev = next((e for e in cal.get("past_unbooked") or [] if e["id"] == b.get("id")), None)
+            if not ev:
+                raise UserError("Diesen Termin gibt es (heute) nicht mehr.")
+            key = " ".join(str(b.get("key") or "").split())
+            key = key if links.is_ref_key(key) else key.upper()
+            if not key or len(key) > 120:
+                raise UserError("Worauf soll gebucht werden? Ticket oder Bereich angeben.")
+            if any(x.get("source") == "termin" and abs(x["start"] - ev["start"]) < 60 for x in self.timebook.range_segments(ev["start"] - 1, ev["end"] + 1, now)):
+                raise UserError("Dieser Termin ist schon als Zeit eingetragen.")
+            area = b.get("area") if b.get("area") and focusplan.area(self.fc, b.get("area")) else self._area_of(key)
+            self.timebook.add_segment(key, ev["subject"], ev["start"], ev["end"], "termin", area or "", "Termin")
+            self.audit("time.meeting", key, minutes=int((ev["end"] - ev["start"]) // 60), subject=ev["subject"][:80])
+            return {"ok": True, "minutes": int((ev["end"] - ev["start"]) // 60)}
+        raise UserError("Unbekannte Aktion.")
+
+    def m365_callback(self, q):
+        """Rückleitung von Microsoft nach der Anmeldung. Gibt (ok, Meldung) zurück."""
+        if q.get("error"):
+            return False, m365._explain((q.get("error") or [""])[0], (q.get("error_description") or [""])[0])
+        try:
+            me = self.m365.callback((q.get("code") or [""])[0], (q.get("state") or [""])[0])
+        except m365.GraphError as e:
+            return False, str(e)
+        self.audit("m365.login", me.get("mail") and "angemeldet" or "", scopes=" ".join(m365.scopes(self.mc)))
+        threading.Thread(target=self._m365_fetch, kwargs={"force": True}, daemon=True).start()
+        return True, "Angemeldet als %s." % (me.get("name") or me.get("mail") or "?")
 
     def _helpdesk_fetch(self, step):
         """Helpdesk-Jira lesen. Fällt es aus, bleiben die letzten Tickets stehen, als veraltet markiert."""
@@ -2815,6 +2946,11 @@ class App:
             log.warning("Workspaces: %s", scrub(e))
             data["workspaces"] = None
         try:
+            data["m365"] = self.m365_state()
+        except Exception as e:      # Zugabe: darf die Übersicht nie verhindern
+            log.warning("Microsoft 365: %s", scrub(e))
+            data["m365"] = None
+        try:
             data["focus"] = self.focus_state()
         except Exception as e:      # Zugabe: darf die Übersicht nie verhindern
             log.warning("Fokusbereiche: %s", scrub(e))
@@ -3495,6 +3631,18 @@ class App:
 
     FOCUS_GRACE = 600      # so lange darf eine Zeitbox überzogen sein, bevor die Sitzung von selbst endet
 
+    def _focus_block(self, title, activity, start, minutes):
+        if self.demo:
+            return {"ok": True, "demo": True}
+        try:
+            ev = self.m365.block("Fokus: %s" % title, start, start + minutes * 60, "Eingetragen von tinyops (Fokus-Sitzung%s)." % (", " + activity if activity else ""))
+            self.audit("m365.event", title, minutes=minutes)
+            self.m365_t = 0.0
+            return {"ok": True, "url": ev.get("url", "")}
+        except m365.GraphError as e:
+            self.audit("m365.event", title, ok=False, error=str(e)[:200])
+            return {"ok": False, "error": str(e)}
+
     def _focus_finish(self, ses, result, end, now, note=""):
         """Eine Sitzung abschliessen: Ende, Ergebnis, XP ab 20 Minuten. Gibt die Zusammenfassung zurück."""
         end = max(ses["start"], min(end, now))
@@ -3565,7 +3713,10 @@ class App:
             tb.start(key, title, now=now, idle=idle, area=aid, activity=activity)
             sid = tb.session_start(key, title, aid, activity, minutes, now)
             self.audit("focus.start", key, area=aid, activity=activity, minutes=minutes, session=sid)
-            return self.focus_state(now)
+            st = self.focus_state(now)
+            if b.get("calendar"):              # auf deinen Haken: im eigenen Kalender als beschäftigt eintragen (0.28)
+                st["calendar"] = self._focus_block(title, activity, now, minutes)
+            return st
         if not ses:
             raise UserError("Es läuft keine Fokus-Sitzung.")
         if action == "park":
@@ -4021,6 +4172,16 @@ def make_handler(app):
                     return self._send(200, app.ide_open(self._body()))
                 if method == "POST" and path == "/api/ide/close":
                     return self._send(200, app.ide_close(self._body()))
+                if method == "GET" and path == "/api/m365/callback":      # Rückleitung von Microsoft: einfache Seite, dann zurück ins Panel
+                    ok, msg = app.m365_callback(urllib.parse.parse_qs(parsed.query))
+                    page = ('<!doctype html><meta charset="utf-8"><title>tinyops</title><body style="font:16px system-ui;padding:40px">'
+                            '<p>%s</p><p><a href="/#settings">Zurück zu tinyops</a></p><script>setTimeout(()=>location.replace("/#settings"),%d)</script>'
+                            % (html_escape(msg), 800 if ok else 8000))
+                    return self._send(200 if ok else 400, page.encode("utf-8"), "text/html")
+                if method == "GET" and path == "/api/m365":
+                    return self._send(200, app.m365_state() or {"enabled": False})
+                if method == "POST" and path.startswith("/api/m365/"):
+                    return self._send(200, app.m365_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path.startswith("/api/focus/"):
                     return self._send(200, app.focus_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "GET" and path == "/api/workspaces":

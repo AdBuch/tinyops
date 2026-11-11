@@ -22,6 +22,7 @@ import sonar
 import usage
 import focusplan
 import helpdesk
+import m365
 import workspaces
 import sprint
 import timesheet
@@ -1111,6 +1112,8 @@ def view(cfg, config_path, features_default=None):
         "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **(cfg.get("time") or {})),
         "helpdesk": helpdesk.cfg(cfg),
+        "m365": dict(m365.cfg(cfg), redirect="http://localhost:%d/api/m365/callback" % int(cfg.get("port") or 8765),
+                     scopes=m365.scopes(m365.cfg(cfg))),
         "workspaces": dict(workspaces.cfg(cfg), found=workspaces.roots_of(cfg)),
         "focus": _focus_view(cfg),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
@@ -1459,6 +1462,25 @@ def build_config(current, p):
         hc["sla_hours"] = _int(h.get("sla_hours"), "helpdesk.sla_hours", 1, 720, errors, hc["sla_hours"])
         hc["area"] = re.sub(r"[^a-z0-9_-]", "", str(h.get("area", hc["area"]) or "hd").lower())[:20] or "hd"
         cfg["helpdesk"] = hc
+    if isinstance(p.get("m365"), dict):
+        m, mc = p["m365"], m365.cfg(cfg)
+        mc["enabled"] = bool(m.get("enabled", mc["enabled"]))
+        for k in ("mail", "calendar", "teams", "calendar_write"):
+            mc[k] = bool(m.get(k, mc[k]))
+        if mc["calendar_write"] and not mc["calendar"]:
+            mc["calendar_write"] = False
+        t = str(m.get("tenant", mc["tenant"]) or "").strip()
+        cid = str(m.get("client_id", mc["client_id"]) or "").strip()
+        if t and not m365.TENANT_RE.fullmatch(t):
+            errors["m365.tenant"] = "Tenant-ID (GUID) oder Domäne wie firma.onmicrosoft.com."
+        if cid and not m365.GUID_RE.fullmatch(cid):
+            errors["m365.client_id"] = "Client-ID ist eine GUID wie 1234abcd-…, aus der App-Registrierung."
+        if mc["enabled"] and not (t and cid):
+            errors["m365.client_id" if t else "m365.tenant"] = "Zum Einschalten Tenant und Client-ID eintragen."
+        mc["tenant"], mc["client_id"] = t, cid
+        mc["reply_days"] = _int(m.get("reply_days"), "m365.reply_days", 1, 14, errors, mc["reply_days"])
+        mc["refresh_minutes"] = _int(m.get("refresh_minutes"), "m365.refresh_minutes", 1, 60, errors, mc["refresh_minutes"])
+        cfg["m365"] = mc
     if isinstance(p.get("focus"), dict):
         cfg["focus"] = _clean_focus(p["focus"], errors)
     if isinstance(p.get("workspaces"), dict):

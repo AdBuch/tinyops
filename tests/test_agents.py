@@ -214,7 +214,7 @@ class Remote(unittest.TestCase):
         self.assertEqual(r["exit_code"], 0)
         self.assertFalse((env.d / "pwned").exists() or (env.d / "pwned2").exists(), "Prompt wurde als Shell-Code ausgeführt")
         out = svc.tail(rid)
-        self.assertIn("ARGS:4", out)            # -p, <prompt>, --model, opus
+        self.assertIn("ARGS:7", out)            # -p, <prompt>, --output-format stream-json --verbose (0.28), --model, opus
         self.assertIn("FIRST:-p", out)
         self.assertIn("touch %s/pwned" % env.d, out)     # Prompt kam unverändert an
         self.assertIn(str(env.remote / "ws" / ".tinyops-wt" / str(rid)), out)   # im eigenen Worktree gestartet

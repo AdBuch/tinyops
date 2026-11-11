@@ -117,6 +117,24 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.28.0
+
+- [ ] `r28-01` Einstellungen → Microsoft 365: Tenant und Client-ID eintragen, speichern → «Anmelden» erscheint, die angefragten Rechte und die Rückleitung stehen darunter
+- [ ] `r28-02` «Anmelden» → Microsoft-Anmeldung mit 2FA → zurück in tinyops, «Angemeldet als …»; im Log steht «Microsoft 365: angemeldet»
+- [ ] `r28-03` Geht die Rückleitung nicht: «Mit Code anmelden» → Code auf microsoft.com/devicelogin eingeben → tinyops meldet die Anmeldung
+- [ ] `r28-04` Fokus: Karte «Heute» zeigt die Termine von heute in der richtigen Uhrzeit, abgesagte fehlen; «Beitreten» erscheint kurz vor Beginn
+- [ ] `r28-05` Fokus: «Wartet auf dich» zeigt eine Mail direkt an dich, die du noch nicht beantwortet hast; nach dem Antworten verschwindet sie beim nächsten Lesen
+- [ ] `r28-06` Ein ungelesener Teams-Chat erscheint unter «Teams, ungelesen»; nach dem Lesen in Teams verschwindet er
+- [ ] `r28-07` Vergangener Termin → «als Zeit» → auf ein Ticket übernehmen → steht in der Zeiterfassung; ein zweites Mal wird abgelehnt
+- [ ] `r28-08` «Fokuszeit im Kalender eintragen dürfen» an, neu anmelden, Sitzung mit Haken starten → Termin «Fokus: …» im Outlook-Kalender
+- [ ] `r28-09` Tags darauf ohne neue Anmeldung: Daten kommen weiter (Refresh-Token)
+- [ ] `r28-10` «Abmelden» → Karten zeigen «Nicht angemeldet», das gespeicherte Token ist weg
+- [ ] `r28-11` MR in der Review-Liste freigeben → nach dem nächsten Auffrischen +20 XP, nur einmal
+- [ ] `r28-12` Claude Code oder Vibe starten → im Lauf-Dialog erscheinen während des Laufs Zeilen wie «▸ Bash: …», nicht erst am Ende
+- [ ] `r28-13` Vibe ohne `--auto-approve` → Warnung im Zuweisen-Dialog
+- [ ] `r28-14` KI-Kontingent: «Mistral-Abo öffnen» öffnet admin.mistral.ai/subscription
+- [ ] `r28-15` Log: keine wiederholten «GET /logo/… → 404» mehr
+
 ## 0.27.0
 
 - [ ] `r27-01` Agent über SSH zuweisen, Projekt liegt im Arbeitsordner → im Dialog «Repository liegt beim Agenten» mit der Remote-Adresse

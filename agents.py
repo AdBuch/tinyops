@@ -57,11 +57,15 @@ STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen",
 DEFAULT_MAX_MINUTES = 60
 MAX_PROMPT = 20000
 KINDS = {
+    # stream_args: damit man im Lauf sieht, was passiert. Im Druckmodus geben Claude Code und Vibe sonst erst am Ende etwas aus (0.28).
     "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic",
+               "stream_args": ["--output-format", "stream-json", "--verbose"], "stream_flags": ("--output-format",),
                "write_flags": ("--permission-mode", "--dangerously-skip-permissions", "--allowedTools", "--allowed-tools"), "write_hint": "--permission-mode acceptEdits"},
     "codex": {"label": "Codex", "bin": "codex", "argv": ["codex", "exec", PROMPT], "provider": "OpenAI",
               "write_flags": ("--full-auto", "--sandbox", "-s", "--dangerously-bypass-approvals-and-sandbox"), "write_hint": "--full-auto"},
-    "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral"},
+    "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral",
+             "stream_args": ["--output", "streaming"], "stream_flags": ("--output",),
+             "write_flags": ("--auto-approve", "--yolo"), "write_hint": "--auto-approve"},
     # Lokale Agenten: Aufrufe aus der Dokumentation der CLIs abgeleitet, nicht gegen die echten Programme getestet.
     # Anbieter und Modell je Agent (0.27): Laufen alle Modelle über denselben Proxy, sagt nur der Agent-Eintrag, ob ein Modell lokal ist.
     "goose": {"label": "Goose", "bin": "goose", "argv": ["goose", "run", "-i", PROMPT_FILE], "provider": "dem in Goose eingestellten Anbieter",
@@ -75,7 +79,7 @@ ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 RUNNER = '''R="$HOME/.tinyops/runs"
 ID="$1"
 export R ID
-{ "${SHELL:-/bin/sh}" -l -c 'PATH="$R/bin:$PATH"; TINYOPS_RUN_DIR="$R"; TINYOPS_RUN_ID="$ID"; export PATH TINYOPS_RUN_DIR TINYOPS_RUN_ID; exec sh "$R/$ID.cmd"'; echo $? > "$R/$ID.exit.tmp"; mv "$R/$ID.exit.tmp" "$R/$ID.exit"; } 2>&1 | tee "$R/$ID.log"
+{ "${SHELL:-/bin/sh}" -l -c 'PATH="$R/bin:$PATH"; TINYOPS_RUN_DIR="$R"; TINYOPS_RUN_ID="$ID"; PYTHONUNBUFFERED=1; export PATH TINYOPS_RUN_DIR TINYOPS_RUN_ID PYTHONUNBUFFERED; exec sh "$R/$ID.cmd"'; echo $? > "$R/$ID.exit.tmp"; mv "$R/$ID.exit.tmp" "$R/$ID.exit"; } 2>&1 | tee "$R/$ID.log"
 '''
 
 # ------------------------------------------------------------------ Hilfsskripte für den Agenten (0.18): fragen, belegen, berichten
@@ -383,14 +387,113 @@ def agent_env(agent):
 
 
 def agent_args(agent):
-    """Feste Argumente der Art mit Anbieter/Modell. opencode ohne Anbieter: nur der Modellname."""
+    """Feste Argumente der Art mit Anbieter/Modell. opencode ohne Anbieter: nur der Modellname. Dazu die Streaming-Argumente,
+    ausser du setzt das Ausgabeformat selbst in den zusätzlichen Argumenten."""
+    spec = KINDS[agent["kind"]]
     out = []
-    for a in KINDS[agent["kind"]]["argv"]:
+    for a in spec["argv"]:
         if a in (PROMPT, PROMPT_FILE):
             out.append(a)
         else:
             out.append(_sub_model(a, agent.get("model", ""), provider_of(agent)).lstrip("/"))
+    if spec.get("stream_args") and not any(x.split("=")[0] in spec["stream_flags"] for x in _extra(agent)):
+        out += spec["stream_args"]
     return out
+
+
+def _short(v, n=140):
+    v = " ".join(str(v if not isinstance(v, (dict, list)) else json.dumps(v, ensure_ascii=False)).split())
+    return v if len(v) <= n else v[:n - 1] + "…"
+
+
+def _tool_line(name, inp):
+    inp = inp if isinstance(inp, dict) else {"args": inp}
+    for k in ("command", "file_path", "path", "pattern", "url", "query", "description", "prompt"):
+        if inp.get(k):
+            return "▸ %s: %s" % (name, _short(inp[k], 160))
+    if isinstance(inp.get("todos"), list):
+        done = sum(1 for t in inp["todos"] if isinstance(t, dict) and t.get("status") == "completed")
+        return "▸ %s: %d von %d Punkten erledigt" % (name, done, len(inp["todos"]))
+    return "▸ %s %s" % (name, _short(inp, 120) if inp else "")
+
+
+def _first(v):
+    if isinstance(v, list):
+        v = " ".join(x.get("text", "") if isinstance(x, dict) else str(x) for x in v)
+    lines = [x for x in str(v or "").splitlines() if x.strip()]
+    return (_short(lines[0], 120) + (" (+%d Zeilen)" % (len(lines) - 1) if len(lines) > 1 else "")) if lines else ""
+
+
+def stream_line(obj):
+    """Eine JSON-Zeile aus dem Stream von Claude Code oder Vibe in lesbaren Text. None = nicht zeigen."""
+    t = obj.get("type")
+    if t == "system":
+        if obj.get("subtype") == "init":
+            return "● gestartet%s" % (" (%s)" % obj["model"] if obj.get("model") else "")
+        return ("● %s" % _short(obj.get("subtype") or "")) if obj.get("subtype") in ("api_retry", "compact_boundary") else None
+    if t in ("assistant", "user"):
+        out = []
+        for c in ((obj.get("message") or {}).get("content") or []):
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "text" and c.get("text", "").strip():
+                out.append(c["text"].strip())
+            elif c.get("type") == "tool_use":
+                out.append(_tool_line(c.get("name") or "Werkzeug", c.get("input")))
+            elif c.get("type") == "tool_result":
+                f = _first(c.get("content"))
+                if c.get("is_error"):
+                    out.append("  ✗ %s" % (f or "Fehler"))
+                elif f:
+                    out.append("  → %s" % f)
+        return "\n".join(out) or None
+    if t == "result":
+        head = "■ %s nach %s Schritten%s" % ("fertig" if obj.get("subtype") == "success" and not obj.get("is_error") else "abgebrochen (%s)" % obj.get("subtype"),
+                                           obj.get("num_turns", "?"), ", %d s" % (obj["duration_ms"] // 1000) if isinstance(obj.get("duration_ms"), int) else "")
+        return head + ("\n" + str(obj["result"]).strip() if obj.get("result") else "")
+    if t == "stream_event":
+        return None
+    role = obj.get("role")                      # Vibe (--output streaming): eine Nachricht je Zeile, OpenAI-ähnlich
+    if role:
+        out = []
+        content = obj.get("content")
+        if role == "assistant":
+            if isinstance(content, str) and content.strip():
+                out.append(content.strip())
+            for tc in obj.get("tool_calls") or []:
+                fn = (tc or {}).get("function") or {}
+                args = fn.get("arguments")
+                try:
+                    args = json.loads(args) if isinstance(args, str) else args
+                except ValueError:
+                    pass
+                out.append(_tool_line(fn.get("name") or "Werkzeug", args))
+        elif role == "tool":
+            f = _first(content)
+            out.append("  → %s" % f if f else "")
+        elif role in ("user", "system"):
+            return None
+        return "\n".join(x for x in out if x) or None
+    return _short(obj, 200)
+
+
+def render_stream(text):
+    """Log eines Laufs für die Anzeige: JSON-Zeilen der Agenten lesbar machen, alles andere bleibt."""
+    out = []
+    for line in (text or "").splitlines():
+        s_ = line.strip()
+        if s_.startswith("{") and s_.endswith("}"):
+            try:
+                obj = json.loads(s_)
+            except ValueError:
+                out.append(line)
+                continue
+            r = stream_line(obj) if isinstance(obj, dict) else None
+            if r:
+                out.extend(r.splitlines())
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 def remote_cmdline(agent):
@@ -1070,7 +1173,7 @@ class Service:
         pf.write_text(prompt, encoding="utf-8")
         spec = local_spec(a, prompt, pf, wd)
         hb = write_helpers(d)
-        spec["env"] = dict(spec.get("env") or {}, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID=str(rid),
+        spec["env"] = dict(spec.get("env") or {}, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID=str(rid), PYTHONUNBUFFERED="1",
                            PATH=str(hb) + os.pathsep + os.environ.get("PATH", ""))
         (d / ("%d.spec.json" % rid)).write_text(json.dumps(spec), encoding="utf-8")
         kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "cwd": str(d), "close_fds": True}
@@ -1444,9 +1547,10 @@ class Service:
         n = max(1, min(int(lines), 400))
         if conn is None:
             try:
-                data = (self.run_dir / ("%d.log" % run_id)).read_bytes()[-200000:].decode("utf-8", "replace")
+                data = (self.run_dir / ("%d.log" % run_id)).read_bytes()[-400000:].decode("utf-8", "replace")
             except OSError:
                 return "(noch keine Ausgabe)"
-            return clean_text("\n".join(data.splitlines()[-n:]))
-        rc, out, err = run_remote(conn, 'tail -n %d "$HOME/.tinyops/runs/%d.log" 2>/dev/null || echo "(noch keine Ausgabe)"' % (n, int(run_id)), timeout=20)
-        return clean_text(out)
+            return clean_text("\n".join(render_stream("\n".join(data.splitlines()[-n * 3:])).splitlines()[-n:]))
+        # Stream-Zeilen sind lang und werden zu wenigen Anzeigezeilen: mehr Rohzeilen holen, lesbar machen, dann kürzen
+        rc, out, err = run_remote(conn, 'tail -n %d "$HOME/.tinyops/runs/%d.log" 2>/dev/null | tail -c 400000 || echo "(noch keine Ausgabe)"' % (n * 3, int(run_id)), timeout=20)
+        return clean_text("\n".join(render_stream(out).splitlines()[-n:]))

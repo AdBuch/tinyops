@@ -34,7 +34,7 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.25.0** ✓ | Workspaces lokal: Unterordner nach Git-Repos durchsuchen (GitLab, GitHub, andere, ohne Git), ungepushte Commits, Uncommittetes, Stashes, Worktrees der Agenten, Agent direkt zuweisen (geliefert 2026-11-10) | – | M |
 | **0.26.0** ✓ | Agenten aus tinyops: Auftrag aus Ticket und Akzeptanzkriterien, Meldung je Kriterium (`tinyops-ak`), Änderungen des Laufs, Nachbessern, Kommentar-Entwurf, Hinweis zu Schreibrechten von Claude Code und Codex (geliefert 2026-11-11) | – | M–L |
 | **0.27.0** ✓ | Projekte beim Agenten prüfen und klonen, Goose mit Anbieter und Modell je Agent (Qwen über Proxy), Geheimnis-Scan vor dem Push, Vorprüfung durch zweiten Agenten, Fokus-Leiste nur bei laufender Sitzung, Hilfe in allen Einstellungen (geliefert 2026-11-11) | – | M |
-| 0.28.0 | Teams, Mail und Kalender über Graph (delegiert, Anmeldung im Browser mit 2FA): ersetzt den ICS-Plan. Braucht Client-ID, Tenant-ID und die Klärung zu Conditional Access; kann vorgezogen werden, sobald das da ist | – | L |
+| **0.28.0** ✓ | Microsoft 365 über Graph (delegiert, Anmeldung im Browser mit 2FA oder Code): Termine heute, Mail und Teams «wartet auf dich», Termine als Zeit übernehmen, Fokuszeit im Kalender eintragen; Review-XP; Agenten-Streaming für Claude Code und Vibe (geliefert 2026-11-11) | – | L |
 | 0.29.0 | Buchungen und Berufsbildung: Warteschlange für das langsame Qwen (Buchungstexte, Wochenrückblick), Projectron-Vertrag | – | M |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.

@@ -92,5 +92,6 @@
     {"id": "claude-devvm", "name": "claude-devvm", "kind": "claude", "connection": "dev-vm", "workspace_root": "/home/adrian/work", "extra_args": "", "cloud": true},
     {"id": "lokal-llm", "name": "lokal-llm", "kind": "custom", "connection": "local", "workspace_root": "~/work", "extra_args": "", "cloud": false, "command": "mein-agent --prompt-file {prompt_file}"},
     {"id": "qwen", "name": "Qwen lokal", "kind": "goose", "connection": "dev-vm", "workspace_root": "/home/adrian/work", "extra_args": "", "model": "qwen-lokal", "provider": "", "cloud": false, "clone_via": "ssh"}
-  ]
+  ],
+  "m365": {"enabled": false, "tenant": "", "client_id": "", "mail": true, "calendar": true, "teams": true, "calendar_write": false, "reply_days": 3, "refresh_minutes": 5}
 }

@@ -5,6 +5,31 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.28.0]
+
+### Neu
+- **Microsoft 365 (Mail, Kalender, Teams) über Graph.** Anmeldung als du selbst im Browser mit 2FA (OAuth mit PKCE, Rückleitung auf `http://localhost`), ersatzweise mit Gerätecode. Gespeichert wird nur das Refresh-Token; neu anmelden musst du erst, wenn Microsoft es verlangt.
+  - **Heute** im Fokus: deine Termine, der nächste mit «In 8 min», «Beitreten» kurz vor Beginn. Abgesagte und abgelehnte Termine fehlen.
+  - **Wartet auf dich:** Mails direkt an dich, nicht von dir, nicht von no-reply und noch nicht beantwortet (Exchange merkt sich die letzte Antwort), dazu alles mit Fähnchen und ungelesene Teams-Chats. Ein Klick öffnet Outlook bzw. Teams.
+  - **Termin als Zeit:** Vergangene Termine von heute mit «als Zeit» in die Zeiterfassung übernehmen, auf ein Ticket oder einen Fokusbereich. Gebucht wird wie immer erst nach deiner Bestätigung des Entwurfs.
+  - **Fokuszeit im Kalender:** Beim Start einer Fokus-Sitzung «Im Kalender als beschäftigt eintragen». Nur wenn in den Einstellungen erlaubt; dann fragt tinyops `Calendars.ReadWrite` statt `Calendars.Read` an.
+  - Die Fokus-Leiste sagt «Termin in 8 min: …», wenn während einer Sitzung ein Termin naht.
+- **Review gibt XP:** Gibst du einen MR aus deiner Review-Liste frei, gibt es einmal 20 XP.
+- **Agenten mitlesen:** Claude Code läuft mit `--output-format stream-json --verbose`, Mistral Vibe mit `--output streaming`. Der Lauf-Dialog zeigt daraus lesbar, was der Agent tut (Werkzeug, Befehl, Datei, Fehler, Ergebnis). Python-Programme laufen ungepuffert.
+- **Vibe-Hinweis:** Ohne `--auto-approve` lehnt Vibe Werkzeugaufrufe ab. Der Dialog warnt, wie bei Claude Code und Codex.
+- **Mistral-Abo direkt öffnen:** Link auf admin.mistral.ai/subscription im KI-Kontingent und beim Lesezeichen.
+
+### Korrigiert
+- Fehlende Logos wurden alle fünf Sekunden neu angefragt (`/logo/jira`, `/logo/gl` → 404 im Log). Jetzt einmal je Seitenaufruf; `gl` zeigt auf das GitLab-Logo.
+- Tote Klicks aus dem Nutzungsbericht: Fundstellen des Geheimnis-Scans kopieren auf Klick «Datei:Zeile»; die Hilfe zu festen Wochenblöcken nennt das Format.
+
+### Grenzen
+- Microsoft 365 ist nur gegen einen nachgebauten Graph-Server getestet. Ob eure Richtlinien (Conditional Access, Zustimmung durch Admin) die Anmeldung zulassen, zeigt erst der erste echte Versuch.
+- «Wartet auf dich» ist eine Faustregel: Antworten aus einem anderen Programm oder vom Handy erkennt Exchange nicht immer.
+- Teams: nur ob ein Chat ungelesen ist, keine Erwähnungen in Kanälen (dafür bräuchte es weitere Rechte).
+- Das Streaming-Format von Vibe ist nicht dokumentiert. tinyops zeigt bekannte Felder lesbar, Unbekanntes gekürzt als JSON.
+- Wer im tmux mitliest, sieht bei Claude Code und Vibe jetzt JSON-Zeilen statt Text.
+
 ## [0.27.0]
 
 ### Neu

@@ -459,6 +459,25 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 4z. Microsoft 365, Review-XP, Agenten mitlesen (neu in 0.28.0)
+
+**Microsoft 365.** Einmalig braucht es eine App-Registrierung in Entra ID (macht meist die IT):
+
+1. Neue Registrierung, nur Konten dieses Verzeichnisses.
+2. Plattform «Mobile- und Desktopanwendungen», Umleitungs-URI `http://localhost`.
+3. «Öffentliche Clientflows zulassen» auf Ja (für die Anmeldung mit Code). Kein Client-Secret.
+4. Delegierte Graph-Rechte: `User.Read`, `Mail.Read`, `Calendars.Read` (oder `Calendars.ReadWrite` zum Eintragen der Fokuszeit), `Chat.Read`, `offline_access`.
+
+```json
+"m365": {"enabled": true, "tenant": "<Verzeichnis-ID>", "client_id": "<Anwendungs-ID>", "mail": true, "calendar": true, "teams": true, "calendar_write": false}
+```
+
+Dann Einstellungen → Microsoft 365 → «Anmelden». Im Fokus erscheinen «Heute» (Termine) und «Wartet auf dich» (Mail, Teams). Vergangene Termine übernimmst du mit «als Zeit» in die Zeiterfassung. Mit `calendar_write` kannst du beim Start einer Fokus-Sitzung einen Termin «Fokus: …» eintragen lassen.
+
+**Review-XP.** Eine Freigabe von dir auf einem MR in deiner Review-Liste gibt einmal 20 XP.
+
+**Agenten mitlesen.** Claude Code und Mistral Vibe laufen mit Streaming-Ausgabe; der Lauf-Dialog zeigt Schritt für Schritt, was sie tun. Vibe braucht `--auto-approve` in den zusätzlichen Argumenten, sonst lehnt es Werkzeugaufrufe ab.
+
 ## 4y. Projekte beim Agenten, Goose mit eigenem Modell, Geheimnis-Scan, Hilfe (neu in 0.27.0)
 
 **Projekte beim Agenten.** Ein Projekt liegt unter `<Arbeitsordner des Agenten>/<Projektname>` (oder dem «Agenten-Ordner» des Projekts). Der Zuweisen-Dialog zeigt, ob es da ist. Fehlt es, klont «Jetzt klonen» es dort, mit den Git-Zugangsdaten des Zielrechners:

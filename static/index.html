@@ -310,6 +310,11 @@
   .sset h2 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.015em; }
   .sset h3 { font-size: 14px; margin: 22px 0 6px; }
   .lead { color: var(--quiet); margin: 0; max-width: 62ch; }
+  .mlist { list-style: none; padding: 0; margin: 4px 0 8px; font-size: 13px; display: grid; gap: 4px; }
+  .mlist li { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .mlist li > a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+  .mlist li small { color: var(--quiet); white-space: nowrap; } .mlist .t { font-variant-numeric: tabular-nums; color: var(--quiet); width: 4.6ch; flex: none; }
+  .mlist .mev.past { opacity: .6; } .mlist .mev.now > a { font-weight: 650; } .mlist .chip, .mlist button { flex: none; padding: 1px 8px; font-size: 12px; }
   details.help { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-width: 86ch; }
   details.help > summary { cursor: pointer; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--quiet); }
   details.help[open] > summary { color: inherit; border-bottom: 1px solid var(--line); }
@@ -1166,7 +1171,8 @@ function storiesTile() {
     body: `<div class="slots">${slots.join('')}</div>${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}` };
 }
 
-const logo = n => `<img class="logo" src="/logo/${n}" alt="" onerror="this.remove()">`;
+const LOGO_MISS = new Set();      // fehlt ein Logo, wird es nicht bei jedem Neuzeichnen wieder angefragt
+const logo = n => LOGO_MISS.has(n) ? '' : `<img class="logo" src="/logo/${n === 'gl' ? 'gitlab' : n}" alt="" onerror="LOGO_MISS.add('${n}');this.remove()">`;
 let openTiles = LS.get('open', []);
 function applyLayout(l) {
   document.body.classList.toggle('layout-list', l === 'list');
@@ -1360,7 +1366,8 @@ const HELP = {
     <li>Beim Agenten die Verbindung wählen und als Arbeitsordner den Ordner angeben, in dem die Repos liegen (absolut, z. B. <code>/home/benutzer/workspace/projects</code>). «Testen».</li></ol>
     <p><b>Häufige Fehler:</b> «Permission denied» = der öffentliche Schlüssel fehlt in <code>~/.ssh/authorized_keys</code> des Zielrechners, oder die Rechte sind zu offen (<code>chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys</code>). «UNPROTECTED PRIVATE KEY FILE» = <code>chmod 600 ~/.ssh/tinyops_agent</code>, und nicht die <code>.pub</code>-Datei angeben.</p>
     <p><b>Projekte beim Agenten:</b> Ein Projekt liegt unter Arbeitsordner/Projektname (oder dem «Agenten-Ordner» des Projekts). Fehlt es, bietet der Zuweisen-Dialog «Jetzt klonen» an. Geklont wird mit den Git-Zugangsdaten des Zielrechners: Für SSH muss dessen Schlüssel bei GitLab oder GitHub hinterlegt sein (prüfen mit <code>ssh -T git@gitlab.firma.ch</code> auf dem Zielrechner).</p>
-    <p><b>Schreibrechte der Cloud-CLIs:</b> Claude Code braucht in «Zusätzliche Argumente» <code>--permission-mode acceptEdits</code>, Codex <code>--full-auto</code>. Sonst ändern sie im Lauf keine Dateien.</p>
+    <p><b>Schreibrechte der Cloud-CLIs:</b> Claude Code braucht in «Zusätzliche Argumente» <code>--permission-mode acceptEdits</code>, Codex <code>--full-auto</code>, Mistral Vibe <code>--auto-approve</code>. Sonst ändern sie im Lauf keine Dateien und lehnen Werkzeugaufrufe ab.</p>
+    <p><b>Mitlesen:</b> Claude Code und Vibe laufen mit Streaming-Ausgabe (<code>--output-format stream-json</code> bzw. <code>--output streaming</code>). tinyops zeigt daraus im Lauf, was der Agent gerade tut. Wer im tmux mitliest, sieht die rohen JSON-Zeilen. Setzt du das Ausgabeformat selbst in den zusätzlichen Argumenten, lässt tinyops seines weg.</p>
     <p><b>Goose mit Qwen oder anderen Modellen:</b> Art «Goose», Modell = der Name, unter dem dein Proxy oder Ollama das Modell führt. Anbieter leer lassen, wenn Goose auf dem Zielrechner schon eingerichtet ist (<code>goose configure</code>); tinyops setzt dann nur <code>GOOSE_MODEL</code>.
       Laufen alle Modelle über denselben Proxy, leg je Modell einen Agenten an und setz den Haken «sendet Daten an einen Cloud-Anbieter» bei jedem, das nicht im eigenen Netz rechnet. Nur Agenten ohne den Haken dürfen an <code>restricted</code>-Projekte.</p>
     <p><b>Eigener Befehl:</b> steht nur in der config.json (<code>"command"</code>, mit <code>{prompt_file}</code>), damit niemand über die Oberfläche Befehle einschleusen kann.</p>`,
@@ -1375,6 +1382,15 @@ const HELP = {
   usage: `<p>Claude und Codex: tinyops nimmt das Token aus der Anmeldedatei der jeweiligen CLI auf diesem Rechner und fragt damit das freie Kontingent ab. Die Schnittstelle ist inoffiziell und kann sich ändern. Mistral: Der Stand kommt über ein Lesezeichen aus deinem Browser.</p>`,
   llm: `<p>Für Ticket-Entwürfe und Bewertungen im Panel (nicht für Agenten). Ollama: Adresse <code>http://127.0.0.1:11434</code>, Modell wie in <code>ollama list</code>. OpenAI-kompatibel (llama.cpp, LiteLLM, vLLM): Basisadresse mit oder ohne <code>/v1</code> und der Modellname.</p>
     <p>Adressen ausserhalb des eigenen Netzes sind gesperrt, solange «entfernte Adresse erlauben» aus ist.</p>`,
+  m365: `<p><b>Einmalig in Entra ID (Azure AD) – das macht meist die IT:</b></p>
+    <ol><li>«App-Registrierungen» → «Neue Registrierung». Name z. B. «tinyops», Kontotyp «Nur Konten in diesem Organisationsverzeichnis».</li>
+    <li>Plattform hinzufügen: <b>«Mobile- und Desktopanwendungen»</b>, Umleitungs-URI <code>http://localhost</code> (der Port spielt dort keine Rolle).</li>
+    <li>Unter «Authentifizierung» <b>«Öffentliche Clientflows zulassen»</b> auf Ja (für «Mit Code anmelden»). Kein Geheimnis und kein Zertifikat anlegen.</li>
+    <li>«API-Berechtigungen» → Microsoft Graph → <b>delegiert</b>: <code>User.Read</code>, <code>Mail.Read</code>, <code>Calendars.Read</code> (oder <code>Calendars.ReadWrite</code> fürs Eintragen der Fokuszeit), <code>Chat.Read</code>, <code>offline_access</code>. Je nach Richtlinie erteilt ein Admin die Zustimmung.</li>
+    <li>Aus «Übersicht» die <b>Anwendungs-ID (Client)</b> und die <b>Verzeichnis-ID (Tenant)</b> hier eintragen, speichern, «Anmelden».</li></ol>
+    <p>Die Anmeldung läuft im Browser mit deiner 2FA. tinyops speichert nur das Refresh-Token (Schlüsselbund oder secrets.json) und fragt erst wieder nach, wenn Microsoft es verlangt (Ablauf, Conditional Access, Passwortwechsel).</p>
+    <p><b>Was tinyops liest:</b> Mails der letzten Tage im Posteingang (Absender, Betreff, Vorschau), deine Termine heute und morgen, die letzte Nachricht deiner Chats. Nichts davon verlässt deinen Rechner. <b>Was es schreibt:</b> nur den Termin «Fokus: …», wenn du «Fokuszeit eintragen dürfen» einschaltest und beim Start der Sitzung anhakst.</p>
+    <p><b>«Wartet auf dich»</b> heisst: direkt an dich, nicht von dir, nicht von einer Absenderadresse wie no-reply, und noch nicht beantwortet. Dazu alles mit Fähnchen.</p>`,
   where: `<p>Die config.json enthält keine Geheimnisse: Tokens liegen im Schlüsselbund des Systems oder in der Datei daneben mit Rechten nur für dich. Das Protokoll zeigt jede schreibende Aktion.</p>`,
 };
 let firstLoad = true, pollT = null;
@@ -1582,10 +1598,12 @@ document.addEventListener('click', ev => {
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches && ev.target.matches('[data-fopen][tabindex]')) ev.target.click(); });
 document.addEventListener('toggle', ev => { if (ev.target && ev.target.id === 'usageDet') { usageOpen = ev.target.open; renderUsageBox(); } }, true);
+const MISTRAL_URL = 'https://admin.mistral.ai/subscription';
 function usageBody() {
   if (!usageData) return '<div class="empty">Frage Kontingent ab …</div>';
   const rows = usageData.items.map(a => {
-    if (!a.ok) return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b><span class="chip warn">nicht abrufbar</span></div><div class="aimeta"><span>${esc(a.error)}</span></div></div>`;
+    const mlink = a.id === 'mistral' ? ` <a href="${MISTRAL_URL}" target="_blank" rel="noopener" title="Dort das Lesezeichen «tinyops: Mistral lesen» anklicken">Mistral-Abo öffnen</a>` : '';
+    if (!a.ok) return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b><span class="chip warn">nicht abrufbar</span></div><div class="aimeta"><span>${esc(a.error)}${mlink}</span></div></div>`;
     const ws = a.windows.map(w => {
       const st = w.left_pct <= 0 ? 'empty' : w.left_pct < 20 ? 'low' : 'ok';
       const mark = w.time_left_pct == null ? '' : `<b style="left:${w.time_left_pct}%" title="${w.time_left_pct} % der Zeit im Fenster übrig"></b>`;
@@ -1593,7 +1611,7 @@ function usageBody() {
         <div class="aimeta"><span><b>${esc(w.left_pct)} %</b> frei im Fenster ${esc(w.label)}${w.detail ? ' <span class="quiet">(' + esc(w.detail) + ')</span>' : ''}</span><span>${w.secs_left == null ? '' : 'Reset in ' + fmtReset(w.secs_left)}</span></div>
         ${paceLine(w)}`;
     }).join('');
-    const age = a.manual ? `<div class="aimeta"><span class="quiet small">${a.stale ? '<b style="color:var(--warn)">Stand ist alt.</b> ' : ''}Zuletzt per Lesezeichen gesendet vor ${fmtAgo(a.fetched)}.</span></div>` : '';
+    const age = a.manual ? `<div class="aimeta"><span class="quiet small">${a.stale ? '<b style="color:var(--warn)">Stand ist alt.</b> ' : ''}Zuletzt per Lesezeichen gesendet vor ${fmtAgo(a.fetched)}.${mlink}</span></div>` : '';
     return `<div class="aiacc"><div class="aihead"><b>${esc(a.name)}</b>${a.stale ? '<span class="chip warn">veraltet</span>' : ''}</div>${ws}${age}</div>`;
   }).join('');
   const ago = Math.max(0, Math.round((Date.now() / 1000 - usageData.fetched) / 60));
@@ -2631,7 +2649,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokusbereiche</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokusbereiche</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -2780,6 +2798,25 @@ async function loadSettings() {
       ${field('ws-scan', 'Neu einlesen alle (Minuten)', S.workspaces.scan_minutes, { type: 'number', err: 'workspaces.scan_minutes' })}
     </div>`)}
 
+  ${sect('m365', 'Microsoft 365', 'Mail, Kalender und Teams-Chats aus deinem Konto: was auf deine Antwort wartet, die Termine von heute im Fokus, vergangene Termine als Zeit übernehmen. Gelesen wird als du selbst; geschrieben wird nur ein Fokus-Termin in deinen Kalender, wenn du es einschaltest und beim Start anhakst.', `
+    <label class="check"><input type="checkbox" id="m3-on" ${S.m365.enabled ? 'checked' : ''}><span><strong>Microsoft 365 einbinden</strong></span></label>
+    <div class="grid2">
+      ${field('m3-tenant', 'Tenant (Verzeichnis-ID)', S.m365.tenant, { ph: '00000000-0000-0000-0000-000000000000 oder firma.onmicrosoft.com', err: 'm365.tenant' })}
+      ${field('m3-client', 'Client-ID (Anwendungs-ID)', S.m365.client_id, { ph: '00000000-0000-0000-0000-000000000000', err: 'm365.client_id', help: 'Aus der App-Registrierung in Entra ID. Kein Geheimnis nötig.' })}
+    </div>
+    <div class="row" style="flex-wrap:wrap;gap:6px 18px;margin:6px 0 10px">
+      <label class="check"><input type="checkbox" id="m3-mail" ${S.m365.mail ? 'checked' : ''}><span>Mail</span></label>
+      <label class="check"><input type="checkbox" id="m3-cal" ${S.m365.calendar ? 'checked' : ''}><span>Kalender</span></label>
+      <label class="check"><input type="checkbox" id="m3-teams" ${S.m365.teams ? 'checked' : ''}><span>Teams-Chats</span></label>
+      <label class="check"><input type="checkbox" id="m3-write" ${S.m365.calendar_write ? 'checked' : ''}><span>Fokuszeit im Kalender eintragen dürfen</span></label>
+    </div>
+    <div class="grid3">
+      ${field('m3-days', 'Mails der letzten (Tage)', S.m365.reply_days, { type: 'number', err: 'm365.reply_days', help: 'So weit zurück sucht «Wartet auf dich».' })}
+      ${field('m3-every', 'Neu lesen alle (Minuten)', S.m365.refresh_minutes, { type: 'number', err: 'm365.refresh_minutes' })}
+    </div>
+    <div class="small quiet">Rechte, die tinyops bei der Anmeldung anfragt: <code>${esc(S.m365.scopes.join(' '))}</code>. Rückleitung: <code>${esc(S.m365.redirect)}</code></div>
+    <div id="m3-status" style="margin-top:10px"></div>`)}
+
   ${sect('helpdesk', 'Helpdesk-Jira', 'Eine zweite Jira-Instanz, nur lesend: dir zugewiesene Tickets erscheinen im Fokus, eine Queue meldet Neues, und angeheftet läuft die Zeit auf das Helpdesk-Ticket. Kommentieren und Status ändern bleibt im Helpdesk.', `
     <label class="check"><input type="checkbox" id="hd-on" ${S.helpdesk.enabled ? 'checked' : ''}><span><strong>Helpdesk einbinden</strong></span></label>
     <div class="grid2">
@@ -2859,7 +2896,7 @@ async function loadSettings() {
   GH = ((S.github || {}).repos || []).map(r => ({ ...r })); renderGhRepos();
   $('gh-test').onclick = testGithub; $('gh-search').onclick = searchGithub; $('gh-q').onkeydown = ev => { if (ev.key === 'Enter') searchGithub(); };
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
-  renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false);
+  renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false); renderM3Status();
   renderLlmKey();
   FA = S.focus.areas.map(a => ({ ...a, pools: (a.pools || []).join(', '), activities: (a.activities || []).join(', ') })); renderFocusAreas();
   $('fa-add').onclick = () => { FA.push({ id: '', name: '', target_pct: 0, ticket: '', pools: '', activities: '', blocks_text: '' }); renderFocusAreas(); };
@@ -2896,11 +2933,42 @@ async function loadSettings() {
   });
 }
 
+// -- Microsoft 365 (0.28): Anmeldung und Stand
+let M3_DEV = null;
+async function renderM3Status() {
+  const box = $('m3-status'); if (!box) return;
+  let st = null;
+  try { st = await api('GET', '/api/m365'); } catch (e) { box.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return; }
+  if (!st || !st.enabled) { box.innerHTML = '<div class="small quiet">Aus. Einschalten, Tenant und Client-ID eintragen, speichern, dann anmelden.</div>'; return; }
+  if (!st.ready && !st.demo) { box.innerHTML = '<div class="small quiet">Tenant und Client-ID eintragen und speichern, dann erscheint «Anmelden».</div>'; return; }
+  const err = Object.entries(st.errors || {}).map(([k, v]) => `<div class="small" style="color:var(--bad)">${esc(k)}: ${esc(v)}</div>`).join('');
+  box.innerHTML = st.logged_in
+    ? `<div class="row" style="gap:10px;flex-wrap:wrap"><span class="okk">Angemeldet${st.me ? ' als ' + esc(st.me) : ''}</span>${st.ts ? `<span class="small quiet">Stand ${hhmm(st.ts)}</span>` : ''}
+        <button id="m3-refresh">Jetzt lesen</button><button id="m3-out" class="quiet-btn">Abmelden</button></div>${st.error ? `<div class="banner warn">${esc(st.error)}</div>` : ''}${err}`
+    : `${st.login_error ? `<div class="banner warn">${esc(st.login_error)}</div>` : ''}<div class="row" style="gap:10px;flex-wrap:wrap"><button class="primary" id="m3-in">Anmelden</button>
+        <button id="m3-dev" title="Falls die Rückleitung auf localhost bei euch nicht geht: Code auf microsoft.com/devicelogin eingeben">Mit Code anmelden</button>
+        <span class="small quiet">Öffnet die Microsoft-Anmeldung mit deiner 2FA. Danach kommst du hierher zurück.</span></div><div id="m3-code"></div>`;
+  if ($('m3-in')) $('m3-in').onclick = async () => { try { location.href = (await post('/api/m365/login', {})).url; } catch (e) { toast(e.message); } };
+  if ($('m3-out')) $('m3-out').onclick = async () => { try { await post('/api/m365/logout', {}); toast('Abgemeldet'); renderM3Status(); load(); } catch (e) { toast(e.message); } };
+  if ($('m3-refresh')) $('m3-refresh').onclick = async () => { try { await post('/api/m365/refresh', {}); renderM3Status(); load(); } catch (e) { toast(e.message); } };
+  if ($('m3-dev')) $('m3-dev').onclick = async () => {
+    try {
+      const d = await post('/api/m365/device', {});
+      $('m3-code').innerHTML = `<div class="banner warn" style="margin-top:8px">Öffne <a href="${esc(d.uri)}" target="_blank" rel="noopener">${esc(d.uri)}</a> und gib diesen Code ein: <b style="font-size:20px;letter-spacing:.08em">${esc(d.user_code)}</b> <button class="quiet-btn" data-copy="${esc(d.user_code)}">${ic('copy')} kopieren</button><div class="small">tinyops wartet auf die Anmeldung …</div></div>`;
+      clearInterval(M3_DEV);
+      M3_DEV = setInterval(async () => {
+        let x; try { x = await post('/api/m365/device_state', {}); } catch (e) { return; }
+        if (x.state === 'fertig') { clearInterval(M3_DEV); toast('Bei Microsoft 365 angemeldet'); renderM3Status(); load(); }
+        else if (x.state === 'fehler') { clearInterval(M3_DEV); $('m3-code').innerHTML = `<div class="banner bad">${esc(x.error)}</div>`; }
+      }, 3000);
+    } catch (e) { toast(e.message); }
+  };
+}
 function renderBookmarklet() {
   const box = $('us-bm'); if (!box) return;
   const href = 'javascript:' + encodeURIComponent(S.usage.bookmarklet_src.replace('__ORIGIN__', location.origin));
   box.innerHTML = `<b>Mistral per Lesezeichen:</b> Diesen Link in die Lesezeichenleiste ziehen: <a class="pchip" href="${esc(href)}" onclick="return false" draggable="true">tinyops: Mistral lesen</a><br>
-    Dann auf <code>admin.mistral.ai</code> (eingeloggt) anklicken. Das Lesezeichen liest dort die Budgetzahlen und öffnet tinyops mit nur diesen Zahlen (Prozent, Budget, Reset). Cookies und Zugangsdaten gehen nie an tinyops. Mistral ändert die Seite gelegentlich: dann meldet das Lesezeichen «Keine Budgetdaten gefunden». Im Container muss das Panel vom Browser aus unter derselben Adresse erreichbar sein, die du gerade benutzt.`;
+    Dann <a href="${MISTRAL_URL}" target="_blank" rel="noopener">admin.mistral.ai/subscription</a> öffnen (eingeloggt) und dort das Lesezeichen anklicken. Das Lesezeichen liest dort die Budgetzahlen und öffnet tinyops mit nur diesen Zahlen (Prozent, Budget, Reset). Cookies und Zugangsdaten gehen nie an tinyops. Mistral ändert die Seite gelegentlich: dann meldet das Lesezeichen «Keine Budgetdaten gefunden». Im Container muss das Panel vom Browser aus unter derselben Adresse erreichbar sein, die du gerade benutzt.`;
 }
 function renderJiraSecret() {
   const basic = $('ji-auth').value === 'basic';
@@ -2927,7 +2995,7 @@ function renderFocusAreas() {
     ${fixed(a.id) ? '' : `<div class="grid3">
       ${field('fa-a' + i, 'Tätigkeiten', a.activities, { err: 'focus.areas.' + i + '.activities', help: 'Komma getrennt. Wählst du in der Sitzung; sie landen im Buchungstext.' })}
       ${field('fa-c' + i, 'Kategorien im Board', a.pools, { err: 'focus.areas.' + i + '.pools', help: 'Vorhaben in diesen Kategorien zählen zu diesem Bereich.' })}
-      ${field('fa-b' + i, 'Feste Wochenblöcke', a.blocks_text || '', { ph: 'Di 13:30-17:00, Do 08:00-10:00', err: 'focus.areas.' + i + '.blocks', help: 'Im Block zeigt der Fokus ein Band zum Starten.' })}
+      ${field('fa-b' + i, 'Feste Wochenblöcke', a.blocks_text || '', { ph: 'Di 13:30-17:00, Do 08:00-10:00', err: 'focus.areas.' + i + '.blocks', help: 'Format: Tag von-bis, mehrere mit Komma. Tage: Mo Di Mi Do Fr Sa So. Beispiel: <code>Di 13:30-17:00, Do 08:00-10:00</code>.' })}
     </div>
     <div class="row"><button class="quiet-btn" data-fadel="${i}">Bereich entfernen</button></div>`}
   </div>`).join('');
@@ -3271,6 +3339,8 @@ function collect() {
     features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     workspaces: { enabled: $('ws-on').checked, roots: val('ws-roots'), depth: val('ws-depth'), stale_days: val('ws-stale'), scan_minutes: val('ws-scan') },
+    m365: { enabled: $('m3-on').checked, tenant: val('m3-tenant'), client_id: val('m3-client'), mail: $('m3-mail').checked, calendar: $('m3-cal').checked,
+      teams: $('m3-teams').checked, calendar_write: $('m3-write').checked, reply_days: val('m3-days'), refresh_minutes: val('m3-every') },
     helpdesk: { enabled: $('hd-on').checked, url: val('hd-url'), name: val('hd-name'), auth: val('hd-auth'), username: val('hd-user'), assigned_jql: val('hd-jql'),
                 queue_jql: val('hd-qjql'), watch_jql: val('hd-wjql'), sla_hours: val('hd-sla'), area: val('hd-area') },
     focus: { week_hours: val('fo-hours'), day_start: val('fo-start'), day_end: val('fo-end'),
@@ -3564,6 +3634,7 @@ function renderRail() {
       <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Abnahmen und Fokus-Sitzungen ab 20 min. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
     </section>`;
   }
+  h += m365Rail();
   h += focusRail();
   h += wsRail();
   const j = state.jira;
@@ -3809,9 +3880,15 @@ function fbarModel() {
   if (ses) {      // die Leiste gibt es nur, solange eine Fokus-Sitzung läuft
     if (FM_OPEN) return null;
     return { kind: 'ses', area: ses.area, tag: ses.area_name, title: ses.title, sub: [ses.key !== ses.title ? ses.key : '', ses.activity].filter(Boolean).join(' · '),
-             soll: blk && blk.area !== ses.area ? `Soll: ${blk.name}-Block bis ${blk.until}` : '', ses };
+             soll: meetSoon() || (blk && blk.area !== ses.area ? `Soll: ${blk.name}-Block bis ${blk.until}` : ''), ses };
   }
   return null;
+}
+function meetSoon() {      // ein Termin in den nächsten 15 Minuten: in der Fokus-Leiste sagen
+  const c = state && state.m365 && state.m365.calendar, nx = c && c.next;
+  if (!nx) return '';
+  const m = Math.round((nx.start - Date.now() / 1000) / 60);
+  return m >= 0 && m <= 15 ? `Termin in ${m} min: ${short(nx.subject, 40)}` : '';
 }
 function fbAutoText(ses) {
   const rest = Math.max(0, Math.ceil((fmLeft(ses) + (ses.grace_secs || 600)) / 60));
@@ -3876,6 +3953,7 @@ function renderFocusDlg(opts) {
     <div class="what" role="radiogroup" aria-label="Woran">${opts.map(o => `<label class="${o.area ? arCls(o.area) : ''}"><input type="radio" name="fsw" value="${esc(o.v)}" ${o.v === FS.what ? 'checked' : ''}><span>${esc(short(o.l, 64))}</span><small>${esc(o.s)}</small></label>`).join('')}</div>
     ${acts.length ? `<div><div class="small quiet" style="margin-bottom:6px">Tätigkeit (landet im Text der Zeitbuchung)</div><div class="chips">${acts.map(a => `<button data-fsact="${esc(a)}" class="${FS.act === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div></div>` : ''}
     <div><div class="small quiet" style="margin-bottom:6px">Dauer</div><div class="chips">${[25, 50, 90].map(m => `<button data-fsmin="${m}" class="${FS.min === m ? 'on' : ''}">${m} min</button>`).join('')}</div></div>
+    ${state.m365 && state.m365.logged_in && state.m365.calendar_write ? `<label class="check"><input type="checkbox" id="fsCal" ${LS.get('fsCal', false) ? 'checked' : ''}><span>Im Kalender als beschäftigt eintragen <span class="quiet small">(Termin «Fokus: …» für die Dauer der Zeitbox)</span></span></label>` : ''}
     <div class="row"><button class="primary" id="fsGo">Starten</button><button id="fsNo">Abbrechen</button></div></div>`;
   $('fsBody')._opts = opts;
 }
@@ -3885,9 +3963,14 @@ $('fsDlg').addEventListener('click', async ev => {
   const m = t.closest('[data-fsmin]'); if (m) { FS.min = +m.dataset.fsmin; LS.set('fsMin', FS.min); renderFocusDlg(opts); return; }
   if (t.id === 'fsNo') { $('fsDlg').close(); return; }
   if (t.id === 'fsGo') {
-    const body = { minutes: FS.min, activity: FS.act };
+    const body = { minutes: FS.min, activity: FS.act, calendar: !!($('fsCal') && $('fsCal').checked) };
+    if ($('fsCal')) LS.set('fsCal', $('fsCal').checked);
     if (FS.what.startsWith('area:')) body.area = FS.what.slice(5); else body.key = FS.what;
-    try { state.focus = await post('/api/focus/start', body); $('fsDlg').close(); await load(); openFmode(); } catch (e) { toast(e.message); }
+    try {
+      const r = await post('/api/focus/start', body); state.focus = r; $('fsDlg').close();
+      if (r.calendar) toast(r.calendar.ok ? 'Im Kalender eingetragen' : 'Kalender: ' + r.calendar.error);
+      await load(); openFmode();
+    } catch (e) { toast(e.message); }
   }
 });
 $('fsDlg').addEventListener('change', ev => { if (ev.target.name === 'fsw') { FS.what = ev.target.value; FS.act = ''; renderFocusDlg($('fsBody')._opts); } });
@@ -4006,7 +4089,7 @@ function wsFacts(r) {
 function secretList(list, lead) {
   if (!list || !list.length) return '';
   return `<div class="banner bad" style="margin:0"><b>${list.length} mögliche${list.length === 1 ? 's Geheimnis' : ' Geheimnisse'}.</b> ${esc(lead)}: Der Scan erkennt Muster, er kann sich irren.
-    <ul class="agfiles" style="max-height:none">${list.map(x => `<li><code>${esc(x.file)}:${x.line}</code><span>${esc(x.rule)} ${esc(x.excerpt)}${x.where ? ' · ' + esc(x.where) : ''}</span></li>`).join('')}</ul>
+    <ul class="agfiles" style="max-height:none">${list.map(x => `<li data-copyfile="${esc(x.file)}:${x.line}" title="Klick kopiert Datei und Zeile" style="cursor:copy"><code>${esc(x.file)}:${x.line}</code><span>${esc(x.rule)} ${esc(x.excerpt)}${x.where ? ' · ' + esc(x.where) : ''}</span></li>`).join('')}</ul>
     <span class="small">Sind es Testdaten: die Zeile mit <code>tinyops:allow-secret</code> kommentieren. Ist es echt: aus dem Commit entfernen und das Geheimnis wechseln.</span></div>`;
 }
 function wsRepo(r, i) {
@@ -4062,6 +4145,58 @@ function wsBadge() {
   const n = w ? (w.stale || []).length : 0;
   b.hidden = !n; b.textContent = n;
 }
+// -- Microsoft 365 im Fokus (0.28): Termine heute, was auf dich wartet
+const hhmm = ts => new Date(ts * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', hour12: false });
+function m365Rail() {
+  const m = state && state.m365;
+  if (!m || !m.enabled) return '';
+  if (!m.logged_in) return `<section class="rcard"><h3>Microsoft 365</h3><div class="small quiet">Nicht angemeldet.</div><button data-goset="m365">Anmelden …</button></section>`;
+  let h = '';
+  const cal = m.calendar, now = Date.now() / 1000;
+  if (cal) {
+    const ev = e => `<li class="mev ${e.end <= now ? 'past' : e.start <= now ? 'now' : ''}"><span class="t">${e.all_day ? 'ganztags' : hhmm(e.start)}</span>
+      <a href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(e.subject)}${e.location ? ' · ' + esc(e.location) : ''}">${esc(e.subject)}</a>
+      ${e.join && e.end > now && e.start - now < 900 ? `<a class="chip ok" href="${esc(e.join)}" target="_blank" rel="noopener">Beitreten</a>` : ''}
+      ${e.end <= now && (cal.past_unbooked || []).some(x => x.id === e.id) && FOC() ? `<button class="quiet-btn" data-mbook="${esc(e.id)}" title="Diesen Termin als Zeit in die Zeiterfassung übernehmen">als Zeit</button>` : ''}</li>`;
+    const nx = cal.next, mins = nx ? Math.round((nx.start - now) / 60) : null;
+    h += `<section class="rcard"><h3>Heute <small>${cal.today.length ? `${cal.today.length} Termin${cal.today.length === 1 ? '' : 'e'}, ${Math.round(cal.meeting_minutes / 6) / 10} h belegt` : 'keine Termine'}</small></h3>
+      ${nx && mins <= 60 ? `<div class="small" style="margin-bottom:6px"><b>${mins <= 0 ? 'Jetzt' : 'In ' + mins + ' min'}:</b> ${esc(nx.subject)}</div>` : ''}
+      ${cal.today.length ? `<ul class="mlist">${cal.today.map(ev).join('')}</ul>` : ''}${m.errors && m.errors.calendar ? `<div class="small" style="color:var(--bad)">${esc(m.errors.calendar)}</div>` : ''}</section>`;
+  }
+  const mail = m.mail, tm = m.teams;
+  if (mail || tm) {
+    const row = x => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.preview || x.subject || x.topic)}">${esc(x.subject || x.topic)}</a><small>${esc(x.from)}${x.age_h != null ? ' · ' + hAge(x.age_h) : ''}</small></li>`;
+    const n = (mail ? mail.waiting_total + mail.flagged.length : 0) + (tm ? tm.unread_total : 0);
+    h += `<section class="rcard"><h3>Wartet auf dich <small>${n || 'nichts'}</small></h3>
+      ${mail && mail.waiting.length ? `<div class="small quiet">Mail, direkt an dich und noch nicht beantwortet</div><ul class="mlist">${mail.waiting.slice(0, 5).map(row).join('')}</ul>` : ''}
+      ${mail && mail.flagged.length ? `<div class="small quiet">Mit Fähnchen</div><ul class="mlist">${mail.flagged.slice(0, 3).map(row).join('')}</ul>` : ''}
+      ${tm && tm.unread.length ? `<div class="small quiet">Teams, ungelesen</div><ul class="mlist">${tm.unread.slice(0, 5).map(row).join('')}</ul>` : ''}
+      ${!n ? '<div class="small quiet">Keine offene Mail und kein ungelesener Chat.</div>' : ''}
+      ${m.outdated ? `<div class="small" style="color:var(--warn)">Stand ist alt: ${esc(m.error || '')}</div>` : ''}${['mail', 'teams'].filter(k => m.errors && m.errors[k]).map(k => `<div class="small" style="color:var(--bad)">${esc(m.errors[k])}</div>`).join('')}</section>`;
+  }
+  return h;
+}
+function openMeetBook(id) {
+  const ev = ((state.m365 || {}).calendar || {}).past_unbooked.find(x => x.id === id); if (!ev) return;
+  const f = FOC(), pin = state.flow && state.flow.pinned;
+  const opts = [...new Set([ev.key, pin && !pin.startsWith('hd:') ? pin : '', ...(f ? f.areas.map(a => a.ticket || a.name) : [])].filter(Boolean))];
+  $('wsDlgBody').innerHTML = `<div style="display:grid;gap:12px"><div><strong>Termin als Zeit übernehmen</strong><div class="quiet small">${esc(ev.subject)}, ${hhmm(ev.start)}–${hhmm(ev.end)} (${Math.round((ev.end - ev.start) / 60)} min). Landet in der Zeiterfassung; gebucht wird erst, wenn du den Entwurf bestätigst.</div></div>
+    <div class="field"><label for="mbKey">Worauf</label><input id="mbKey" class="full" list="mbOpts" value="${esc(opts[0] || '')}" placeholder="Ticket (z. B. DLP-120) oder Bereich"><datalist id="mbOpts">${opts.map(o => `<option value="${esc(o)}">`).join('')}</datalist></div>
+    ${f ? `<div class="field"><label for="mbArea">Fokusbereich</label><select id="mbArea" class="full"><option value="">automatisch</option>${f.areas.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>` : ''}
+    <div class="row"><button class="primary" id="mbGo">Übernehmen</button><button id="mbNo">Abbrechen</button></div></div>`;
+  $('wsDlg').showModal(); $('mbKey').focus();
+  $('mbNo').onclick = () => $('wsDlg').close();
+  $('mbGo').onclick = async () => {
+    try { const r = await post('/api/m365/book', { id, key: $('mbKey').value, area: $('mbArea') ? $('mbArea').value : '' }); $('wsDlg').close(); toast(`${r.minutes} min übernommen`); await load(); }
+    catch (e) { toast(e.message); }
+  };
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest && ev.target.closest('[data-mbook]'); if (b) { ev.stopPropagation(); openMeetBook(b.dataset.mbook); return; }
+  const g = ev.target.closest && ev.target.closest('[data-goset]'); if (g) { setView('settings'); setTimeout(() => { const x = document.getElementById('s-' + g.dataset.goset); if (x) x.scrollIntoView(); }, 400); return; }
+  const c = ev.target.closest && ev.target.closest('[data-copy]'); if (c) { copyText(c.dataset.copy, 'Kopieren'); return; }
+  const li = ev.target.closest && ev.target.closest('[data-copyfile]'); if (li) copyText(li.dataset.copyfile, 'Datei und Zeile');
+});
 function wsRail() {
   const w = state && state.workspaces;
   if (!w || w.scanning || !w.todo) return '';
