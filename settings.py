@@ -1127,7 +1127,7 @@ def view(cfg, config_path, features_default=None):
             "ignore_branches": bf.get("ignore_branches", ["release/*"])},
         "jira": {"url": jc.get("url", ""), "auth": jc.get("auth", "bearer"), "username": jc.get("username", ""),
                  "project_keys": jc.get("project_keys", []), "story_limit": jc.get("story_limit", 2),
-                 "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT,
+                 "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "group_link_types": jc.get("group_link_types") or [], "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT,
                  "only_active_sprints": bool(jc.get("only_active_sprints", True)),
                  "allow_create": bool(jc.get("allow_create", False)), "create_type": jc.get("create_type", "Story")},
         "llm": {"enabled": bool((cfg.get("llm") or {}).get("enabled", False)), "provider": (cfg.get("llm") or {}).get("provider", "ollama"),
@@ -1315,6 +1315,8 @@ def build_config(current, p):
         jc["project_keys"] = keys
         jc["story_limit"] = _int(j.get("story_limit"), "jira.story_limit", 1, 20, errors, 2)
         jc["wip_issue_types"] = _lst(j.get("wip_issue_types"), "jira.wip_issue_types", errors)
+        if "group_link_types" in j:
+            jc["group_link_types"] = _lst(j.get("group_link_types"), "jira.group_link_types", errors)
         jc["only_active_sprints"] = bool(j.get("only_active_sprints", True))
         jc["allow_create"] = bool(j.get("allow_create", False))
         jc["create_type"] = (j.get("create_type") or "Story").strip()[:60] or "Story"

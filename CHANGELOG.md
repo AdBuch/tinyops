@@ -5,6 +5,34 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.30.0]
+
+### Neu
+- **Tickets zu Tasks gruppieren.** «Stories in Arbeit» heisst jetzt «Tasks in Arbeit». Gehören mehrere Jira-Tickets in Arbeit zusammen, erscheinen sie als ein Task: im Panel, auf dem Board, im Fokus und in der Detailansicht, mit allen MRs und Branches.
+  - **Bug mit Begleitticket:** Der Bug ist der Task, das Begleitticket hängt darunter («+ DLP-132 Aufgabe»).
+  - **Story mit Unteraufgaben:** Die Story ist der Task.
+  - Zusammen gehören Tickets in Arbeit, die in Jira verknüpft sind. Unter Einstellungen → Jira kannst du die Link-Typen einschränken (z. B. «Relates»). Leer heisst: jeder Link zählt.
+  - **Von Hand:** «Gruppieren …» am Task oder in der Detailansicht: einem Task zuordnen, eigenständig machen oder zurück auf automatisch. Von Hand gilt immer vor der Erkennung.
+  - Ein Task zählt einmal zum Limit.
+- **Wunsch an tinyops:** Im Ideen-Dialog (Taste i) der Haken «Wunsch an tinyops», oder im Ideenfeld mit «tinyops:» beginnen. Der Wunsch landet nicht in der Ideenbox, sondern wörtlich im Nutzungsbericht, mit Ansicht, Version und den letzten Klicks davor. Er wird gespeichert, auch wenn die Erfassung aus ist.
+- **Mehr im Nutzungsbericht:**
+  - **Version je Sitzung.** «Auffällig» zählt nur noch die neueste Version, damit alte Probleme nicht wieder auftauchen.
+  - **Fehlermeldungen**, die das Panel gezeigt hat, als Vorlage: Ticket-Keys, Zahlen und Zitate werden ersetzt. Bei Einstellungen nur die Feldnamen.
+  - **Langsame Antworten** über 1,5 s je Endpunkt.
+  - **Welche Hilfe** aufgeklappt wurde.
+  - **Welche Ansichten** im Zeitraum nie geöffnet wurden.
+
+### Geändert
+- **Bugs und andere Typen bleiben sichtbar.** Bisher verschwanden Tickets, deren Typ nicht unter «Vorgangstypen, die beim Limit zählen» stand. Jetzt bleiben sie im Panel und auf dem Board, mit dem Hinweis «zählt nicht».
+
+### Korrigiert
+- Ein Klick auf eine Board-Karte öffnete die Details und schloss sie im selben Moment wieder. Jetzt bleiben sie offen.
+
+### Grenzen
+- Die Gruppierung ist nur gegen nachgebaute Jira-Daten getestet. Welchen Link-Typ ihr für Begleittickets nutzt, zeigt erst euer Jira.
+- Gruppiert werden nur Tickets, die in Arbeit sind. Ein Begleitticket in «Offen» bleibt ausserhalb.
+- Ein Agent bekommt den Auftrag aus dem Task-Ticket. Die Beschreibung der Begleittickets geht noch nicht mit.
+
 ## [0.29.0]
 
 ### Neu

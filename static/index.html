@@ -315,6 +315,9 @@
   .mlist li > a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
   .mlist li small { color: var(--quiet); white-space: nowrap; } .mlist .t { font-variant-numeric: tabular-nums; color: var(--quiet); width: 4.6ch; flex: none; }
   .mlist .mev.past { opacity: .6; } .mlist .mev.now > a { font-weight: 650; } .mlist .chip, .mlist button { flex: none; padding: 1px 8px; font-size: 12px; }
+  .comps { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 4px 0; font-size: 12.5px; }
+  .comp { display: inline-flex; gap: 5px; align-items: baseline; min-width: 0; } .comp .quiet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+  .chip.bug { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
   .bcsappr { border-collapse: collapse; font-size: 13px; margin: 6px 0; } .bcsappr td, .bcsappr th { padding: 3px 12px 3px 0; text-align: left; font-variant-numeric: tabular-nums; }
   .bcsappr th { color: var(--quiet); font-weight: 500; } label.bcst { padding: 4px 0; } .warn-btn { border-color: var(--warn); }
   details.help { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-width: 86ch; }
@@ -953,6 +956,7 @@
   <strong>Idee festhalten</strong>
   <div class="quiet small" style="margin:4px 0 8px">Nur erfassen, gestartet wird nichts. Enter speichert, Esc bricht ab.</div>
   <textarea id="ideaQuick" rows="3" placeholder="Was geht dir gerade durch den Kopf?"></textarea>
+  <label class="check" style="margin-top:6px"><input type="checkbox" id="ideaWish"><span><strong>Wunsch an tinyops</strong> <span class="quiet small">Landet nicht in der Ideenbox, sondern wörtlich im Nutzungsbericht (Prüfen → UI-Nutzung), mit Ansicht und den letzten Klicks davor. Tipp: im Ideenfeld mit «tinyops:» beginnen.</span></span></label>
   <div class="row" style="margin-top:8px"><button class="primary" id="ideaSave">Speichern</button><button id="ideaCancel">Abbrechen</button></div>
 </dialog>
 
@@ -987,9 +991,19 @@ const openLogs = new Set();
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 async function api(method, path, body) {
-  const r = await fetch(path, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
+  const t0 = performance.now(), ep = method + ' ' + String(path).split('?')[0].replace(/\/\d+(?=\/|$)/g, '/#');
+  const track = !/^\/api\/ux\//.test(path) && typeof uxPush === 'function';
+  let r;
+  try { r = await fetch(path, { method, headers: H, body: body ? JSON.stringify(body) : undefined }); }
+  catch (e) { if (track) uxPush({ k: 'fail', t: ep, e: { m: 'Panel nicht erreichbar' } }); throw e; }
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { const e = new Error(data.error || ('HTTP ' + r.status)); e.data = data; throw e; }
+  const ms = Math.round(performance.now() - t0);
+  if (track && ms > 1500 && ep !== 'GET /api/overview') uxPush({ k: 'slow', t: ep, e: { ms } });
+  if (!r.ok) {
+    const e = new Error(data.error || ('HTTP ' + r.status)); e.data = data;
+    if (track) uxPush({ k: 'fail', t: ep, e: { m: data.errors ? 'Felder: ' + Object.keys(data.errors).join(', ') : e.message, s: r.status } });
+    throw e;
+  }
   return data;
 }
 
@@ -1150,27 +1164,59 @@ function group(title, items, empty, hint) {
   return `<div class="group"><div class="secthead"><h2>${esc(title)}</h2><span class="count">${items.length}</span>${hint ? `<span class="right">${hint}</span>` : ''}</div>${body}</div>`;
 }
 
+// -- Tasks: Tickets, die zusammengehören (0.30). Bug + Begleitticket: der Bug ist der Task.
+const typeChip = t => !t ? '' : `<span class="chip ${/^(bug|fehler|defect|defekt|störung|incident)$/i.test(t) ? 'bug' : 'tk'}" title="Vorgangstyp in Jira">${esc(t)}</span>`;
+function compList(s) {
+  const cs = s.companions || [];
+  const btn = s.local ? '' : `<button class="quiet-btn small" data-grp="${esc(s.key)}" title="Andere Tickets in Arbeit diesem Task zuordnen oder ihn eigenständig machen">${cs.length ? 'Gruppe' : 'Gruppieren …'}</button>`;
+  if (!cs.length) return btn ? `<div class="comps">${btn}</div>` : '';
+  return `<div class="comps">${cs.map(c => `<span class="comp" title="${esc(c.summary)}${c.why ? ' · ' + esc(c.why) : ''}">+ ${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.key)}</a>` : esc(c.key)} ${typeChip(c.type)}<span class="quiet">${esc(short(c.summary || '', 40))}</span></span>`).join('')}${btn}</div>`;
+}
+function openGroup(key) {
+  const st = (state.jira && state.jira.stories) || [];
+  const head = st.find(s => s.key === key) || st.find(s => (s.companions || []).some(c => c.key === key));
+  const tickets = st.flatMap(s => [s, ...(s.companions || [])]).filter(t => !t.local);
+  const me = tickets.find(t => t.key === key) || { key, summary: '' };
+  const isComp = head && head.key !== key;
+  $('wsDlgBody').innerHTML = `<div style="display:grid;gap:10px"><div><strong>${esc(key)} gruppieren</strong><div class="quiet small">${esc(me.summary || '')}</div></div>
+    <div class="small quiet">Ein Task ist, woran du arbeitest. Gehören mehrere Tickets in Arbeit zusammen (Bug und Begleitticket, Story und Unteraufgaben), erscheinen sie als ein Task mit allen MRs und Branches, zählen einmal zum Limit, und ein Agent bekommt den Auftrag des Tasks. tinyops gruppiert verknüpfte Tickets von selbst; hier entscheidest du von Hand.</div>
+    <div class="field"><label for="grpHead">${esc(key)} gehört zu</label><select id="grpHead" class="full"><option value="">– niemandem: eigener Task –</option>
+      ${tickets.filter(t => t.key !== key && !(head && head.key === key && (head.companions || []).some(c => c.key === t.key) && false)).map(t => `<option value="${esc(t.key)}" ${isComp && head.key === t.key ? 'selected' : ''}>${esc(t.key)} ${esc(t.type ? '(' + t.type + ') ' : '')}${esc(short(t.summary || '', 50))}</option>`).join('')}</select></div>
+    ${head && !isComp && (head.companions || []).length ? `<div class="small">Zu ${esc(key)} gehören: ${head.companions.map(c => `<b>${esc(c.key)}</b> <span class="quiet">(${esc(c.why || '')})</span>`).join(', ')}. Ein Begleitticket lösen: dort «Gruppe» wählen.</div>` : ''}
+    <div class="row"><button class="primary" id="grpSave">Speichern</button><button id="grpAuto" class="quiet-btn" title="Von Hand gesetzte Zuordnung entfernen, tinyops erkennt wieder selbst">Automatisch</button><button id="grpNo">Abbrechen</button></div></div>`;
+  $('wsDlg').showModal();
+  $('grpNo').onclick = () => $('wsDlg').close();
+  const go = async body => { try { await post('/api/groups', body); $('wsDlg').close(); toast('Gespeichert, wird neu gruppiert'); await api('POST', '/api/refresh', {}); await load(); } catch (e) { toast(e.message); } };
+  $('grpSave').onclick = () => go({ key, head: $('grpHead').value });
+  $('grpAuto').onclick = () => go({ key, reset: true });
+}
+document.addEventListener('click', ev => { const g = ev.target.closest && ev.target.closest('[data-grp]'); if (g) { ev.stopPropagation(); openGroup(g.dataset.grp); } }, true);
 function storiesTile() {
   const j = state.jira;
   if (!j) return null;
-  if (j.loading) return { title: 'Stories in Arbeit', count: '', hint: '', body: '<div class="empty busy">lädt …</div>' };
-  if (!j.ok) return { title: 'Stories in Arbeit', count: '', hint: 'Jira antwortet nicht', body: '<div class="empty">Jira ist eingerichtet, antwortet aber nicht. Details im Banner und unter Einstellungen.</div>' };
+  if (j.loading) return { title: 'Tasks in Arbeit', count: '', hint: '', body: '<div class="empty busy">lädt …</div>' };
+  if (!j.ok) return { title: 'Tasks in Arbeit', count: '', hint: 'Jira antwortet nicht', body: '<div class="empty">Jira ist eingerichtet, antwortet aber nicht. Details im Banner und unter Einstellungen.</div>' };
   const slots = [];
-  const n = Math.max(j.limit, j.stories.length);
+  const counted = j.stories.filter(s => s.counts !== false), rest = j.stories.filter(s => s.counts === false);
+  const ordered = counted.concat(rest);
+  const n = Math.max(j.limit, counted.length) + rest.length;
+  let ci = 0;
   for (let i = 0; i < n; i++) {
-    const s = j.stories[i];
-    if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst eine neue Story beginnen.</span></div>'); continue; }
+    const s = ordered[i];
+    if (!s) { slots.push('<div class="slot free"><strong>Platz frei</strong><span>Du kannst einen neuen Task beginnen.</span></div>'); continue; }
+    const over = s.counts !== false && ci++ >= j.limit;
     const mrs = s.items.map(x => `<a class="mrchip" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="pd ${esc(x.pipeline)}"></span><b>${x.iid ? 'MR' : 'Branch'}</b> ${x.iid ? '!' + esc(x.iid) : esc(x.branch)}${x.sonar === 'ERROR' ? ' <span class="sqdot bad" title="Quality Gate rot">●</span>' : x.sonar === 'OK' ? ' <span class="sqdot ok" title="Quality Gate grün">●</span>' : ''}${x.manual ? ` <button class="x" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">×</button>` : ''}</a>${sqLinks(x)}`).join('');
-    slots.push(`<div class="slot ${i >= j.limit ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
-      <div class="top"><span class="key">${esc(s.key)}</span>${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
+    slots.push(`<div class="slot ${over ? 'over' : ''}" data-skey="${esc(s.key)}" draggable="true" title="Branch oder MR hierher ziehen, um ihn mit ${esc(s.key)} zu verknüpfen">
+      <div class="top"><span class="key">${esc(s.key)}</span>${typeChip(s.type)}${s.local ? '<span class="chip">Lokal</span>' : `<span class="chip">${esc(s.status)}</span>`}${s.counts === false ? '<span class="chip" title="Dieser Typ zählt nicht zum Limit (Einstellungen → Jira)">zählt nicht</span>' : ''}<span class="chip tk" title="Stufe im Board">${esc(STAGE_LABEL[s.stage] || '')}</span>${s.sprint ? `<span class="chip tk" title="Aktiver Sprint">${esc(s.sprint)}</span>` : ''}</div>
       ${s.url ? `<a class="sum" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.summary)}</a>` : `<span class="sum">${esc(s.summary)}</span>`}
+      ${compList(s)}
       <div class="links">${mrs}${s.no_mr ? '<span class="nolink">Noch kein MR oder Branch mit diesem Key</span>' : ''}</div>
       ${agentRow(s.key, s.key, s.summary, s.url, s.items)}
     </div>`);
   }
   const sp = (j.sprints || []).map(s => `${esc(s.name)}${s.days_left !== null && s.days_left !== undefined ? (s.days_left >= 0 ? ` · noch ${s.days_left} Tage` : ' · überfällig') : ''}`).join(', ');
-  return { title: 'Stories in Arbeit', count: `${j.count} von ${j.limit}`, bad: j.over, hint: (j.only_active ? 'nur aktive Sprints' : 'alle Sprints') + (sp ? ': ' + sp : ''),
-    body: `<div class="slots">${slots.join('')}</div>${j.over ? `<div class="overnote">${j.count} Stories in Arbeit, Limit ${j.limit}. Eine abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}` };
+  return { title: 'Tasks in Arbeit', count: `${j.count} von ${j.limit}`, bad: j.over, hint: (j.only_active ? 'nur aktive Sprints' : 'alle Sprints') + (sp ? ': ' + sp : '') + (j.tickets > j.stories.length ? ` · ${j.tickets} Tickets` : ''),
+    body: `<div class="slots">${slots.join('')}</div>${j.over ? `<div class="overnote">${j.count} Tasks in Arbeit, Limit ${j.limit}. Einen abschließen oder zurücksetzen, bevor etwas Neues beginnt.</div>` : ''}` };
 }
 
 const LOGO_MISS = new Set();      // fehlt ein Logo, wird es nicht bei jedem Neuzeichnen wieder angefragt
@@ -1700,8 +1746,9 @@ function boardCard(c) {
     .map(r => `<button class="chip ${AG_ST[r.status] || ''}" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.agent_name)}</button>`).join('');
   const nx = n && n.kind !== 'done' && !isIdea ? `<div class="bnext k-${esc(n.kind)}" title="${esc(n.why)}">${OWNER[n.owner] ? ic(OWNER[n.owner]) : (n.kind === 'blocked' ? ic('alert') : ic('chevron2'))}<span>${esc(n.label)}</span></div>` : '';
   const act = isIdea ? `<div class="bplan"><select data-bplansel="${c.idea_id}" aria-label="Kategorie wählen">${poolOptions(selPool, true)}</select><button data-bplan="${c.idea_id}" title="Als Aufgabe in «Geplant» übernehmen (braucht eine Kategorie)">Planen</button></div>` : '';
+  const comps = (c.companions || []).map(x => `<span class="comp" title="${esc(x.summary)}${x.why ? ' · ' + esc(x.why) : ''}">+ ${esc(x.key)} ${typeChip(x.type)}</span>`).join('');
   return `<div class="bcard ${n ? 'k-' + esc(n.kind) : ''}" draggable="true" data-bid="${esc(c.id)}" ${c.key ? `data-bkey="${esc(c.key)}"` : ''} title="Klick: Details · Ziehen: andere Station">
-    <div class="btop">${key}${chips}</div><div class="bsum">${esc(title)}</div>${refs || runs ? `<div class="links">${refs}${runs}</div>` : ''}${nx}${act ? `<div class="bact">${act}</div>` : ''}</div>`;
+    <div class="btop">${key}${c.type && c.type !== 'Idee' && !c.local ? typeChip(c.type) : ''}${chips}</div><div class="bsum">${esc(title)}</div>${comps ? `<div class="comps">${comps}</div>` : ''}${refs || runs ? `<div class="links">${refs}${runs}</div>` : ''}${nx}${act ? `<div class="bact">${act}</div>` : ''}</div>`;
 }
 document.addEventListener('click', ev => {
   const b = ev.target.closest && ev.target.closest('.bcard[data-bid]');
@@ -2219,9 +2266,9 @@ function uxCard() {
   if (!UXR.enabled) return '<h3>UI-Nutzung</h3><div class="small quiet">Ausgeschaltet (Einstellungen → Weiteres).</div>';
   return `<div class="row" style="justify-content:space-between"><h3 style="margin:0">UI-Nutzung <span class="quiet small">letzte ${UXR.days} Tage, nur lokal</span></h3>
       <span class="row"><select id="uxDays" aria-label="Zeitraum">${[1, 7, 30].map(d => `<option value="${d}" ${d === UXR.days ? 'selected' : ''}>${d === 1 ? 'heute' : d + ' Tage'}</option>`).join('')}</select><button class="primary" id="uxCopy">Bericht kopieren</button><button class="quiet-btn" id="uxClear">Daten löschen</button></span></div>
-    <div class="psum" style="margin:6px 0"><span>Sitzungen <b>${UXR.sessions}</b></span><span>aktiv <b>${UXR.active_min} min</b></span><span>Ereignisse <b>${UXR.events}</b></span></div>
+    <div class="psum" style="margin:6px 0"><span>Sitzungen <b>${UXR.sessions}</b></span><span>aktiv <b>${UXR.active_min} min</b></span><span>Ereignisse <b>${UXR.events}</b></span>${UXR.wishes ? `<span>Wünsche an tinyops <b>${UXR.wishes}</b></span>` : ''}</div>
     ${UXR.hints.length ? `<ul class="small" style="margin:4px 0 0 18px;padding:0">${UXR.hints.map(h => `<li>${esc(h)}</li>`).join('')}</ul>` : '<div class="small quiet">Noch nichts Auffälliges. Der Bericht enthält Ansichten, Aktionen mit Zögern, tote Klicks, Tasten, Dialoge und eine Maus-Verteilung.</div>'}
-    <div class="small quiet" style="margin-top:6px">Erfasst werden Klicks (welches Element, nicht was darin steht), Mausweg, Tasten ausserhalb von Feldern und Ansichtswechsel. Kopiere den Bericht und gib ihn mir für die nächste UI-Runde.</div>`;
+    <div class="small quiet" style="margin-top:6px">Erfasst werden Klicks (welches Element, nicht was darin steht), Mausweg, Tasten ausserhalb von Feldern, Ansichtswechsel, Fehlermeldungen und langsame Antworten (ohne Einzelheiten) und die Version. Wörtlich nur, was du als «Wunsch an tinyops» schreibst. Kopiere den Bericht und gib ihn mir für die nächste Runde.</div>`;
 }
 async function loadUx(days) {
   try { await uxFlush(false); UXR = await api('GET', '/api/ux/report?days=' + (days || (UXR && UXR.days) || 7)); } catch (e) { UXR = null; }
@@ -2532,10 +2579,19 @@ $('linkDlg').addEventListener('click', ev => {
 });
 
 // Ideen-Drop: überall ein Tastendruck oder Klick entfernt
-function openIdeaDrop() { const d = $('ideaDlg'); if (!d.open) d.showModal(); $('ideaQuick').focus(); }
+let WISH_VIEW = '';
+function openIdeaDrop() { const d = $('ideaDlg'); WISH_VIEW = typeof view !== 'undefined' ? view : ''; if (!d.open) d.showModal(); $('ideaWish').checked = false; $('ideaQuick').focus(); }
+const WISH_RE = /^\s*tinyops\s*:\s*/i;
+async function saveWish(text) {        // Wunsch an tinyops: wörtlich in den Nutzungsbericht, mit Ansicht und den letzten Klicks
+  await api('POST', '/api/ux/wish', { text: text.replace(WISH_RE, ''), view: WISH_VIEW || (typeof view !== 'undefined' ? view : ''), trail: UX.trail.slice(-6), sess: UX.sess });
+  toast('Für tinyops notiert: steht im nächsten Nutzungsbericht');
+}
 async function saveIdeaDrop() {
   const el = $('ideaQuick'); if (!el.value.trim()) return;
-  try { await api('POST', '/api/ideas', { text: el.value }); el.value = ''; $('ideaDlg').close(); toast('In der Ideenbox'); await load(); } catch (e) { toast(e.message); }
+  try {
+    if ($('ideaWish').checked || WISH_RE.test(el.value)) { await saveWish(el.value); el.value = ''; $('ideaDlg').close(); return; }
+    await api('POST', '/api/ideas', { text: el.value }); el.value = ''; $('ideaDlg').close(); toast('In der Ideenbox'); await load();
+  } catch (e) { toast(e.message); }
 }
 $('ideaBtn').onclick = openIdeaDrop; $('ideaSave').onclick = saveIdeaDrop; $('ideaCancel').onclick = () => $('ideaDlg').close();
 $('ideaQuick').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); saveIdeaDrop(); } });
@@ -2549,7 +2605,7 @@ document.getElementById('ideaText').addEventListener('keydown', async ev => {
   ev.preventDefault();
   const el = ev.target;
   if (!el.value.trim()) return;
-  try { await api('POST', '/api/ideas', { text: el.value }); el.value = ''; await load(); } catch (e) { toast(e.message); }
+  try { if (WISH_RE.test(el.value)) { WISH_VIEW = view; await saveWish(el.value); el.value = ''; return; } await api('POST', '/api/ideas', { text: el.value }); el.value = ''; await load(); } catch (e) { toast(e.message); }
 });
 document.getElementById('ideas').addEventListener('click', async ev => {
   const btn = ev.target.closest('button[data-ia]');
@@ -2806,7 +2862,8 @@ async function loadSettings() {
       ${field('ji-keys', 'Projekt-Keys', j.project_keys.join(', '), { err: 'jira.project_keys', ph: 'DLP, OPS', help: 'Damit erkennt das Panel Ticket-Nummern in Branch-Namen.' })}
       ${field('ji-limit', 'Höchstens so viele Stories gleichzeitig in Arbeit', j.story_limit, { type: 'number', err: 'jira.story_limit' })}
     </div>
-    ${field('ji-types', 'Vorgangstypen, die beim Limit zählen', j.wip_issue_types.join(', '), { err: 'jira.wip_issue_types', help: 'Deutsche Instanzen: oft «Aufgabe», «Fehler». Leer = alle Typen zählen.' })}
+    ${field('ji-types', 'Vorgangstypen, die beim Limit zählen', j.wip_issue_types.join(', '), { err: 'jira.wip_issue_types', help: 'Deutsche Instanzen: oft «Aufgabe», «Fehler». Leer = alle Typen zählen. Andere Typen bleiben sichtbar, zählen aber nicht.' })}
+    ${field('ji-grp', 'Link-Typen, die Tickets zu einem Task gruppieren', (j.group_link_types || []).join(', '), { err: 'jira.group_link_types', ph: 'leer = jeder Link zwischen Tickets in Arbeit', help: 'Z. B. «Relates», «Begleitticket». Bug mit Begleitticket: der Bug ist der Task. Unteraufgaben gehören immer zu ihrer Story.' })}
     <label class="check"><input type="checkbox" id="ji-sprint" ${j.only_active_sprints !== false ? 'checked' : ''}>
       <span><strong>Nur Tickets aus aktiven Sprints</strong><br><span class="quiet small">Ergänzt die JQL um <code>sprint in openSprints()</code> und markiert verknüpfte Tickets ausserhalb eines Sprints. Braucht Jira Software. Der Test unten sagt, ob es funktioniert.</span></span></label>
     <label class="check"><input type="checkbox" id="ji-create" ${j.allow_create ? 'checked' : ''}>
@@ -3439,7 +3496,7 @@ function collect() {
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
     jira: { url: val('ji-url'), auth: val('ji-auth'), username: val('ji-user'), project_keys: split(val('ji-keys')), story_limit: val('ji-limit'),
-      wip_issue_types: split(val('ji-types')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
+      wip_issue_types: split(val('ji-types')), group_link_types: split(val('ji-grp')), jql_in_progress: val('ji-jql'), only_active_sprints: $('ji-sprint').checked,
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
     usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
@@ -3784,6 +3841,9 @@ function renderFx() {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><button class="ibtn" data-topics="${esc(JSON.stringify({ host: e.r.host || 'gitlab', project_id: e.r.project_id, iid: e.r.iid }))}" title="Offene Review-Kommentare ansehen und exportieren">${ic('chat')} Offene Punkte</button><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
     const c = e.c;
+    if (c.key && !c.local && !c.idea_id) body += `<div><h3>Tickets in diesem Task <small>${1 + (c.companions || []).length}</small></h3><div class="fxitem"><div class="nm"><b>${esc(c.key)} ${typeChip(c.type)}</b><small>${esc(c.status || '')} · Task</small></div></div>
+      ${(c.companions || []).map(x => `<div class="fxitem"><div class="nm"><b>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a>` : esc(x.key)} ${typeChip(x.type)}</b><small>${esc(x.summary)} · ${esc(x.status || '')} · ${esc(x.why || '')}</small></div></div>`).join('')}
+      <button class="quiet-btn" data-grp="${esc(c.key)}">Gruppieren …</button></div>`;
     if (!c.idea_id) {
       body += `<div><h3>Teilschritte <small>Kleine Haken, je erledigter +3 XP</small></h3><ul class="ck">${e.d.checklist.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-fck="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(x.text)}"><span>${esc(x.text)}</span><button data-fckdel="${x.id}" title="Entfernen" aria-label="Entfernen">${ic('x')}</button></li>`).join('')}</ul>
         <div class="ckadd"><input id="fxCkNew" maxlength="200" placeholder="${e.d.checklist.length ? 'Nächster kleiner Schritt …' : 'In kleine Schritte zerlegen, z. B. «Test für Retry schreiben»'}" autocomplete="off"><button data-fckadd="1">Hinzufügen</button></div></div>`;
@@ -3903,7 +3963,7 @@ async function fQuickAdd() {
 $('fAddBtn').onclick = fQuickAdd;
 $('fAdd').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); fQuickAdd(); } });
 document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.fgrp) LS.set('fopen.' + d.dataset.fgrp, d.open); }, true);
-document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.help) LS.set('help.' + d.dataset.help, d.open); }, true);
+document.addEventListener('toggle', ev => { const d = ev.target; if (d.dataset && d.dataset.help) { LS.set('help.' + d.dataset.help, d.open); if (d.open && typeof uxPush === 'function' && uxOn()) uxPush({ k: 'help', t: d.dataset.help }); } }, true);
 document.addEventListener('click', async ev => {
   const t = ev.target;
   const go = t.closest('[data-fgo]');
@@ -3932,7 +3992,7 @@ document.addEventListener('click', async ev => {
   const dp = t.closest('[data-fxdeploy]');
   if (dp) { const [p, i] = dp.dataset.fxdeploy.split(':'); await act(() => api('POST', '/api/deploy', { project_id: +p, iid: +i }), 'Deploy gestartet'); return; }
   const row = t.closest('#viewFocus .frow, #viewFocus .hero');
-  if (!row && FXID && !t.closest('#fx, header, #fbar, dialog, #fmode, a, button, input, select, textarea, summary, label, [data-fopen], .rcard')) { closeFx(); return; }
+  if (!row && FXID && !t.closest('#fx, header, #fbar, dialog, #fmode, a, button, input, select, textarea, summary, label, [data-fopen], .rcard, .bcard[data-bid], .slot[data-skey]')) { closeFx(); return; }   // 0.30: Klick auf eine Board-Karte öffnet, statt sofort wieder zu schliessen
   if (row && !t.closest('a, button, select, input')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
 });
 document.addEventListener('change', ev => { const c = ev.target.closest && ev.target.closest('[data-fck]'); if (c) fCheck(+c.dataset.fck, c.checked, c); });
@@ -4363,13 +4423,14 @@ setInterval(() => {   // laufende Agenten: Stand nachfragen, aber keine offene A
 // ------------------------------------------------ UI-Nutzung (0.22): lokal erfassen, damit die Oberfläche besser wird
 // Erfasst Klicks (Element-Beschreibung, keine Inhalte), tote Klicks, Tasten ausserhalb von Feldern, Dialoge, Ansichten,
 // Mausweg und grobe Verteilung. Nie: Text aus Feldern, Titel von Zeilen und Karten. Ausschalten: Einstellungen → Weiteres.
-const UX = { q: [], sess: Math.random().toString(36).slice(2, 12), hover: null, hoverT: 0, move: {}, lastMove: null, lastMoveT: 0, typing: null };
+const UX = { q: [], sess: Math.random().toString(36).slice(2, 12), hover: null, hoverT: 0, move: {}, lastMove: null, lastMoveT: 0, typing: null, trail: [] };
 const uxOn = () => !!(state && state.ux && state.ux.enabled);
 function uxPush(e) {
   if (!uxOn() && !(state === undefined || state === null)) return;
   e.ts = Date.now() / 1000; e.v = e.v || (typeof view !== 'undefined' ? view : '');
   UX.q.push(e);
   if (UX.q.length > 400) UX.q.splice(0, UX.q.length - 400);
+  if (['click', 'dead', 'view', 'dialog', 'fail'].includes(e.k)) { UX.trail.push(`${e.k === 'view' ? 'Ansicht' : e.k === 'dead' ? 'tot' : e.k === 'fail' ? 'Fehler' : e.k === 'dialog' ? 'Dialog' : 'Klick'} ${e.t || ''}`.slice(0, 80)); if (UX.trail.length > 8) UX.trail.shift(); }
 }
 const UX_ACT = '.wsrepo > summary,[data-wsgo],button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],.rcard.score,.aipace,#fbar,dialog';
 function uxDesc(el) {
@@ -4442,7 +4503,8 @@ let uxEnvSent = false;
 async function uxFlush(keepalive) {
   if (!uxOn()) { UX.q = []; UX.move = {}; return; }
   uxFlushTyping();
-  if (!uxEnvSent) { uxPush({ k: 'env', e: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio, touch: matchMedia('(pointer: coarse)').matches } }); uxEnvSent = true; }
+  if (!uxEnvSent) { uxPush({ k: 'env', e: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio, touch: matchMedia('(pointer: coarse)').matches, ver: state && state.version,
+    views: [...document.querySelectorAll('.tab[data-view]')].filter(t => !t.hidden && t.offsetParent).map(t => t.dataset.view) } }); uxEnvSent = true; }
   for (const [v, m] of Object.entries(UX.move)) if (m.d || Object.keys(m.g).length) UX.q.push({ k: 'move', v, ts: Date.now() / 1000, e: { d: Math.round(m.d * 100) / 100, g: m.g } });
   UX.move = {};
   if (!UX.q.length) return;

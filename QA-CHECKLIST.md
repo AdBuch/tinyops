@@ -117,6 +117,19 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.30.0
+
+- [ ] `r30-01` Ein Bug in Arbeit, dessen Typ nicht unter «Vorgangstypen, die beim Limit zählen» steht → er erscheint im Panel «Tasks in Arbeit» mit «zählt nicht» und auf dem Board
+- [ ] `r30-02` Bug und Begleitticket, beide in Arbeit und in Jira verknüpft → ein Task: Bug oben, «+ Begleitticket» darunter; das Begleitticket hat keine eigene Karte; MRs beider Tickets stehen beim Task
+- [ ] `r30-03` Story mit Unteraufgabe in Arbeit → die Story ist der Task
+- [ ] `r30-04` «Gruppieren …» → ein anderes Ticket als Task wählen → nach dem Auffrischen hängt das Ticket dort; «eigener Task» trennt es; «Automatisch» setzt zurück; im Verlauf «Ticket einem Task zugeordnet»
+- [ ] `r30-05` Einstellungen → Jira → Link-Typen auf euren Begleitticket-Typ setzen → andere Links gruppieren nicht mehr
+- [ ] `r30-06` Ein Task aus zwei Tickets zählt einmal zum Limit
+- [ ] `r30-07` Taste i, Text, Haken «Wunsch an tinyops» → Meldung «Für tinyops notiert»; nicht in der Ideenbox; Prüfen → UI-Nutzung zeigt «Wünsche an tinyops 1», der kopierte Bericht enthält den Text mit Ansicht und «zuvor: …»
+- [ ] `r30-08` Im Ideenfeld «tinyops: …» + Enter → landet ebenfalls als Wunsch im Bericht
+- [ ] `r30-09` Nutzungsbericht nennt die Versionen; «Auffällig» steht mit «nur Sitzungen mit 0.30.0»
+- [ ] `r30-10` Eine Fehlermeldung provozieren (z. B. BCS prüfen ohne Entwürfe) → der Bericht listet sie unter «Fehlermeldungen» ohne Ticket-Keys und Titel
+
 ## 0.29.0
 
 - [ ] `r29-01` Einstellungen → Zeiterfassung → BCS-Middleware: Adresse `http://127.0.0.1:3210` (und Token, falls gesetzt) speichern → in der Zeit-Ansicht erscheint die Karte «BCS» mit Anwesenheit und den Einträgen des Tages

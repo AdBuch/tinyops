@@ -551,9 +551,23 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                              " sha text not null, path text not null, repo text not null, ts real not null)")
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
                              " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
+                conn.execute("create table if not exists ticket_group(key text primary key, head text not null, ts real not null)")   # 0.30
                 yield conn
         finally:
             conn.close()
+
+    # ---- Tickets zu Tasks gruppieren (0.30): head «» = eigenständig, nie automatisch gruppieren
+    def groups(self):
+        with self._conn() as c:
+            return {} if c is None else {r["key"]: r["head"] for r in c.execute("select key, head from ticket_group")}
+
+    def group_set(self, key, head):
+        with self._conn(True) as c:
+            if head is None:
+                c.execute("delete from ticket_group where key=?", (key,))
+            else:
+                c.execute("insert into ticket_group(key, head, ts) values(?,?,?) on conflict(key) do update set head=excluded.head, ts=excluded.ts",
+                          (key, head, time.time()))
 
     @staticmethod
     def _now():

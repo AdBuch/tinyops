@@ -129,7 +129,9 @@ class Flow(unittest.TestCase):
                 self.assertNotIn(("mr", "release/1.5"), names)
                 self.assertIn(("mr", "feature/DLP-101-a"), names)
                 self.assertTrue(ov["jira"]["only_active"])
-                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102"})   # DLP-120 liegt nicht im aktiven Sprint
+                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102", "DLP-103"})   # DLP-120 liegt nicht im aktiven Sprint
+                self.assertEqual({x["key"]: x["counts"] for x in ov["jira"]["stories"]}["DLP-103"], False)   # 0.30: der Bug bleibt sichtbar, zählt aber nicht
+                self.assertEqual(ov["jira"]["count"], 2)
                 self.assertEqual(ov["jira"]["sprints"][0]["name"], "Sprint 12")
                 self.assertGreater(ov["jira"]["sprints"][0]["days_left"], 100)
                 t101 = next(i for i in ov["mine"] if i["branch"] == "feature/DLP-101-a")["ticket"]
@@ -160,7 +162,7 @@ class Flow(unittest.TestCase):
                 names = [(i["kind"], i["branch"]) for i in ov["mine"]]
                 self.assertIn(("branch", "release/2.0"), names)
                 self.assertIn(("mr", "release/1.5"), names)
-                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102", "DLP-120"})
+                self.assertEqual({x["key"] for x in ov["jira"]["stories"]}, {"DLP-101", "DLP-102", "DLP-103", "DLP-120"})   # 0.30: DLP-103 (Bug) bleibt sichtbar
                 # einschalten, ohne Neustart
                 code, _ = self.call("POST", "/api/settings/save", {
                     "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}], "features": {"ideas": True, "testenv": True},

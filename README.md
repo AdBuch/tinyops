@@ -459,6 +459,12 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5b. Tasks statt einzelner Tickets, Wünsche an tinyops (neu in 0.30.0)
+
+**Tasks.** Jira-Tickets in Arbeit, die zusammengehören, erscheinen als ein Task. Bug mit Begleitticket: der Bug ist der Task. Story mit Unteraufgaben: die Story. Erkannt wird über Issue-Links (Einstellungen → Jira → «Link-Typen, die Tickets zu einem Task gruppieren», leer = alle) und Eltern-Tickets; «Gruppieren …» am Task setzt es von Hand. Bugs bleiben immer sichtbar; ob sie zum Limit zählen, bestimmen die «Vorgangstypen, die beim Limit zählen».
+
+**Wunsch an tinyops.** Taste i, Text schreiben, Haken «Wunsch an tinyops» (oder im Ideenfeld mit `tinyops:` beginnen). Der Wunsch steht wörtlich im Nutzungsbericht unter Prüfen → UI-Nutzung, mit Ansicht, Version und den Klicks davor. Bericht kopieren und mir geben.
+
 ## 5a. BCS buchen über die Middleware (neu in 0.29.0)
 
 Einstellungen → Zeiterfassung → BCS-Middleware: «In BCS buchen» einschalten, Adresse (Standard `http://127.0.0.1:3210`) und, falls die Middleware ein `BCS_API_TOKEN` verlangt, dieses als Token eintragen.

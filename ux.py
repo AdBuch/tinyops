@@ -8,6 +8,10 @@ Was erfasst wird, und was nicht:
 * Klicks ins Leere («tote Klicks»), Tasten ausserhalb von Eingabefeldern, Ansichtswechsel, Dialoge auf/zu,
   Mausweg und eine grobe Verteilung je Ansicht (12 × 8 Felder), Fenstergrösse, JavaScript-Fehler.
 * Nie: Text aus Eingabefeldern, Inhalte von Zeilen und Karten (Ticket-Titel), Tastendrücke in Feldern (nur «getippt in»).
+  Ausnahme: ein «Wunsch an tinyops», den du ausdrücklich dafür schreibst (0.30). Er steht als Text im Bericht, damit er zurückfindet.
+
+Seit 0.30 zusätzlich: Version je Sitzung (Auffälliges zählt nur für die neueste), Fehlermeldungen, die das Panel gezeigt hat
+(als Vorlage: Ticket-Keys und Zahlen ersetzt), langsame Antworten je Endpunkt, aufgeklappte Hilfen, nie geöffnete Ansichten.
 """
 import json
 import re
@@ -17,9 +21,20 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import briefing
 import secretstore as store
 
-KINDS = {"click", "dead", "key", "type", "view", "dialog", "move", "env", "error"}
+KINDS = {"click", "dead", "key", "type", "view", "dialog", "move", "env", "error", "wish", "fail", "slow", "help"}
+SLOW_MS = 1500
+KEY_T = re.compile(r"\b[A-Z][A-Z0-9_]{1,15}-\d+\b")
+
+
+def template(msg, n=140):
+    """Fehlermeldung ohne Einzelheiten: Ticket-Keys → KEY, Zahlen → #, Zitate gekürzt."""
+    m = KEY_T.sub("KEY", str(msg or ""))
+    m = re.sub(r"«[^»]{0,200}»", "«…»", m)
+    m = re.sub(r"\d+", "#", m)
+    return _txt(m, n)
 GRID_W, GRID_H = 12, 8
 MAX_BATCH = 600
 SHADES = " .:-=+*#%@"
@@ -62,7 +77,11 @@ class UxLog:
             x = min(1.0, max(0.0, float(x))) if isinstance(x, (int, float)) else None
             y = min(1.0, max(0.0, float(y))) if isinstance(y, (int, float)) else None
             extra = e.get("e")
-            extra = json.dumps(extra, ensure_ascii=False)[:4000] if isinstance(extra, (dict, list)) else _txt(extra, 200) if extra else ""
+            if e["k"] == "fail" and isinstance(extra, dict):
+                extra = dict(extra, m=template(extra.get("m")))
+            extra = json.dumps(extra, ensure_ascii=False) if isinstance(extra, (dict, list)) else _txt(extra, 200) if extra else ""
+            if len(extra) > 4000:
+                extra = ""                               # lieber ohne Zusatz als abgeschnittenes JSON
             rows.append((ts, sess, _txt(e.get("v"), 20), e["k"], _txt(e.get("t")), _txt(e.get("c"), 40), x, y, extra))
         if not rows:
             return 0
@@ -77,6 +96,14 @@ class UxLog:
             finally:
                 c.close()
         return len(rows)
+
+    def add_wish(self, sess, text, view="", trail=(), version="", now=None):
+        """Wunsch an tinyops: der einzige Text, den der Bericht wörtlich enthält, weil du ihn genau dafür schreibst. Geheimnisse werden geschwärzt."""
+        t, _ = briefing.mask(_txt(text, 1500))
+        if not t.strip():
+            raise ValueError("Der Wunsch ist leer.")
+        tr = [_txt(x, 80) for x in list(trail or [])[-8:]]
+        return self.add_batch(sess, [{"k": "wish", "v": view, "t": "wunsch", "ts": now or time.time(), "e": {"text": t, "trail": tr, "ver": _txt(version, 20)}}], 0, now)
 
     def clear(self):
         with self.lock:
@@ -203,8 +230,29 @@ def analyse(evs, now=None):
             mouse[e["view"] or "?"]["clicks"] = mouse[e["view"] or "?"].get("clicks", 0) + 1
     envs = [e["extra"] for e in evs if e["kind"] == "env" and isinstance(e["extra"], dict)]
     errors = Counter(e["target"] for e in evs if e["kind"] == "error")
+    ver = {}
+    for e in evs:
+        if e["kind"] == "env" and isinstance(e["extra"], dict) and e["extra"].get("ver"):
+            ver[e["sess"]] = str(e["extra"]["ver"])
+    versions = Counter(ver.values())
+    fails = Counter()
+    for e in evs:
+        if e["kind"] == "fail":
+            fails[(e["target"], (e["extra"] or {}).get("m", "") if isinstance(e["extra"], dict) else "")] += 1
+    slow = defaultdict(list)
+    for e in evs:
+        if e["kind"] == "slow" and isinstance(e["extra"], dict) and isinstance(e["extra"].get("ms"), (int, float)):
+            slow[e["target"]].append(e["extra"]["ms"])
+    helps = Counter(e["target"] for e in evs if e["kind"] == "help")
+    offered = set()
+    for x in envs:
+        offered |= {str(v) for v in x.get("views") or []}
+    seen = {e["target"] for e in evs if e["kind"] == "view"} | {e["view"] for e in evs if e["view"]}
+    wishes = [{"ts": e["ts"], "view": e["view"], "text": (e["extra"] or {}).get("text", ""), "trail": (e["extra"] or {}).get("trail") or [],
+               "ver": (e["extra"] or {}).get("ver", "")} for e in evs if e["kind"] == "wish" and isinstance(e["extra"], dict)]
     return {"sessions": len(by_sess), "events": len(evs), "active_min": round(active / 60), "views": view_time, "transitions": trans,
             "actions": act, "dead": dead, "rage": rage, "keys": keys, "typed": typed, "dialogs": dlg, "mouse": mouse, "envs": envs, "errors": errors,
+            "versions": versions, "sess_ver": ver, "fails": fails, "slow": slow, "helps": helps, "unused": sorted(offered - seen), "wishes": wishes,
             "first": min((e["ts"] for e in evs), default=None), "last": max((e["ts"] for e in evs), default=None)}
 
 
@@ -245,22 +293,48 @@ def hints(a):
             break
     if a["errors"]:
         out.append("%d JavaScript-Fehler, siehe unten." % sum(a["errors"].values()))
+    for (t, m), n in a.get("fails", Counter()).most_common(2):
+        if n >= 3:
+            out.append("%d× dieselbe Fehlermeldung bei %s: «%s». Lässt sie sich vermeiden oder klarer sagen, was zu tun ist?" % (n, t, m))
+    for t, ms in sorted(a.get("slow", {}).items(), key=lambda kv: -len(kv[1]))[:2]:
+        if len(ms) >= 3:
+            out.append("%s antwortet oft langsam (%d× über %.1f s, Median %.1f s)." % (t, len(ms), SLOW_MS / 1000.0, _median(ms) / 1000.0))
     return out
 
 
-def report_md(a, days, version):
+def latest_only(evs, a):
+    """Ereignisse nur aus Sitzungen der neuesten Version (wenn mehrere Versionen im Zeitraum liegen)."""
+    if len(a["versions"]) < 2:
+        return None, ""
+    def key(v):
+        return tuple(int(x) if x.isdigit() else 0 for x in v.split("."))
+    newest = max(a["versions"], key=key)
+    keep = {s for s, v in a["sess_ver"].items() if v == newest}
+    return [e for e in evs if e["sess"] in keep], newest
+
+
+def report_md(a, days, version, cur=None, cur_ver=""):
     from datetime import datetime
     f = lambda ts: datetime.fromtimestamp(ts).strftime("%d.%m. %H:%M") if ts else "–"
     L = ["# tinyops UI-Nutzung %s" % version, "",
          "Lokal erfasst, %s bis %s (letzte %d Tage): %d Sitzungen, etwa %d aktive Minuten, %d Ereignisse." % (f(a["first"]), f(a["last"]), days, a["sessions"], a["active_min"], a["events"]),
          "Keine Eingaben, keine Ticket-Titel. Ziel: die Oberfläche verbessern.", ""]
+    if a.get("versions"):
+        L += ["Versionen: " + ", ".join("%s (%d Sitzung%s)" % (v, n, "" if n == 1 else "en") for v, n in sorted(a["versions"].items())), ""]
+    if a.get("wishes"):
+        L += ["## Wünsche an tinyops (wörtlich, von dir geschrieben)"]
+        for w in a["wishes"]:
+            L.append("- [%s, %s%s] %s" % (f(w["ts"]), w["view"] or "?", ", " + w["ver"] if w["ver"] else "", w["text"].replace("\n", " ")))
+            if w["trail"]:
+                L.append("  zuvor: " + " → ".join(w["trail"]))
+        L.append("")
     if a["envs"]:
         sizes = Counter("%s×%s" % (e.get("w"), e.get("h")) for e in a["envs"])
         L.append("Fenster: " + ", ".join("%s (%d×)" % kv for kv in sizes.most_common(4)) + "; Pixeldichte " + ", ".join(sorted({str(e.get("dpr")) for e in a["envs"]})))
         L.append("")
-    h = hints(a)
+    h = hints(cur or a)
     if h:
-        L += ["## Auffällig"] + ["- " + x for x in h] + [""]
+        L += ["## Auffällig" + (" (nur Sitzungen mit %s)" % cur_ver if cur else "")] + ["- " + x for x in h] + [""]
     if a["views"]:
         tot = float(sum(a["views"].values())) or 1.0
         L += ["## Ansichten (Anteil aktive Zeit)"] + ["- %s: %d %% (%d min)" % (v, round(100 * s / tot), round(s / 60)) for v, s in a["views"].most_common()] + [""]
@@ -298,4 +372,13 @@ def report_md(a, days, version):
         L.append("")
     if a["errors"]:
         L += ["## JavaScript-Fehler"] + ["- %s: %d×" % kv for kv in a["errors"].most_common(8)] + [""]
+    if a.get("fails"):
+        L += ["## Fehlermeldungen, die das Panel gezeigt hat (Vorlage, ohne Einzelheiten)"] + ["- %s: «%s» %d×" % (t, m, n) for (t, m), n in a["fails"].most_common(12)] + [""]
+    if a.get("slow"):
+        L += ["## Langsame Antworten (über %.1f s)" % (SLOW_MS / 1000.0)] + ["- %s: %d×, Median %.1f s, max %.1f s" % (t, len(ms), _median(ms) / 1000.0, max(ms) / 1000.0)
+                                                                          for t, ms in sorted(a["slow"].items(), key=lambda kv: -len(kv[1]))[:10]] + [""]
+    if a.get("helps"):
+        L += ["## Hilfe aufgeklappt"] + [", ".join("%s %d×" % kv for kv in a["helps"].most_common(12)), ""]
+    if a.get("unused"):
+        L += ["## Im Zeitraum nie geöffnet"] + [", ".join(a["unused"]), ""]
     return "\n".join(L).strip() + "\n"

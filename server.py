@@ -37,6 +37,7 @@ import workspaces
 import briefing
 import m365
 import bcs
+import groups
 from html import escape as html_escape
 import qa
 import review
@@ -57,7 +58,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.29.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.30.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -180,6 +181,7 @@ JIRA_DEFAULTS = {
     "project_keys": [],
     "story_limit": 2,
     "wip_issue_types": [],
+    "group_link_types": [],        # 0.30: welche Issue-Links Tickets zu einem Task gruppieren; leer = jeder Link zwischen Tickets in Arbeit
     "only_active_sprints": True,   # nur Tickets aus aktiven Sprints (Jira Software, JQL sprint in openSprints())
     "jql_in_progress": 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC',
     "allow_create": False,         # Tickets aus dem Panel anlegen (Schreibzugriff auf Jira!). Aus, bis du es einschaltest.
@@ -920,7 +922,7 @@ class JiraClient:
 
     def _fields(self):
         sf = self.sprint_field()
-        return ["summary", "status", "issuetype"] + ([sf] if sf else [])
+        return ["summary", "status", "issuetype", "issuelinks", "parent"] + ([sf] if sf else [])
 
     def _issue(self, i):
         f = i.get("fields") or {}
@@ -930,6 +932,7 @@ class JiraClient:
             "type": (f.get("issuetype") or {}).get("name", ""),
             "url": self.base + "/browse/" + i["key"],
             "sprint": "", "sprint_end": "", "in_sprint": None,
+            "links": groups.links_of(f), "parent": (f.get("parent") or {}).get("key", ""),
         }
         if self._sf:
             act = sprint.active_sprint(f.get(self._sf))
@@ -1260,7 +1263,11 @@ class DemoJira:
         "DLP-120": ("Retry-Tests ergänzen", "To Do"),
         "DLP-140": ("Policy-Tabelle filtern", "In Review"),
         "DLP-150": ("Sonar Quality Gate", "In Review"),
+        "DLP-131": ("Export bricht bei Umlauten im Dateinamen ab", "In Progress"),
+        "DLP-132": ("Begleitticket: Testfall und Release-Notiz zum Export-Fix", "In Progress"),
     }
+    _TYPES = {"DLP-131": "Bug", "DLP-132": "Aufgabe"}
+    _LINKS = {"DLP-131": [{"key": "DLP-132", "type": "Relates"}], "DLP-132": [{"key": "DLP-131", "type": "Relates"}]}
 
     _BACKLOG = {"DLP-103", "DLP-120"}   # nicht im aktiven Sprint
 
@@ -1271,8 +1278,9 @@ class DemoJira:
         summary, status = self._DATA[key]
         ins = key not in self._BACKLOG
         end = (datetime.now(timezone.utc) + timedelta(days=9)).isoformat()
-        return {"key": key, "summary": summary, "status": status, "type": "Story", "url": "%s/browse/%s" % (self.base, key),
-                "sprint": "Sprint 12" if ins else "", "sprint_end": end if ins else "", "in_sprint": ins}
+        return {"key": key, "summary": summary, "status": status, "type": self._TYPES.get(key, "Story"), "url": "%s/browse/%s" % (self.base, key),
+                "sprint": "Sprint 12" if ins else "", "sprint_end": end if ins else "", "in_sprint": ins,
+                "links": list(self._LINKS.get(key, [])), "parent": ""}
 
     def in_progress(self):
         return [self._issue(k) for k, v in self._DATA.items() if v[1] == "In Progress"]
@@ -1436,6 +1444,7 @@ class App:
             except bcs.BcsError as e:
                 self.bcs_error = str(e)
         self._bcs_prev = {}                      # draftId der Middleware → was tinyops dafür geprüft hat
+        self._head_of = {}                       # Begleitticket → Task (0.30)
         self._bcs_lock = threading.Lock()
         self.ssl_ctx = ssl.create_default_context()
         if not hasattr(self, "_send_lock"):
@@ -1680,6 +1689,35 @@ class App:
             it["no_ticket"] = (not it["keys"]) and it["kind"] in ("mr", "branch")
             it["create_url"] = ""
 
+    def _group_linked(self, head, items):
+        """MRs und Branches eines Tasks: die des Kopf-Tickets und aller Begleittickets, ohne Doppelte."""
+        seen, out = set(), []
+        for k in [head["key"]] + [c["key"] for c in head.get("companions") or []]:
+            for x in self._linked(k, items):
+                if x.get("ref") not in seen:
+                    seen.add(x.get("ref"))
+                    out.append(x)
+        return out
+
+    def group_action(self, b):
+        """Ticket einem Task zuordnen (head), eigenständig machen (head «») oder zur Erkennung zurück (reset)."""
+        key = str(b.get("key") or "").strip().upper()
+        if not groups.KEY_RE.match(key):
+            raise UserError("Ticket-Key wie DLP-123 erwartet.")
+        if b.get("reset"):
+            self.store.group_set(key, None)
+            self.audit("board.group", key, head="(automatisch)")
+        else:
+            head = str(b.get("head") or "").strip().upper()
+            if head and (not groups.KEY_RE.match(head) or head == key):
+                raise UserError("Wähle ein anderes Ticket als Task.")
+            if head and self.store.groups().get(head):
+                raise UserError("%s ist selbst einem Task zugeordnet. Wähle dessen Task." % head)
+            self.store.group_set(key, head)
+            self.audit("board.group", key, head=head or "(eigenständig)")
+        self.cache_t = 0.0                  # beim nächsten Abruf neu gruppieren
+        return {"ok": True}
+
     # -- Jira-Verknüpfung (läuft beim Auffrischen des Caches)
     def _jira_data(self, data, pre=None):
         j = self.jira
@@ -1690,10 +1728,7 @@ class App:
                "stories": [], "url": j.base, "error": ""}
         items = data["mine"] + data["review"] + data["assigned"]
         try:
-            inprog = pre() if pre else j.in_progress()
-            types = {t.lower() for t in (self.jc.get("wip_issue_types") or [])}
-            if types:
-                inprog = [i for i in inprog if i["type"].lower() in types]
+            inprog = pre() if pre else j.in_progress()       # 0.30: alle Typen bleiben sichtbar; die Typen bestimmen nur, was zum Limit zählt
             allowed = self._key_rules()
             manual = self.store.links()
             for it in items:
@@ -1715,7 +1750,10 @@ class App:
         by_key.update({i["key"]: dict(i, in_progress=True) for i in inprog})
         by_key.update({t["key"]: self._local_ticket(t) for t in self.store.tasks()})   # Aufgaben ohne Jira-Ticket zählen wie Tickets
         self._by_key = by_key
-        over = len(inprog) > limit
+        heads, head_of = groups.build(inprog, self.store.groups(), self.jc.get("group_link_types") or (), self.jc.get("wip_issue_types") or ())
+        self._head_of = head_of
+        counted = sum(1 for h in heads if h["counts"])
+        over = counted > limit
         for it in items:
             tk = next((by_key[k] for k in it["keys"] if k in by_key), None)
             it["ticket"] = tk
@@ -1723,8 +1761,8 @@ class App:
             it["no_ticket"] = (not it["keys"]) and it["kind"] in ("mr", "branch")
             it["create_url"] = j.create_url(it["title"]) if it["no_ticket"] else ""
             it["agent_locked"] = bool(over and not (tk and tk["in_progress"]))
-        for s in inprog:
-            linked = self._linked(s["key"], items)
+        for s in heads:
+            linked = self._group_linked(s, items)
             s["items"] = linked
             s["no_mr"] = not any(x["kind"] in ("mr", "assigned") for x in linked)
         sprints = {}
@@ -1737,10 +1775,10 @@ class App:
                 sprints[t["sprint"]] = {"name": t["sprint"], "end": end, "days_left": left}
         out["sprints"] = list(sprints.values())
         out["only_active"] = bool(self.jc.get("only_active_sprints", True))
-        out.update({"ok": True, "count": len(inprog), "over": over, "stories": inprog})
+        out.update({"ok": True, "count": counted, "over": over, "stories": heads, "tickets": len(inprog)})
         linked_n = sum(1 for it in items if it.get("ticket"))
-        jlog.info("%d Stories in Arbeit (Limit %d)%s; %d von %d Einträgen mit Ticket verknüpft, %d ohne Key, %d Key unbekannt",
-                  len(inprog), limit, " → ÜBER DEM LIMIT" if over else "", linked_n, len(items),
+        jlog.info("%d Tickets in Arbeit, %d Tasks davon %d zählend (Limit %d)%s; %d von %d Einträgen mit Ticket verknüpft, %d ohne Key, %d Key unbekannt",
+                  len(inprog), len(heads), counted, limit, " → ÜBER DEM LIMIT" if over else "", linked_n, len(items),
                   sum(1 for it in items if it.get("no_ticket")), sum(1 for it in items if it.get("ticket_unknown")))
         for it in items:
             if it.get("ticket_unknown"):
@@ -1835,6 +1873,10 @@ class App:
             for i in p["items"]:
                 pools.setdefault(i["value"], []).append({"id": p["id"], "name": p["name"]})
         jira_prog = {st["key"] for st in (j or {}).get("stories", [])}
+        head_of = dict(getattr(self, "_head_of", {}) or {})
+        comps_of = {}
+        for st in (j or {}).get("stories", []):
+            comps_of[st["key"]] = st.get("companions") or []
         mine_keys = {k for it in data["mine"] for k in it.get("keys", [])}
         # auch Keys, die Jira (noch) nicht kennt: sonst verschwände ein eigener MR mit Tippfehler im Key aus Board und Fokus
         keys = set(jira_prog) | set(known) | {k for k in stages if not links.is_ref_key(k)} | set(self.store.pool_tickets()) | mine_keys
@@ -1846,14 +1888,18 @@ class App:
         cards = []
         for k in sorted(keys):
             tk = known.get(k)
+            if k in head_of and head_of[k] in keys:
+                continue   # Begleitticket: erscheint auf der Karte seines Tasks (0.30)
             if k not in stages and k not in pools and k not in jira_prog and k not in mine_keys and not (tk and tk.get("local")):
                 continue   # Tickets nur, wenn sie in Arbeit, im Pool, auf dem Board oder mit eigenem MR/Branch verbunden sind
-            linked = self._linked(k, items)
+            linked = self._group_linked({"key": k, "companions": comps_of.get(k) or []}, items)
             st = stages.get(k)
             card = {"id": k, "key": k, "title": (tk or {}).get("summary", "") or next((x.get("title", "") for x in linked if x.get("title")), ""), "status": (tk or {}).get("status", ""), "url": (tk or {}).get("url", ""),
                     "local": bool(tk and tk.get("local")), "known": tk is not None, "type": (tk or {}).get("type", ""), "items": linked,
                     "stage": st["stage"] if st else derive(tk, linked), "manual_stage": bool(st), "updated": st["updated"] if st else 0,
-                    "pools": pools.get(k, []), "jira_in_progress": k in jira_prog, "sprint": (tk or {}).get("sprint", "")}
+                    "pools": pools.get(k, []), "jira_in_progress": k in jira_prog, "sprint": (tk or {}).get("sprint", ""),
+                    "companions": [{"key": c["key"], "summary": c.get("summary", ""), "type": c.get("type", ""), "status": c.get("status", ""), "url": c.get("url", ""),
+                                    "why": c.get("why", "")} for c in comps_of.get(k) or []]}
             cards.append(card)
         for it in data["mine"]:   # MRs/Branches ohne Ticket: eigene Karten, damit nichts fehlt
             if it["kind"] in ("mr", "branch") and not it.get("keys") and it.get("ref"):
@@ -1888,9 +1934,12 @@ class App:
             for st in stories:
                 st["stage"] = (by_id.get(st["key"]) or {}).get("stage", "impl")
             if not j.get("partial"):
-                j["stories"], j["count"] = stories, len(stories)
-                j["over"] = len(stories) > int(j.get("limit", 2))
-                prog_keys = {st["key"] for st in stories}
+                for st in stories:
+                    st.setdefault("counts", True)
+                    st.setdefault("companions", [])
+                j["stories"], j["count"] = stories, sum(1 for st in stories if st["counts"])
+                j["over"] = j["count"] > int(j.get("limit", 2))
+                prog_keys = {st["key"] for st in stories} | {c["key"] for st in stories for c in st["companions"]}
                 for it in items:
                     tk = it.get("ticket")
                     it["agent_locked"] = bool(j["over"] and not (tk and tk["key"] in prog_keys))
@@ -3795,9 +3844,21 @@ class App:
 
     def ux_report(self, days=7):
         days = max(1, min(int(days or 7), 365))
-        a = ux.analyse(self.uxlog.events(time.time() - days * 86400))
-        return {"text": ux.report_md(a, days, VERSION), "sessions": a["sessions"], "events": a["events"], "active_min": a["active_min"],
-                "hints": ux.hints(a), "enabled": self._ux_cfg()["enabled"], "stored": self.uxlog.count(), "days": days}
+        evs = self.uxlog.events(time.time() - days * 86400)
+        a = ux.analyse(evs)
+        sub, newest = ux.latest_only(evs, a)
+        cur = ux.analyse(sub) if sub is not None else None
+        return {"text": ux.report_md(a, days, VERSION, cur, newest), "sessions": a["sessions"], "events": a["events"], "active_min": a["active_min"],
+                "hints": ux.hints(cur or a), "enabled": self._ux_cfg()["enabled"], "stored": self.uxlog.count(), "days": days, "wishes": len(a["wishes"])}
+
+    def ux_wish(self, b):
+        """Wunsch an tinyops (0.30): landet im Nutzungsbericht, auch wenn die Erfassung aus ist – du hast ihn ja ausdrücklich geschrieben."""
+        try:
+            self.uxlog.add_wish(b.get("sess"), b.get("text"), b.get("view") or "", b.get("trail") or [], VERSION)
+        except ValueError as e:
+            raise UserError(str(e))
+        self.audit("ux.wish", "", chars=len(str(b.get("text") or "")))
+        return {"ok": True}
 
     def ux_clear(self):
         n = self.uxlog.clear()
@@ -4382,6 +4443,8 @@ def make_handler(app):
                             '<p>%s</p><p><a href="/#settings">Zurück zu tinyops</a></p><script>setTimeout(()=>location.replace("/#settings"),%d)</script>'
                             % (html_escape(msg), 800 if ok else 8000))
                     return self._send(200 if ok else 400, page.encode("utf-8"), "text/html")
+                if method == "POST" and path == "/api/groups":
+                    return self._send(200, app.group_action(self._body()))
                 if method == "GET" and path == "/api/bcs/day":
                     return self._send(200, app.bcs_day((urllib.parse.parse_qs(parsed.query).get("date") or [timesheet.today()])[0]))
                 if method == "POST" and path.startswith("/api/bcs/"):
@@ -4405,6 +4468,8 @@ def make_handler(app):
                 if method == "GET" and path == "/api/ux/report":
                     q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
                     return self._send(200, app.ux_report(q.get("days") or 7))
+                if method == "POST" and path == "/api/ux/wish":
+                    return self._send(200, app.ux_wish(self._body()))
                 if method == "POST" and path == "/api/ux/clear":
                     return self._send(200, app.ux_clear())
                 if method == "POST" and path == "/api/update/seen":
