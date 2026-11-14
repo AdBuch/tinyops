@@ -37,6 +37,8 @@ Grössen: S = ein Tag, M = zwei bis drei Tage, L = eine Woche (Arbeit an tinyops
 | **0.28.0** ✓ | Microsoft 365 über Graph (delegiert, Anmeldung im Browser mit 2FA oder Code): Termine heute, Mail und Teams «wartet auf dich», Termine als Zeit übernehmen, Fokuszeit im Kalender eintragen; Review-XP; Agenten-Streaming für Claude Code und Vibe (geliefert 2026-11-11) | – | L |
 | **0.29.0** ✓ | BCS buchen über die lokale Middleware (Workflow-API): Aufgaben zuordnen, Tag gemeinsam prüfen, einmal bestätigen, Abgleich nach Abbruch; BCS-Tageskarte, Lernende (lesen), Buchungstexte vom lokalen Modell (geliefert 2026-11-11) | – | L |
 | **0.30.0** ✓ | Tickets zu Tasks gruppieren (Bug + Begleitticket, Story + Unteraufgaben, von Hand), Bugs bleiben sichtbar; Wunsch an tinyops im Nutzungsbericht; Bericht mit Version, Fehlermeldungen, langsamen Antworten, Hilfe und ungenutzten Ansichten (geliefert 2026-11-13) | – | M |
+| **0.31.0** ✓ | Agenten-Zyklus Planen → Umsetzen → Review → Test mit Freigabe und Prüfpunkten von Hand (`tinyops-manual`), Leitplanken in jedem Prompt, Prompts als Markdown (ansehen, bearbeiten, kopieren), Testsitzung in Prüfen (geliefert 2026-11-14) | – | M |
+| 0.32.0 | Bewusst klein: Rückstand der Prüfliste abarbeiten, Korrekturen aus deinen Tests und dem Nutzungsbericht, keine grossen neuen Funktionen | – | S |
 
 Reihenfolge: 0.15 ist klein und nimmt die falschen Grünmeldungen weg. 0.16 vor 0.17, weil du Agenten auf DLP-Repos willst.
 0.17 vor 0.19, weil Zeitbuchungen der erste neue Write nach draussen sind und auditiert sein müssen. 0.18 braucht das Zeitlimit aus 0.15.

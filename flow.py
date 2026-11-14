@@ -19,6 +19,7 @@ STAGE_TO_PHASE = {"idea": 0, "planned": 0, "impl": 2, "review": 4, "test": 5, "t
 PHASE_TO_STAGE = {0: "planned", 2: "impl", 4: "review", 5: "test", 6: "tested", 7: "done"}   # Branch und MR sind Tatsachen, keine Wahl
 RUNNING = ("running", "pending", "created", "waiting_for_resource", "preparing", "scheduled")
 XP_STEP, XP_DONE, XP_CHECK, XP_AGENT = 10, 30, 3, 5
+NEXT_PHASE = {"plan": ("develop", "Umsetzen"), "develop": ("review", "Review"), "review": ("test", "Test")}   # Agenten-Zyklus (0.31)
 
 
 def _slug(s):
@@ -239,14 +240,23 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None
                         owner="agent", run=latest["id"])
         elif latest["status"] in ("fehlgeschlagen", "verloren", "abgelaufen") and nxt["kind"] != "blocked":
             nxt = _step("blocked", "agent_failed", "Agent-Lauf prüfen", "%s: %s." % (latest.get("agent_name", "Agent"), latest["status"]), run=latest["id"])
-        elif latest["status"] == "fertig" and (phase <= 2 or not latest.get("ack")) and nxt["kind"] != "blocked":
-            nxt = _step("do", "agent_result", "Ergebnis des Agenten prüfen", "%s ist fertig. %s%s" % (
-                latest.get("agent_name", "Agent"), report_line(latest), "Bericht lesen, dann MR erstellen." if phase <= 2 else "Bericht lesen."), run=latest["id"])
+        elif latest["status"] == "fertig" and not latest.get("gate") and (phase <= 2 or not latest.get("ack")) and nxt["kind"] != "blocked":
+            lab = latest.get("phase_label") or "Umsetzen"
+            man = latest.get("manual") or []
+            todo = ("Prüfpunkte %d von %d abgehakt, dann freigeben oder zurückgeben." % (latest.get("manual_done", 0), len(man))) if man else "Bericht lesen, dann freigeben oder zurückgeben."
+            nxt = _step("do", "agent_result", "%s prüfen und freigeben" % lab, "%s ist fertig. %s%s" % (
+                latest.get("agent_name", "Agent"), report_line(latest), todo), run=latest["id"])
+        elif latest["status"] == "fertig" and latest.get("gate") == "back" and phase <= 5 and nxt["kind"] != "blocked":
+            nxt = _step("do", "agent_back", "Nachbessern lassen", "Du hast «%s» zurückgegeben: %s" % (latest.get("phase_label") or "Umsetzen", latest.get("gate_note") or ""), run=latest["id"])
+        elif latest["status"] == "fertig" and latest.get("gate") == "ok" and latest.get("phase") in ("plan", "develop", "review") and phase <= 5 and nxt["kind"] == "do":
+            nx = NEXT_PHASE[latest["phase"]]
+            nxt = _step("do", "agent_next", "%s starten" % nx[1], "«%s» ist freigegeben. Nächste Phase: %s." % (latest.get("phase_label") or "", nx[1]),
+                        run=latest["id"], phase=nx[0])
         elif latest["status"] == "zugewiesen" and phase <= 2 and nxt["kind"] == "do":
             nxt = _step("do", "agent_start", "Agent starten", "%s ist zugewiesen, aber noch nicht gestartet." % latest.get("agent_name", "Agent"), run=latest["id"])
 
     # -- Teilschritte: der nächste offene Haken ist der kleinste nächste Schritt
-    if open_checks and phase in (0, 1, 2, 3) and nxt["kind"] == "do" and nxt["id"] not in ("agent_result", "agent_start", "plan"):
+    if open_checks and phase in (0, 1, 2, 3) and nxt["kind"] == "do" and nxt["id"] not in ("agent_result", "agent_start", "agent_back", "agent_next", "plan"):
         done_n = len(checklist) - len(open_checks)
         nxt = _step("do", "check", open_checks[0]["text"], "Teilschritt %d von %d. Danach: %s." % (done_n + 1, len(checklist), nxt["label"]),
                     check=open_checks[0]["id"], then=nxt)

@@ -130,6 +130,11 @@ case "$2" in ok|OK|erf*|done|ja|pass*) s=ok;; offen|open|fail*|nein|nicht*) s=op
 printf '{"n": %d, "state": "%s", "note": "%s", "ts": %s}\n' "$k" "$s" "$(j "$3" | cut -c1-400)" "$(date +%s)" >> "$R/$N.ak"
 echo "[tinyops] AK$k: $s" >&2
 ''',
+    "tinyops-manual": _HELPER_HEAD + r'''# tinyops-manual "Schritt" "Erwartet"   beschreibt einen Testschritt, den der Mensch von Hand ausführt (Oberfläche, Ablauf, Daten)
+[ -n "$1" ] || { echo 'Aufruf: tinyops-manual "Was tun" "Was soll passieren"' >&2; exit 2; }
+printf '{"step": "%s", "expect": "%s", "ts": %s}\n' "$(j "$1" | cut -c1-300)" "$(j "$2" | cut -c1-300)" "$(date +%s)" >> "$R/$N.manual"
+echo "[tinyops] manueller Testschritt notiert" >&2
+''',
     "tinyops-report": _HELPER_HEAD + r'''# tinyops-report < bericht.md   oder   tinyops-report "Text"   speichert den Ergebnisbericht (Markdown, höchstens 20 KB)
 if [ $# -gt 0 ]; then printf '%s\n' "$*"; else cat; fi | head -c 20000 > "$R/$N.summary.md.tmp" && mv "$R/$N.summary.md.tmp" "$R/$N.summary.md"
 echo "[tinyops] Bericht gespeichert." >&2
@@ -302,6 +307,78 @@ def clean_agents(raw, conn_ids, existing, errors):
 
 
 CLONE_URL_RE = re.compile(r"^(?:https://[A-Za-z0-9.-]+(?::\d+)?/|ssh://(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+(?::\d+)?/|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:)[A-Za-z0-9._~/+-]+$")
+
+
+# -- Zyklus (0.31): Planen → Umsetzen → Review → Test, jede Phase endet mit deiner Freigabe
+PHASES = ("plan", "develop", "review", "test")
+PHASE_LABEL = {"plan": "Planen", "develop": "Umsetzen", "review": "Review", "test": "Test"}
+PHASE_TEMPLATE = {"plan": "agent-plan", "develop": "agent-task", "review": "agent-prereview", "test": "agent-test"}
+GATES = ("ok", "back")
+GUARD_DEFAULTS = {"max_files": 8, "max_lines": 300, "extra": ""}
+
+
+def guards_cfg(cfg):
+    g = dict(GUARD_DEFAULTS)
+    g.update(cfg.get("agent_guards") or {})
+    return g
+
+
+def guards_text(g, phase="develop"):
+    """Leitplanken für jeden Prompt: eine gute, aber einfache Änderung, die sich leicht reviewen lässt."""
+    lines = ["## Leitplanken",
+             "- **Klein halten:** höchstens %d Dateien und etwa %d geänderte Zeilen. Wird es mehr, hör auf und schlag mit `tinyops-ask` eine Aufteilung vor." % (g["max_files"], g["max_lines"]),
+             "- **Nur, was die Aufgabe verlangt:** kein Umbau nebenbei, keine Formatierung fremder Zeilen, keine neuen Abhängigkeiten ohne Rückfrage.",
+             "- **Einfach vor clever:** bestehende Muster und den Stil des Projekts übernehmen; Namen, die erklären, was passiert.",
+             "- **Jede Verhaltensänderung bekommt einen Test**, ausgeführt mit `tinyops-check`.",
+             "- **Kleine Commits** mit einer Absicht je Commit und einer Nachricht, die sie nennt.",
+             "- **Für das Review schreiben:** Im Bericht zuerst, was ein Reviewer ansehen soll, und was du bewusst nicht gemacht hast."]
+    if phase in ("plan", "review"):
+        lines[1:3] = ["- **Nichts ändern:** In dieser Phase liest du nur. Keine Dateien bearbeiten, nichts committen.",
+                      "- **Am Ziel messen:** Eine gute Änderung bleibt unter %d Dateien und etwa %d Zeilen. Ist mehr nötig, schlag eine Aufteilung vor." % (g["max_files"], g["max_lines"])]
+    extra = " ".join(str(g.get("extra") or "").split())[:600]
+    if extra:
+        lines.append("- **Im Team vereinbart:** " + extra)
+    return "\n".join(lines) + "\n"
+
+
+def guard_warnings(result, g):
+    """Was am Ergebnis über die Leitplanken geht. Nur Hinweise: entscheiden tust du."""
+    if not result:
+        return []
+    out = []
+    files = len(result.get("files") or [])
+    m = re.search(r"(\d+) insertion", result.get("stat") or "")
+    d = re.search(r"(\d+) deletion", result.get("stat") or "")
+    lines = (int(m.group(1)) if m else 0) + (int(d.group(1)) if d else 0)
+    if files > g["max_files"]:
+        out.append("%d Datei%s geändert, Ziel höchstens %d. Lässt es sich aufteilen?" % (files, "" if files == 1 else "en", g["max_files"]))
+    if lines > g["max_lines"]:
+        out.append("%d Zeilen geändert, Ziel etwa %d. Gross für ein gründliches Review." % (lines, g["max_lines"]))
+    if result.get("dirty"):
+        out.append("%d Datei%s nicht committet." % (result["dirty"], "" if result["dirty"] == 1 else "en"))
+    return out
+
+
+def parse_manual(text):
+    out = []
+    for line in (text or "").splitlines()[-30:]:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        st = " ".join(str(d.get("step") or "").split())[:300]
+        if st:
+            out.append({"step": st, "expect": " ".join(str(d.get("expect") or "").split())[:300]})
+    return out[:20]
+
+
+def review_items(v):
+    """Deine Prüfpunkte für ein manuelles Review des Ergebnisses: fest, plus je Akzeptanzkriterium."""
+    items = [{"kind": "review", "step": "Diff ganz gelesen", "expect": "Jede geänderte Zeile verstanden; nichts ausserhalb der Aufgabe"},
+             {"kind": "review", "step": "Umfang passt", "expect": "Klein genug, sonst aufteilen lassen (Nachbessern)"},
+             {"kind": "review", "step": "Tests passen zur Änderung", "expect": "Neue oder geänderte Logik ist durch Tests abgedeckt, Belege grün"}]
+    items += [{"kind": "review", "step": "AK%d: %s" % (c["n"], c["text"]), "expect": "im Code erfüllt"} for c in v.get("criteria") or []]
+    return items
 
 
 def clone_hint(msg, url):
@@ -621,7 +698,7 @@ cat > "$R/{rid}.cmd" <<'{d2}'
 cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
 {runner}TINYOPS_RUNNER_EOF
 command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.summary.md" "$R/{rid}.answer."*
+rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.manual" "$R/{rid}.summary.md" "$R/{rid}.answer."*
 {helpers}ID={rid}
 {prep}echo "$WD" > "$R/{rid}.wd"
 tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
@@ -647,7 +724,7 @@ def remote_status_script(ids):
 
 def remote_report_script(rid):
     return ('R="$HOME/.tinyops/runs"; echo "@@SUMMARY"; head -c 20000 "$R/%d.summary.md" 2>/dev/null; echo; echo "@@CHECKS"; '
-            'tail -n 50 "$R/%d.checks" 2>/dev/null; echo "@@AK"; tail -n 200 "$R/%d.ak" 2>/dev/null; true') % (int(rid), int(rid), int(rid))
+            'tail -n 50 "$R/%d.checks" 2>/dev/null; echo "@@AK"; tail -n 200 "$R/%d.ak" 2>/dev/null; echo "@@MANUAL"; tail -n 30 "$R/%d.manual" 2>/dev/null; true') % (int(rid), int(rid), int(rid), int(rid))
 
 
 def result_script(wt, mode):
@@ -1008,9 +1085,12 @@ class Service:
                 return ""
         ws = self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
         vals = D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
-                 url_line=("Link: %s\n" % url) if url else "", workspace_line=ws)
+                 url_line=("Link: %s\n" % url) if url else "", workspace_line=ws,
+                 guards=guards_text(guards_cfg(self.cfg), {v: k for k, v in PHASE_TEMPLATE.items()}.get(template, "develop")))
         vals.update(extra or {})
         out = re.sub(r"\n{3,}", "\n\n", tpl.format_map(vals)).strip() + "\n"
+        if "{guards}" not in tpl:                      # eigene Vorlagen ohne Platzhalter bekommen die Leitplanken trotzdem
+            out += "\n" + vals["guards"]
         return out + ("\n" + tools + "\n" if tools else "")
 
     def prompt_info(self, aid, ticket, pid, branch, title, key, url="", template="agent-task", extra=None):
@@ -1056,6 +1136,27 @@ class Service:
                 v[k] = empty
         v["criteria"] = briefing.merge(v["criteria"] or [], v.pop("ak") or [])
         v["ak"] = briefing.counts(v["criteria"])
+        v["phase"] = r.get("phase") or "develop"
+        v["phase_label"] = PHASE_LABEL.get(v["phase"], v["phase"])
+        try:
+            steps = json.loads(r.get("msteps") or "[]")
+            checks_ = json.loads(r.get("mchecks") or "{}")
+        except ValueError:
+            steps, checks_ = [], {}
+        items = []
+        if v["phase"] in ("develop", "review"):
+            items += review_items(v)
+        if v["phase"] in ("develop", "test"):
+            items += [dict(x, kind="test") for x in steps]
+            if v["phase"] == "test" or steps:
+                items.append({"kind": "test", "step": "Im laufenden System ausprobiert", "expect": "Das Ticket-Ziel ist aus Sicht eines Nutzers erreicht"})
+        for i, it in enumerate(items):
+            c = checks_.get(str(i)) or {}
+            it.update(i=i, done=bool(c.get("done")), note=c.get("note", ""))
+        v["manual"] = items
+        v["manual_done"] = sum(1 for x in items if x["done"])
+        v["gate"], v["gate_note"] = r.get("gate") or "", r.get("gate_note") or ""
+        v["guard_warnings"] = guard_warnings(v.get("result"), guards_cfg(self.cfg)) if v["phase"] in ("develop", "test") else []
         v["ack"] = bool(r.get("ack"))
         v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
@@ -1090,7 +1191,7 @@ class Service:
         self._ev("agent.assign", self.store.agent_run(rid), branch=str(branch or "")[:200])
         return rid
 
-    def start(self, run_id, prompt, pid=None, branch=None):
+    def start(self, run_id, prompt, pid=None, branch=None, phase="develop", parent=None):
         with self.lock:
             r = self.store.agent_run(run_id)
             if not r:
@@ -1119,7 +1220,8 @@ class Service:
             prep = prepare_script(mode, self._q(a, repo), self._q(a, root), run_id, outb, branch, (self.project(pid) or {}).get("cloud_paths") or [])
             crit = briefing.parse_prompt(prompt)
             self.store.agent_run_update(run_id, project_id=pid, branch=branch, workdir=wd, prompt=prompt, mode=mode, out_branch=outb,
-                                        criteria=json.dumps(crit, ensure_ascii=False), ak="", result="")
+                                        criteria=json.dumps(crit, ensure_ascii=False), ak="", result="", msteps="", mchecks="", gate="", gate_note="",
+                                        phase=phase if phase in PHASES else "develop", parent=str(parent or ""))
             try:
                 if conn is None:
                     run_wd = self._local_prepare(a, run_id, prep) if mode != "shared" else wd
@@ -1164,7 +1266,7 @@ class Service:
                 (d / ("%d.%s" % (rid, ext))).unlink()
             except OSError:
                 pass
-        for f in list(d.glob("%d.answer.*" % rid)) + [d / ("%d.%s" % (rid, x)) for x in ("question.json", "qn", "checks", "ak", "summary.md")]:
+        for f in list(d.glob("%d.answer.*" % rid)) + [d / ("%d.%s" % (rid, x)) for x in ("question.json", "qn", "checks", "ak", "manual", "summary.md")]:
             try:
                 f.unlink()
             except OSError:
@@ -1267,16 +1369,18 @@ class Service:
             if conn is None:
                 d = self.run_dir
                 rd = lambda ext: (d / ("%d.%s" % (r["id"], ext))).read_text(encoding="utf-8", errors="replace") if (d / ("%d.%s" % (r["id"], ext))).exists() else ""
-                summary, checks, ak = rd("summary.md")[:20000], rd("checks"), rd("ak")
+                summary, checks, ak, manual = rd("summary.md")[:20000], rd("checks"), rd("ak"), rd("manual")
             else:
                 rc, out, _ = run_remote(conn, remote_report_script(r["id"]), timeout=20)
                 if rc != 0 or "@@CHECKS" not in out:
                     return False
                 head, _, checks = out.partition("@@CHECKS")
                 checks, _, ak = checks.partition("@@AK")
+                ak, _, manual = ak.partition("@@MANUAL")
                 summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
             self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False),
-                                        ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False))
+                                        ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False),
+                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False))
             cur = self.store.agent_run(r["id"]) or r
             if cur.get("wt") and cur.get("mode") in ("worktree", "export"):      # was am Code geändert wurde; fehlt der Ordner schon, bleibt der alte Stand
                 rc, out, _ = self._sh(a, conn, result_script(cur["wt"], cur["mode"]), r["id"], timeout=25)
@@ -1287,6 +1391,37 @@ class Service:
         except (AgentError, OSError) as e:
             log.debug("Bericht von Lauf %s nicht lesbar: %s", r.get("id"), e)
             return False
+
+    def gate(self, run_id, gate, note=""):
+        """Deine Freigabe am Ende einer Phase: ok (weiter) oder back (zurück, mit Grund)."""
+        r = self.store.agent_run(run_id)
+        if not r or r["status"] in ("zugewiesen", "läuft"):
+            raise AgentError("Freigeben geht erst, wenn der Lauf beendet ist.")
+        if gate not in GATES + ("",):
+            raise AgentError("Unbekannte Freigabe.")
+        v = self.run_view(r)
+        if gate == "ok" and r["status"] != "fertig":
+            raise AgentError("Ein Lauf mit Status «%s» lässt sich nicht freigeben. Zurückgeben oder neu starten." % r["status"])
+        if gate == "ok" and v["manual"] and v["manual_done"] < len(v["manual"]):
+            raise AgentError("Erst alle Prüfpunkte abhaken (%d von %d). Was nicht zutrifft: mit Notiz abhaken." % (v["manual_done"], len(v["manual"])))
+        note = " ".join(str(note or "").split())[:1000]
+        if gate == "back" and not note:
+            raise AgentError("Was soll anders werden? Ein Satz reicht; er geht in den nächsten Auftrag.")
+        self.store.agent_run_update(run_id, gate=gate, gate_note=note, ack="1")
+        self._ev("agent.gate", r, phase=v["phase"], gate=gate or "(zurückgesetzt)", note=note[:120])
+        return self.run_view(self.store.agent_run(run_id))
+
+    def manual_check(self, run_id, i, done, note=""):
+        r = self.store.agent_run(run_id)
+        if not r:
+            raise AgentError("Diesen Lauf gibt es nicht.")
+        try:
+            cur = json.loads(r.get("mchecks") or "{}")
+        except ValueError:
+            cur = {}
+        cur[str(int(i))] = {"done": bool(done), "note": " ".join(str(note or "").split())[:500]}
+        self.store.agent_run_update(run_id, mchecks=json.dumps(cur, ensure_ascii=False))
+        return self.run_view(self.store.agent_run(run_id))
 
     def ack(self, run_id):
         r = self.store.agent_run(run_id)

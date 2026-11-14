@@ -1109,6 +1109,7 @@ def view(cfg, config_path, features_default=None):
                              for r in (cfg.get("github") or {}).get("repos") or []]},
         "agents": [{k: v for k, v in a.items() if k != "command"} | {"has_command": bool(a.get("command"))} for a in cfg.get("agents") or []],
         "agent_log_days": int(cfg.get("agent_log_days", 30)),
+        "agent_guards": agents.guards_cfg(cfg),
         "ux": dict({"enabled": True, "days": 30}, **(cfg.get("ux") or {})),
         "ide_command": cfg.get("ide_command") or "idea {path}",
         "time": dict(timesheet.DEFAULTS, **dict(cfg.get("time") or {}, bcs=bcs.cfg(cfg))),
@@ -1544,6 +1545,23 @@ def build_config(current, p):
             errors["ide_command"] = "Befehl unlesbar (Anführungszeichen prüfen)."
         else:
             cfg["ide_command"] = cmd
+    if "agent_guards" in p:                 # Leitplanken für jeden Agenten-Prompt (0.31)
+        g = p.get("agent_guards") if isinstance(p.get("agent_guards"), dict) else {}
+        out = {}
+        for k, lo, hi in (("max_files", 1, 200), ("max_lines", 20, 20000)):
+            try:
+                v = int(g.get(k))
+                if not lo <= v <= hi:
+                    raise ValueError
+                out[k] = v
+            except (TypeError, ValueError):
+                errors["agent_guards." + k] = "Ganze Zahl von %d bis %d." % (lo, hi)
+        ex = " ".join(str(g.get("extra") or "").split())
+        if len(ex) > 600:
+            errors["agent_guards.extra"] = "Höchstens 600 Zeichen."
+        out["extra"] = ex[:600]
+        if not any(k.startswith("agent_guards.") for k in errors):
+            cfg["agent_guards"] = out
     if "agent_log_days" in p:
         try:
             d = int(p.get("agent_log_days"))

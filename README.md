@@ -459,6 +459,23 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5c. Agenten-Zyklus, Leitplanken, Testsitzung (neu in 0.31.0)
+
+**Zyklus.** Ein Ticket durchläuft mit Agenten vier Phasen, jede mit deiner Freigabe:
+
+1. **Planen.** Im Agenten-Dialog «Phase: Planen» wählen. Der Agent ändert nichts und liefert einen Plan. Du liest ihn und gibst frei oder gibst zurück.
+2. **Umsetzen.** Nach der Freigabe «Umsetzen vorbereiten …». Der Plan steht im Auftrag. Kleine Aufgaben kannst du ohne Plan direkt umsetzen lassen.
+3. **Review.** Ein zweiter Agent, gern ein lokales Modell, liest das Ergebnis und meldet je Kriterium sein Urteil.
+4. **Test.** Tests laufen lassen und ergänzen, Schritte für deinen Test von Hand beschreiben (`tinyops-manual`).
+
+Im Lauf hakst du die **Prüfpunkte** ab. Erst dann geht «Freigeben». «Zurückgeben» mit einem Satz führt zu «Nachbessern lassen», mit deinem Satz im Auftrag.
+
+**Leitplanken** (Einstellungen → Coding-Agenten): höchstens Dateien und Zeilen je Lauf, dazu eine Team-Regel. Sie stehen in jedem Prompt. Geht ein Ergebnis darüber, zeigt der Lauf einen Hinweis.
+
+**Prompt ansehen.** «Ansehen» zeigt den Prompt gerendert, «Bearbeiten» als Text, «Kopieren» legt ihn in die Zwischenablage. So lässt er sich auch von Hand in ein anderes Werkzeug geben.
+
+**Testsitzung.** Prüfen → «Als Nächstes testen» zeigt fünf Punkte, das aktuelle Release zuerst. Ältere Releases ruhen, bis du sie holst.
+
 ## 5b. Tasks statt einzelner Tickets, Wünsche an tinyops (neu in 0.30.0)
 
 **Tasks.** Jira-Tickets in Arbeit, die zusammengehören, erscheinen als ein Task. Bug mit Begleitticket: der Bug ist der Task. Story mit Unteraufgaben: die Story. Erkannt wird über Issue-Links (Einstellungen → Jira → «Link-Typen, die Tickets zu einem Task gruppieren», leer = alle) und Eltern-Tickets; «Gruppieren …» am Task setzt es von Hand. Bugs bleiben immer sichtbar; ob sie zum Limit zählen, bestimmen die «Vorgangstypen, die beim Limit zählen».

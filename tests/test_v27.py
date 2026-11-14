@@ -264,7 +264,7 @@ class ServerAccess(unittest.TestCase):
         self.assertTrue(wait_for(lambda: (a.agents.poll(force=True), a.store.agent_run(rid)["status"] != "läuft")[1]))
         pre = a.agent_action("prompt", {"agent": "a1", "prereview": rid})
         self.assertEqual((pre["prereview"], pre["branch"], pre["repo"]["state"]), (rid, "agent/dlp-101-%d" % rid, "git"))
-        self.assertIn("Vorprüfung zu DLP-101", pre["prompt"])
+        self.assertIn("Review: DLP-101 ", pre["prompt"])
         self.assertEqual(len(briefing.parse_prompt(pre["prompt"])), 3)
 
     def test_github_clone_url(self):
@@ -343,7 +343,7 @@ class Ui(unittest.TestCase):
     def test_static(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         for needle in ("const HELP = {", 'data-help="${id}"', "ssh-keygen -t ed25519", "data-fbext", "data-fmext", 'id="agRepo"', "/api/agents/clone", "/api/agents/access",
-                       "function secretList(", 'id="agPre"', 'data-f="provider"', 'data-f="clone_via"', "FOCUS_AUTO"):
+                       "function secretList(", 'id="agNext"', 'data-f="provider"', 'data-f="clone_via"', "FOCUS_AUTO"):
             self.assertIn(needle, html, needle)
         for gone in ("soll-only", "startLabel: 'Block starten'", "ohne Zeitbox"):          # die Leiste gibt es nur noch bei laufender Sitzung
             self.assertNotIn(gone, html, gone)

@@ -117,6 +117,16 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.31.0
+
+- [ ] `r31-01` Prüfen → oben «Als Nächstes testen» mit fünf Punkten aus 0.31.0 → einen auf ok setzen → der nächste rückt nach, «in dieser Sitzung 1 erledigt»
+- [ ] `r31-02` Agent zuweisen → «Phase: Planen» → «Ansehen» zeigt den Prompt mit Überschriften und «Leitplanken»; «Kopieren» legt ihn in die Zwischenablage; «Bearbeiten» zeigt den Text
+- [ ] `r31-03` Plan-Lauf fertig → Plan gerendert, keine Prüfpunkte → «Freigeben» → «Umsetzen vorbereiten …» → im Prompt steht «Freigegebener Plan» mit dem Plan als Zitat
+- [ ] `r31-04` Umsetzen-Lauf fertig → Prüfpunkte (Diff gelesen, Umfang, Tests, je Kriterium, Testschritte des Agenten) → «Freigeben» ist gesperrt, bis alle abgehakt sind
+- [ ] `r31-05` «Zurückgeben» ohne Notiz → Hinweis; mit Notiz → «Nachbessern lassen …» öffnet den Auftrag mit deiner Notiz
+- [ ] `r31-06` Nach der Freigabe «Review vorbereiten …» mit einem lokalen Agenten → Prompt «Review», Branch des Laufs; danach «Test vorbereiten …»
+- [ ] `r31-07` Einstellungen → Coding-Agenten → Leitplanken: 3 Dateien, Team-Regel speichern → neuer Prompt zeigt beides; ein Lauf mit mehr Dateien zeigt den Hinweis im Freigabe-Kasten
+
 ## 0.30.0
 
 - [ ] `r30-01` Ein Bug in Arbeit, dessen Typ nicht unter «Vorgangstypen, die beim Limit zählen» steht → er erscheint im Panel «Tasks in Arbeit» mit «zählt nicht» und auf dem Board

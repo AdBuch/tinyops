@@ -58,7 +58,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.30.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.31.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -3219,6 +3219,15 @@ class App:
                     info["review_skipped"] = skipped
                     return info
                 aid = str(b.get("agent") or "")
+                phase = str(b.get("phase") or "")
+                if phase and phase not in agents.PHASES:
+                    raise UserError("Unbekannte Phase.")
+                if phase in ("review", "test") and b.get("parent") not in (None, ""):
+                    return self._phase_prompt(svc, aid, phase, b)
+                if phase == "review" and b.get("prereview") in (None, ""):
+                    raise UserError("Review braucht einen beendeten Umsetzen-Lauf mit eigenem Branch.")
+                if phase == "test" and b.get("parent") in (None, ""):
+                    raise UserError("Test braucht einen beendeten Lauf, dessen Ergebnis getestet wird.")
                 if b.get("followup") not in (None, ""):     # Nachbesserung: offene Kriterien des alten Laufs, Ausgang ist sein Branch
                     old = svc.store.agent_run(self._rid({"run": b.get("followup")}))
                     if not old or old["status"] in ("zugewiesen", "läuft"):
@@ -3227,7 +3236,8 @@ class App:
                     base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "") or ov.get("branch") or ""
                     info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
                                            template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"))})
-                    info.update(branch=base, project_id=ov["project_id"], followup=ov["id"], repo=self._repo_access(svc, aid, ov["project_id"]))
+                    info.update(branch=base, project_id=ov["project_id"], followup=ov["id"], parent=ov["id"], phase="develop",      # Nachbessern ändert Code: immer Umsetzen
+                                repo=self._repo_access(svc, aid, ov["project_id"]))
                     return info
                 if b.get("prereview") not in (None, ""):    # Vorprüfung: ein zweiter Agent liest das Ergebnis, ändert nichts, meldet je Kriterium sein Urteil
                     old = svc.store.agent_run(self._rid({"run": b.get("prereview")}))
@@ -3239,13 +3249,24 @@ class App:
                         raise UserError("Dieser Lauf hat keinen eigenen Branch, den ein zweiter Agent prüfen könnte.")
                     info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
                                            template="agent-prereview", extra={"brief": briefing.prereview(ov)})
-                    info.update(branch=base, project_id=ov["project_id"], prereview=ov["id"], repo=self._repo_access(svc, aid, ov["project_id"]))
+                    info.update(branch=base, project_id=ov["project_id"], prereview=ov["id"], parent=ov["id"], phase="review",
+                                repo=self._repo_access(svc, aid, ov["project_id"]))
                     return info
                 key = str(b.get("key") or "")
                 br = self.ticket_brief(key, b.get("title") or "")
                 opts = briefing.options(br, b.get("brief"), bool(svc.agent(aid).get("cloud", True)))
+                phase = phase or "develop"
+                text, plan = briefing.block(br, opts), None
+                if phase == "develop" and b.get("parent") not in (None, ""):      # Umsetzen nach einem freigegebenen Plan
+                    plan = svc.store.agent_run(self._rid({"run": b.get("parent")}))
+                    if not plan or (plan.get("phase") or "develop") != "plan":
+                        raise UserError("Der Plan-Lauf ist nicht mehr da.")
+                    if plan.get("gate") != "ok":
+                        raise UserError("Den Plan zuerst freigeben.")
+                    text += briefing.plan_block(svc.run_view(plan))
                 info = svc.prompt_info(aid, b.get("ticket"), self._pid(b.get("project_id")), b.get("branch") or "",
-                                       b.get("title") or "", key, b.get("url") or "", extra={"brief": briefing.block(br, opts)})
+                                       b.get("title") or "", key, b.get("url") or "", template=agents.PHASE_TEMPLATE[phase], extra={"brief": text})
+                info.update(phase=phase, parent=plan["id"] if plan else None)
                 info["brief"] = briefing.view(br, opts)
                 info["repo"] = self._repo_access(svc, aid, self._pid(b.get("project_id")))
                 try:                               # für die Projektauswahl: was liegt beim Agenten, was fehlt (derselbe kurz gemerkte Blick)
@@ -3266,8 +3287,21 @@ class App:
                 rid = svc.assign(str(b.get("agent") or ""), b.get("ticket"), self._pid(b.get("project_id")), b.get("branch"), b.get("title"))
                 return {"id": rid}
             if action == "start":
-                rid = svc.start(self._rid(b), b.get("prompt"), self._pid(b.get("project_id")), b.get("branch"))
+                phase = str(b.get("phase") or "develop")
+                if phase not in agents.PHASES:
+                    raise UserError("Unbekannte Phase.")
+                parent = self._rid({"run": b.get("parent")}) if b.get("parent") not in (None, "") else None
+                rid = svc.start(self._rid(b), b.get("prompt"), self._pid(b.get("project_id")), b.get("branch"), phase=phase, parent=parent)
                 return {"id": rid}
+            if action == "gate":             # deine Freigabe am Ende einer Phase
+                g = str(b.get("gate") or "")
+                return svc.gate(self._rid(b), g, b.get("note") or "")
+            if action == "manual":           # Prüfpunkt im Lauf abhaken
+                try:
+                    i = int(b.get("i"))
+                except (TypeError, ValueError):
+                    raise UserError("Welcher Prüfpunkt?")
+                return svc.manual_check(self._rid(b), i, bool(b.get("done")), b.get("note") or "")
             if action == "stop":
                 svc.stop(self._rid(b))
                 return {"ok": True}
@@ -3302,6 +3336,29 @@ class App:
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    def _phase_prompt(self, svc, aid, phase, b):
+        """Review oder Test auf dem Ergebnis eines beendeten Laufs: derselbe Branch, Kriterien und Bericht als Grundlage."""
+        old = svc.store.agent_run(self._rid({"run": b.get("parent")}))
+        if not old or old["status"] in ("zugewiesen", "läuft"):
+            raise UserError("%s geht erst, wenn der vorige Lauf beendet ist." % agents.PHASE_LABEL[phase])
+        ov = svc.run_view(old)
+        if ov["phase"] == "plan":
+            raise UserError("Ein Plan hat keinen Code. Zuerst umsetzen lassen.")
+        base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "")
+        if not base and ov["phase"] in ("review", "test") and ov.get("parent"):      # Review/Test ändern nichts: zurück zum Lauf mit dem Code
+            src = svc.store.agent_run(self._rid({"run": ov["parent"]}))
+            sv = svc.run_view(src) if src else {}
+            base = sv.get("taken") or (sv.get("out_branch") if sv.get("mode") == "worktree" else "") or ov.get("branch") or ""
+        if not base:
+            raise UserError("Dieser Lauf hat keinen eigenen Branch, den ein zweiter Agent %s könnte." % ("prüfen" if phase == "review" else "testen"))
+        brief = briefing.prereview(ov) if phase == "review" else briefing.test_brief(ov)
+        info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
+                               template=agents.PHASE_TEMPLATE[phase], extra={"brief": brief})
+        info.update(branch=base, project_id=ov["project_id"], parent=ov["id"], phase=phase, repo=self._repo_access(svc, aid, ov["project_id"]))
+        if phase == "review":
+            info["prereview"] = ov["id"]
+        return info
 
     def clone_url(self, pid, via="ssh"):
         """Adresse, von der der Agent ein Projekt klont: GitLab laut API, GitHub aus dem Repo-Namen. Ohne Zugangsdaten in der Adresse."""

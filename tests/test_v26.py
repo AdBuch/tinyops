@@ -150,7 +150,7 @@ class RunResult(unittest.TestCase):
         # Nachbesserung: neuer Lauf vom Branch des ersten, sieht dessen Commit
         f = briefing.followup(v, "Limit einbauen")
         info = svc.prompt_info("a1", "DLP-1", 7, v["out_branch"], "t", "DLP-1", template="agent-followup", extra={"brief": f})
-        self.assertIn("Nachbesserung zu DLP-1", info["prompt"])
+        self.assertIn("Nachbessern: DLP-1 ", info["prompt"])
         self.assertIn("AK1: Höchstens 5 Versuche\n  zuletzt gemeldet: offen, Limit fehlt noch", info["prompt"])
         self.assertIn("tinyops-ak", info["prompt"])
         svc.cfg["agents"][0]["command"] = "test -f neu.txt && tinyops-ak 1 ok nachgezogen"
@@ -238,7 +238,7 @@ class ServerActions(unittest.TestCase):
         self.assertEqual((v["status"], v["ak"]), ("fertig", {"total": 3, "ok": 1, "open": 2}))
         fu = a.agent_action("prompt", {"agent": "a1", "followup": rid, "note": "Limit einbauen"})
         self.assertEqual((fu["followup"], fu["branch"], fu["project_id"]), (rid, v["out_branch"], 1))
-        self.assertIn("Nachbesserung zu DLP-101", fu["prompt"])
+        self.assertIn("Nachbessern: DLP-101 ", fu["prompt"])
         self.assertEqual([x["text"][:9] for x in briefing.parse_prompt(fu["prompt"])], ["Höchstens", "Ein Test "])
         txt = a.agent_action("comment", {"run": rid})["text"]
         self.assertIn("(/) AK1", txt)

@@ -266,6 +266,46 @@
   .agfollow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
   .agfollow input { flex: 1 1 220px; min-width: 0; }
   @media (max-width: 600px) { .aklist li { grid-template-columns: minmax(0, 1fr); } .aklist .note { grid-column: 1; } }
+  /* 0.31: Prompt lesbar, Zyklus, Prüfpunkte, Freigabe */
+  .pbox { border: 1px solid var(--line); border-radius: 10px; margin-top: 4px; background: var(--surface); }
+  .pbar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .pbar .sm { flex: 1 1 200px; margin: 0; }
+  .pbar .seg { margin-left: 0; }
+  .pbox textarea { border: 0; border-radius: 0 0 10px 10px; width: 100%; height: 300px; font: 12.5px/1.5 var(--mono); }
+  .mdv { padding: 4px 14px 10px; max-height: 46vh; overflow: auto; font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+  .mdv h3 { font-size: 15.5px; margin: 10px 0 2px; } .mdv h4 { font-size: 13.5px; margin: 14px 0 2px; } .mdv h5 { font-size: 13px; margin: 10px 0 0; color: var(--quiet); }
+  .mdv p { margin: 6px 0; } .mdv ul, .mdv ol { margin: 4px 0; padding-left: 22px; } .mdv li { margin: 2px 0; }
+  .mdv code { font: 12.5px var(--mono); background: var(--raised); padding: 1px 4px; border-radius: 4px; }
+  .mdv pre { font: 12.5px/1.45 var(--mono); background: var(--raised); padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; margin: 6px 0; }
+  .mdv blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--line); color: var(--quiet); }
+  .mdv .mddata { border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; margin: 6px 0; white-space: pre-wrap; font-size: 12.5px; }
+  .mdv .mddata::before { content: "Daten aus dem Ticket"; display: block; font-size: 11.5px; color: var(--quiet); margin-bottom: 2px; }
+  .mdv .mdak { display: block; padding: 3px 0 3px 8px; border-left: 3px solid var(--focus); margin: 3px 0; }
+  .agrep .mdv { background: var(--raised); border-radius: 8px; max-height: 34vh; }
+  .agrep .mdv code { background: var(--surface); }
+  .cycle { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 8px 0 4px; counter-reset: ph; }
+  .cycle .ph { position: relative; border-top: 4px solid var(--line); padding: 5px 2px 0; font-size: 12.5px; color: var(--quiet); min-width: 0; }
+  .cycle .ph b { display: block; color: var(--ink); font-weight: 650; }
+  .cycle .ph span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cycle .ph.ok { border-color: var(--ok); } .cycle .ph.ok span { color: var(--ok); }
+  .cycle .ph.back { border-color: var(--warn); } .cycle .ph.back span { color: var(--warn); }
+  .cycle .ph.wait { border-color: var(--focus); } .cycle .ph.wait span { color: var(--focus); }
+  .cycle .ph.cur b { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
+  .mchk { list-style: none; padding: 0; margin: 6px 0 0; }
+  .mchk li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: start; }
+  .mchk li:first-child { border-top: 0; }
+  .mchk input[type=checkbox] { margin-top: 3px; width: 17px; height: 17px; }
+  .mchk .st { font-weight: 600; overflow-wrap: anywhere; } .mchk .ex { color: var(--quiet); font-size: 12.5px; overflow-wrap: anywhere; }
+  .mchk .kd { font-size: 11.5px; color: var(--quiet); margin-right: 6px; font-weight: 500; white-space: nowrap; }
+  .mchk li.done .st { color: var(--quiet); text-decoration: line-through; text-decoration-color: var(--line); }
+  .mchk .mn { grid-column: 2; margin-top: 4px; font-size: 12.5px; padding: 3px 7px; }
+  .gatebox { border: 2px solid var(--focus); border-radius: 12px; padding: 10px 12px; margin-top: 12px; background: var(--focus-bg); }
+  .gatebox.ok { border-color: var(--ok); background: var(--ok-bg); } .gatebox.back { border-color: var(--warn); background: var(--warn-bg); }
+  .gatebox h3 { margin: 0 0 4px; font-size: 14.5px; }
+  .gatebox textarea { width: 100%; height: 64px; min-height: 54px; margin: 6px 0; font-family: var(--sans); resize: vertical; }
+  .gatebox .row { flex-wrap: wrap; }
+  .qsess { border: 2px solid var(--focus); }
+  .gwarn { margin: 8px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .aud { list-style: none; margin: 6px 0 0; padding: 0; }
   .aud li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 12px; padding: 7px 4px; border-top: 1px solid var(--line); font-size: 13px; }
   .aud li:first-child { border-top: 0; }
@@ -1405,7 +1445,10 @@ const HELP = {
   github: `<ol><li>Auf github.com unter Settings → Developer settings ein «Fine-grained token» anlegen, nur lesend: Contents, Pull requests, Metadata.</li><li>Token eintragen, Repos wählen.</li></ol>
     <p>Für GitHub Enterprise die API-Adresse anpassen (<code>https://github.firma.ch/api/v3</code>).</p>`,
   sonar: `<p>Adresse und ein Benutzer-Token eintragen. Den Sonar-Schlüssel je Projekt trägst du bei den Projekten ein. tinyops fragt nur das Quality Gate ab.</p>`,
-  agents: `<p><b>Agent auf einem anderen Rechner (SSH), Schritt für Schritt</b></p>
+  agents: `<p><b>Der Zyklus: Planen → Umsetzen → Review → Test</b></p>
+    <p>Jede Phase ist ein eigener Lauf und endet mit deiner Freigabe. <b>Planen</b>: Der Agent liest nur und schreibt einen Plan. <b>Umsetzen</b>: Code auf eigenem Branch, nach dem freigegebenen Plan. <b>Review</b>: Ein zweiter Agent (gern ein lokales Modell) liest das Ergebnis und ändert nichts. <b>Test</b>: Tests laufen lassen, fehlende ergänzen und Schritte für deinen Test von Hand beschreiben.</p>
+    <p>Freigeben geht erst, wenn du die Prüfpunkte abgehakt hast: fürs Review den Diff gelesen, den Umfang geprüft und jedes Kriterium; für den Test die Schritte, die der Agent mit <code>tinyops-manual</code> beschrieben hat. «Zurückgeben» braucht einen Satz, was anders werden soll. Er geht in den Nachbessern-Auftrag. Kleine Aufgaben kannst du direkt umsetzen lassen, ohne Plan.</p>
+    <p><b>Agent auf einem anderen Rechner (SSH), Schritt für Schritt</b></p>
     <ol><li>Auf <em>diesem</em> Rechner einen Schlüssel ohne Passphrase anlegen (tinyops kann keine Passphrase abfragen):<pre>ssh-keygen -t ed25519 -C tinyops -f ~/.ssh/tinyops_agent -N ""</pre></li>
     <li>Den öffentlichen Teil auf den Zielrechner bringen:<pre>ssh-copy-id -i ~/.ssh/tinyops_agent.pub benutzer@zielrechner</pre></li>
     <li>Einmal von Hand verbinden und den Fingerabdruck bestätigen. Wichtig: <code>-i</code> bekommt die Datei <em>ohne</em> <code>.pub</code>:<pre>ssh -i ~/.ssh/tinyops_agent benutzer@zielrechner</pre></li>
@@ -1875,11 +1918,11 @@ async function openAgentDlg(o) {
   let pid = o.review ? o.review.project_id : o.pid ?? (ctx.items[0] ? ctx.items[0].project_id : (ag.projects[0] ? ag.projects[0].id : null));
   const branch = o.review ? o.review.branch : (ctx.items.find(x => x.project_id === pid) || ctx.items[0] || {}).branch || '';
   const box = $('agBody');
-  let bopt = null, dirty = false;
+  let bopt = null, dirty = false, phase = o.phase || (o.review || o.followup || o.prereview ? '' : LS.get('agphase', 'develop'));
   async function draw() {
     let info;
     try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined,
-      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, prereview: o.prereview || undefined }); }
+      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, prereview: o.prereview || undefined, phase: phase || undefined, parent: o.parent || undefined }); }
     catch (e) { toast(e.message); return; }
     dirty = false;
     if (info.followup || info.prereview) pid = info.project_id;
@@ -1914,8 +1957,16 @@ async function openAgentDlg(o) {
         : `<div class="small quiet">${bf.source === 'lokal' ? 'Keine offenen Teilschritte: Lege Teilschritte an, dann werden sie zu Kriterien.' : 'Im Ticket steht kein Abschnitt «Akzeptanzkriterien». Der Agent bekommt gesagt, dass er nachfragen soll.'}</div>`}
       ${bf.masked ? `<div class="small quiet">${bf.masked} mögliche${bf.masked === 1 ? 's Geheimnis' : ' Geheimnisse'} (Passwort, Token) geschwärzt. Lies den Prompt trotzdem durch.</div>` : ''}`}</div>`;
     const projSel = ag.projects.length > 1 && !o.review ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => { const st = (info.access || {})[p.id]; return `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}${st === 'missing' ? ' · fehlt beim Agenten' : st === 'dir' ? ' · kein Git-Repo' : ''}</option>`; }).join('')}</select></label>` : '';
+    const canPick = !o.review && !info.followup && !info.prereview && !o.parent;
+    const phaseSel = canPick ? `<div class="row small" style="margin:0 0 8px"><span class="quiet">Phase:</span><span class="seg" role="group" aria-label="Phase">${['plan', 'develop'].map(p => `<button type="button" data-aph="${p}" class="${(info.phase || 'develop') === p ? 'on' : ''}" title="${p === 'plan' ? 'Der Agent liest nur und schreibt einen Plan. Du gibst ihn frei, dann wird umgesetzt.' : 'Der Agent ändert Code auf einem eigenen Branch.'}">${PH_L[p]}</button>`).join('')}</span>
+      <span class="quiet">${(info.phase || 'develop') === 'plan' ? 'Erst planen: kleiner Plan, den du in fünf Minuten prüfst.' : 'Direkt umsetzen. Bei grösseren Aufgaben lieber zuerst planen.'}</span></div>` : '';
+    const plab = o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code>` : info.followup ? `Prompt: Nachbessern von Lauf ${info.followup} auf <code>${esc(info.branch || 'Hauptbranch')}</code>`
+      : info.phase === 'review' ? `Prompt: Review von Lauf ${info.parent} auf <code>${esc(info.branch)}</code> (der Agent ändert nichts)` : info.phase === 'test' ? `Prompt: Test von Lauf ${info.parent} auf <code>${esc(info.branch)}</code>`
+      : info.phase === 'plan' ? 'Prompt: Plan (der Agent ändert nichts)' : info.parent ? `Prompt: Umsetzen nach Plan aus Lauf ${info.parent}` : 'Prompt';
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(ctx.key || 'Aufgabe')} an ${esc(a.name)}</strong><span class="quiet small">${esc(info.kind)}</span></div>
-      <div class="quiet small" style="margin:4px 0 8px">${esc(ctx.title)}</div>
+      <div class="quiet small" style="margin:4px 0 4px">${esc(ctx.title)}</div>
+      ${agCycleHtml(o.ticket)}
+      ${phaseSel}
       <div class="agbox"><div class="grid3">${projSel}<div class="quiet small">Ziel: ${esc(info.where)}<br>Repository: <code>${esc(info.workdir || '—')}</code><br>Datenklasse: <b>${esc(info.data_class || '?')}</b>${info.model ? `<br>Modell: <code>${esc(info.model)}</code>` : ''}</div>
         <div class="quiet small">${info.mode === 'export' ? `Arbeitet in einem <b>Export</b> nur dieser Pfade: <code>${esc(info.cloud_paths.join(', '))}</code>. Eigenes Git ohne den Rest des Repos. Ergebnis per «Übernehmen» als Branch.` : info.mode === 'worktree' ? 'Arbeitet in einem <b>eigenen Worktree</b> auf Branch <code>agent/…</code>; dein Checkout bleibt unberührt.' : 'Arbeitet im <b>gemeinsamen Ordner</b> (ohne Isolation).'}</div></div></div>
       ${(info.review_skipped || []).length ? `<div class="banner warn">Nicht im Prompt, weil ausserhalb der freigegebenen Pfade (Export): ${esc(info.review_skipped.join(', '))}. Diese Punkte selbst oder mit einem lokalen Agenten bearbeiten.</div>` : ''}
@@ -1923,11 +1974,16 @@ async function openAgentDlg(o) {
       <div id="agRepo"></div>
       ${(info.hints || []).map(h => `<div class="banner warn">${esc(h)}</div>`).join('')}
       ${briefBox}
-      <label class="sm" for="agPrompt">${o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code> (Kommentare als Zitat, du kannst ihn ändern)` : info.followup ? `Prompt: Nachbesserung zu Lauf ${info.followup}, Ausgang <code>${esc(info.branch || 'Hauptbranch')}</code> (du kannst ihn ändern)` : info.prereview ? `Prompt: Vorprüfung von Lauf ${info.prereview} auf <code>${esc(info.branch)}</code> (der Agent ändert nichts)` : 'Prompt (so geht er an den Agenten, du kannst ihn ändern)'}</label>
-      <textarea id="agPrompt" spellcheck="false" style="height:230px">${esc(info.prompt)}</textarea>
+      ${promptBoxHtml('agPrompt', plab + ' <span class="quiet">· so geht er an den Agenten</span>', info.prompt, true)}
       <div class="row" style="margin-top:8px;justify-content:flex-end"><button id="agCancel">Abbrechen</button>${o.run ? '' : '<button id="agAssign">Nur zuweisen</button>'}<button class="primary" id="agStart" ${info.allowed ? '' : 'disabled'}>${o.run ? 'Starten' : 'Zuweisen &amp; starten'}</button></div>`;
     if ($('agProj')) $('agProj').onchange = ev => { pid = +ev.target.value; draw(); };
     $('agPrompt').oninput = () => { dirty = true; };
+    wirePromptBox(box, 'agPrompt');
+    box.querySelectorAll('[data-aph]').forEach(b => b.onclick = () => {
+      if (b.dataset.aph === (info.phase || 'develop')) return;
+      if (dirty && !confirm('Der Prompt wird für die andere Phase neu aufgebaut. Deine Änderungen am Text gehen verloren.')) return;
+      phase = b.dataset.aph; LS.set('agphase', phase); draw();
+    });
     wireRepo(info.repo);
     box.querySelectorAll('[data-bf],[data-bfc]').forEach(c => c.onchange = () => {
       if (dirty && !confirm('Der Prompt wird neu aufgebaut. Deine Änderungen am Text gehen verloren.')) { c.checked = !c.checked; return; }
@@ -1939,9 +1995,9 @@ async function openAgentDlg(o) {
     const go = async start => {
       try {
         let run = o.run;
-        const br = info.followup || info.prereview ? info.branch : branch;
+        const br = info.followup || info.prereview || info.phase === 'review' || info.phase === 'test' ? info.branch : branch;
         if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch: br, title: ctx.title })).id;
-        if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch: br });
+        if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch: br, phase: info.phase || 'develop', parent: info.parent || undefined });
         agClose(); toast(start ? 'Gestartet' : 'Zugewiesen'); await load();
       } catch (e) { toast(e.message); await load(); }
     };
@@ -1950,6 +2006,102 @@ async function openAgentDlg(o) {
   }
   await draw();
   $('agDlg').showModal();
+}
+// -- 0.31: Markdown lesbar anzeigen (sicher: erst alles escapen, dann wenige Formen), Zyklus, Prüfpunkte, Freigabe
+function mdHtml(src) {
+  const inl = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const out = []; let list = null, para = [], quote = [], fence = null, data = null;
+  const flush = () => {
+    if (para.length) { out.push('<p>' + para.map(inl).join('<br>') + '</p>'); para = []; }
+    if (list) { out.push(`</${list}>`); list = null; }
+    if (quote.length) { out.push('<blockquote>' + quote.map(inl).join('<br>') + '</blockquote>'); quote = []; }
+  };
+  for (const line of String(src || '').split('\n')) {
+    if (fence !== null) { if (/^\s*```/.test(line)) { out.push('<pre>' + esc(fence.join('\n')) + '</pre>'); fence = null; } else fence.push(line); continue; }
+    if (data !== null) { if (line.trim() === 'TICKET>>>') { out.push('<div class="mddata">' + esc(data.join('\n').trim()) + '</div>'); data = null; } else data.push(line); continue; }
+    let m;
+    if (/^\s*```/.test(line)) { flush(); fence = []; continue; }
+    if (line.trim() === '<<<TICKET') { flush(); data = []; continue; }
+    if (!line.trim()) { flush(); continue; }
+    if ((m = line.match(/^(#{1,3})\s+(.*)$/))) { flush(); out.push(`<h${m[1].length + 2}>${inl(m[2])}</h${m[1].length + 2}>`); continue; }
+    if ((m = line.match(/^>\s?(.*)$/))) { if (para.length || list) flush(); quote.push(m[1]); continue; }
+    if ((m = line.match(/^\s{0,3}[-*]\s+(.*)$/)) || (m = line.match(/^\s{0,3}\d+[.)]\s+(.*)$/))) {
+      const kind = /^\s{0,3}[-*]\s/.test(line) ? 'ul' : 'ol';
+      if (para.length || quote.length || (list && list !== kind)) flush();
+      if (!list) { list = kind; out.push(`<${kind}>`); }
+      out.push('<li>' + inl(m[1]) + '</li>'); continue;
+    }
+    if (list && /^\s{2,}\S/.test(line)) { out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, '<br>' + inl(line.trim()) + '</li>'); continue; }
+    if ((m = line.match(/^AK(\d{1,2}):\s*(.*)$/))) { flush(); out.push(`<span class="mdak"><b>AK${m[1]}</b> ${inl(m[2])}</span>`); continue; }
+    if (quote.length) flush();
+    para.push(line);
+  }
+  if (fence !== null) out.push('<pre>' + esc(fence.join('\n')) + '</pre>');
+  if (data !== null) out.push('<div class="mddata">' + esc(data.join('\n').trim()) + '</div>');
+  flush();
+  return out.join('');
+}
+// Prompt als lesbares Markdown (Ansehen) oder als Text (Bearbeiten), immer kopierbar. Die Textarea bleibt die Quelle.
+function promptBoxHtml(id, label, text, editable) {
+  const mode = editable ? LS.get('agpv', 'view') : 'view';
+  return `<div class="pbox"><div class="pbar"><label class="sm" for="${id}">${label}</label>
+    ${editable ? `<span class="seg" role="group" aria-label="Ansicht"><button type="button" data-pv="view" class="${mode === 'view' ? 'on' : ''}">Ansehen</button><button type="button" data-pv="edit" class="${mode === 'edit' ? 'on' : ''}">Bearbeiten</button></span>` : ''}
+    <button type="button" data-pcopy="${id}" title="Prompt in die Zwischenablage">${ic('copy')} Kopieren</button></div>
+    <div class="mdv" data-pview="${id}" ${mode === 'edit' ? 'hidden' : ''}>${mdHtml(text)}</div>
+    <textarea id="${id}" spellcheck="false" ${mode === 'view' ? 'hidden' : ''} ${editable ? '' : 'readonly'}>${esc(text)}</textarea></div>`;
+}
+function wirePromptBox(root, id) {
+  const ta = $(id), pv = root.querySelector(`[data-pview="${id}"]`);
+  root.querySelectorAll('[data-pv]').forEach(b => b.onclick = () => {
+    const edit = b.dataset.pv === 'edit';
+    root.querySelectorAll('[data-pv]').forEach(x => x.classList.toggle('on', x === b));
+    if (!edit) pv.innerHTML = mdHtml(ta.value);
+    pv.hidden = edit; ta.hidden = !edit; LS.set('agpv', b.dataset.pv);
+    if (edit) ta.focus();
+  });
+  const cp = root.querySelector(`[data-pcopy="${id}"]`);
+  if (cp) cp.onclick = () => copyText(ta.value, 'Prompt');
+}
+const PH_ORDER = ['plan', 'develop', 'review', 'test'], PH_L = { plan: 'Planen', develop: 'Umsetzen', review: 'Review', test: 'Test' };
+const NEXT_PH = { plan: 'develop', develop: 'review', review: 'test' };
+// Zyklus eines Tickets: je Phase der jüngste Lauf und wo er steht
+function agCycleHtml(ticket, curId) {
+  const runs = AG().runs.filter(x => x.ticket === ticket);
+  return `<div class="cycle" aria-label="Agenten-Zyklus">${PH_ORDER.map(p => {
+    const r = runs.find(x => (x.phase || 'develop') === p);
+    const [cls, txt] = !r ? ['', 'noch nicht'] : r.active ? ['wait', 'läuft'] : r.status === 'zugewiesen' ? ['', 'zugewiesen']
+      : r.gate === 'ok' ? ['ok', 'freigegeben'] : r.gate === 'back' ? ['back', 'zurückgegeben'] : ['wait', r.status === 'fertig' ? 'wartet auf dich' : r.status];
+    return `<div class="ph ${cls} ${r && r.id === curId ? 'cur' : ''}" title="${esc(PH_L[p])}: ${esc(txt)}${r ? ' (Lauf ' + r.id + ')' : ''}"><b>${PH_L[p]}</b><span>${esc(txt)}</span></div>`;
+  }).join('')}</div>`;
+}
+function agManualHtml(r) {
+  const m = r.manual || [];
+  if (r.active || r.status === 'zugewiesen' || !m.length) return '';
+  const K = { review: 'Review', test: 'Test' };
+  return `<div class="small"><b>Deine Prüfung von Hand</b> <span class="quiet">${r.manual_done} von ${m.length} abgehakt. Trifft etwas nicht zu: abhaken und eine Notiz schreiben.</span>
+    <ul class="mchk">${m.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-mck="${x.i}" ${x.done ? 'checked' : ''} aria-label="${esc(x.step)} erledigt">
+      <div><div class="st"><span class="kd">${K[x.kind] || ''}</span>${esc(x.step)}</div>${x.expect ? `<div class="ex">Erwartet: ${esc(x.expect)}</div>` : ''}</div>
+      ${x.done || x.note ? `<input type="text" class="mn" data-mnote="${x.i}" maxlength="500" value="${esc(x.note)}" placeholder="Notiz, falls etwas nicht ganz zutrifft" aria-label="Notiz zu ${esc(x.step)}">` : ''}</li>`).join('')}</ul></div>`;
+}
+function agGateHtml(r) {
+  if (r.active || r.status === 'zugewiesen') return '';
+  const lab = r.phase_label || 'Umsetzen', m = r.manual || [], left = m.length - (r.manual_done || 0);
+  const warn = (r.guard_warnings || []).length ? `<ul class="gwarn">${r.guard_warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+  const agentSel = id => `<select id="${id}" aria-label="Agent für die nächste Phase">${AG().agents.map(a => `<option value="${esc(a.id)}" ${a.id === r.agent ? 'selected' : ''}>${esc(a.name)}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>`;
+  if (r.gate === 'ok') {
+    const nx = NEXT_PH[r.phase];
+    return `<div class="gatebox ok"><h3>${esc(lab)} freigegeben</h3>${r.gate_note ? `<div class="small">${esc(r.gate_note)}</div>` : ''}
+      <div class="row" style="margin-top:6px">${nx ? `<span class="small">Weiter mit <b>${PH_L[nx]}</b> durch</span>${agentSel('agNxA')}<button class="primary" id="agNext" data-ph="${nx}">${PH_L[nx]} vorbereiten …</button>` : '<span class="small">Der Zyklus ist durch. Jetzt MR, Review im Team und Merge wie gewohnt.</span>'}
+      <button class="quiet-btn" id="agGateReset" title="Freigabe zurücknehmen">Zurücknehmen</button></div></div>`;
+  }
+  if (r.gate === 'back') return `<div class="gatebox back"><h3>${esc(lab)} zurückgegeben</h3><div class="small">${esc(r.gate_note)}</div>
+      <div class="row" style="margin-top:6px"><button class="primary" id="agBackGo" title="Neuer Lauf desselben Agenten mit deiner Notiz, auf dem Branch dieses Laufs">Nachbessern lassen …</button><button class="quiet-btn" id="agGateReset">Zurücknehmen</button></div></div>`;
+  const what = r.phase === 'plan' ? 'Ist der Plan klein, klar und richtig? Erst dann wird umgesetzt.' : r.phase === 'review' ? 'Teilst du den Befund? Dann folgt der Test.'
+    : r.phase === 'test' ? 'Ist es im laufenden System wirklich erfüllt?' : 'Hast du den Code gelesen und verstanden? Dann prüft ein Review.';
+  return `<div class="gatebox"><h3>${esc(lab)}: deine Freigabe</h3><div class="small">${what}</div>${warn}
+    <textarea id="agGateNote" maxlength="1000" placeholder="Notiz. Bei «Zurückgeben» Pflicht: was soll anders werden?" aria-label="Notiz zur Freigabe"></textarea>
+    <div class="row"><button class="primary" id="agGateOk" ${left > 0 || r.status !== 'fertig' ? 'disabled' : ''} title="${r.status !== 'fertig' ? 'Nur ein fertiger Lauf lässt sich freigeben' : left > 0 ? 'Erst alle Prüfpunkte abhaken' : 'Phase freigeben'}">${ic('check')} Freigeben${left > 0 ? ` (noch ${left} Prüfpunkt${left === 1 ? '' : 'e'})` : ''}</button>
+      <button id="agGateBack">Zurückgeben</button></div></div>`;
 }
 function agQuestionHtml(r) {
   const q = r.question;
@@ -1975,13 +2127,13 @@ function agReportHtml(r) {
     ${res.files.length ? `<details><summary class="quiet">${res.files.length} Datei${res.files.length === 1 ? '' : 'en'}</summary><ul class="agfiles">${res.files.map(f => `<li><b title="A neu, M geändert, D gelöscht, R umbenannt">${esc(f.st)}</b><code>${esc(f.path)}</code></li>`).join('')}</ul></details>` : ''}</div>`);
   parts.push(ck ? `<div class="small"><b>Belege</b> <span class="quiet">(mit tinyops-check gelaufen, Exit-Code zählt)</span><ul class="agchk">${ck}</ul></div>`
     : (!r.active ? '<div class="small quiet">Keine Belege: Der Agent hat keine Tests über <code>tinyops-check</code> laufen lassen. Was er im Bericht «getestet» nennt, ist nicht belegt.</div>' : ''));
-  if (!r.active) parts.push(r.summary ? `<div class="small"><b>Bericht des Agenten</b> <span class="quiet">(seine Angaben, nicht geprüft)</span><div class="md">${esc(r.summary)}</div></div>`
+  if (!r.active) parts.push(r.summary ? `<div class="small"><b>${r.phase === 'plan' ? 'Plan des Agenten' : r.phase === 'review' ? 'Befund des Agenten' : 'Bericht des Agenten'}</b> <span class="quiet">(seine Angaben, nicht geprüft)</span><div class="mdv">${mdHtml(r.summary)}</div></div>`
     : '<div class="small quiet">Kein Bericht (<code>tinyops-report</code> nicht benutzt). Das Log unten zeigt, was passiert ist.</div>');
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
   if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow"><input type="text" id="agNote" maxlength="1000" placeholder="Was soll nachgebessert werden? (optional)" aria-label="Anmerkung für die Nachbesserung">
     <button id="agFollow" title="Neuer Lauf desselben Agenten: offene Kriterien, fehlgeschlagene Belege und deine Anmerkung. Er baut auf dem Branch dieses Laufs auf.">Nachbessern …</button>
-    ${r.out_branch && r.mode === 'worktree' && state.agents.agents.length ? `<select id="agPre" aria-label="Vorprüfen lassen" title="Ein zweiter Agent liest das Ergebnis, ändert nichts und meldet je Kriterium sein eigenes Urteil. Gut für ein lokales Modell."><option value="">Vorprüfen lassen …</option>${state.agents.agents.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>` : ''}
     <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button></div>`);
+  parts.push(agManualHtml(r), agGateHtml(r));
   return `<div class="agrep">${parts.join('')}</div>`;
 }
 
@@ -2281,7 +2433,7 @@ $('viewQa').addEventListener('click', async ev => {
 $('viewQa').addEventListener('change', ev => { if (ev.target.id === 'uxDays') loadUx(+ev.target.value); });
 
 // ------------------------------------------------ Prüfen (0.19): Prüfliste je Release und Selbsttest
-let QA = null, QAONLY = false, QARES = null;
+let QA = null, QAONLY = false, QARES = null, QAREST = LS.get('qarest', true);
 try { QAONLY = localStorage.getItem('tinyops.qaonly') === '1'; } catch (e) { /* egal */ }
 async function loadQa() {
   loadUx();
@@ -2298,18 +2450,33 @@ function renderQa() {
     <div><div class="tx">${md(i.text)}</div>${i.expect ? `<div class="ex">erwartet: ${md(i.expect)}</div>` : ''}${i.changed ? '<div class="ex" style="color:var(--warn)">Text geändert, bitte neu prüfen</div>' : ''}</div>
     <span class="qid" title="${i.checked_in ? 'geprüft in ' + esc(i.checked_in) : ''}">${esc(i.id)}</span>
     ${i.status === 'fehler' ? `<textarea data-qnote="${esc(i.id)}" placeholder="Was ist passiert? (wird mit «Ergebnis kopieren» mitgegeben)">${esc(i.note)}</textarea><div style="grid-column:2/-1"><button class="quiet-btn" data-qtask="${esc(i.id)}">Als Aufgabe ins Board</button></div>` : ''}</div>`;
+  // Testsitzung (0.31): die nächsten fünf offenen Punkte, dieses Release zuerst. Ältere Releases ruhen, bis du sie holst.
+  const vnum = v => (v || '0.0.0').split('.').map(Number);
+  const cur = vnum(QA.version), recent = sec => !sec.version || sec.current || (vnum(sec.version)[0] === cur[0] && cur[1] - vnum(sec.version)[1] <= 1);
+  const active = QA.sections.filter(x => !QAREST || recent(x)), resting = QA.sections.filter(x => QAREST && !recent(x));
+  const prio = sec => (sec.current ? 0 : sec.version ? 1 + (cur[1] - vnum(sec.version)[1]) : 50);
+  const queue = active.flatMap(sec => sec.items.filter(i => i.status === 'offen').map(i => [i.changed ? -1 : prio(sec), sec, i]))
+    .sort((x, y) => x[0] - y[0]).map(x => x[2]);
+  const next5 = queue.slice(0, 5), restOpen = resting.reduce((n, x) => n + x.total - x.done, 0);
+  const sessDone = (() => { try { return JSON.parse(sessionStorage.getItem('tinyops.qsess') || '[]'); } catch (e) { return []; } })();
   $('viewQa').innerHTML = `<div class="phead"><h1>Prüfliste tinyops ${esc(QA.version)}</h1><span class="sp"></span>
       <div class="psum"><span>geprüft <b>${done}/${all.length}</b></span><span>Fehler <b>${fails}</b></span></div>
       <label class="check"><input type="checkbox" id="qOnly" ${QAONLY ? 'checked' : ''}><span>nur offene</span></label>
       <button id="qSelf">Selbsttest ausführen</button><button class="primary" id="qRep">Ergebnis kopieren</button></div>
+    <section class="pcard qsess"><div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:16px">Als Nächstes testen</h2>
+      <span class="quiet small">${sessDone.length ? `in dieser Sitzung ${sessDone.length} erledigt · ` : ''}noch ${queue.length} offen${restOpen ? `, ${restOpen} in älteren Releases ruhen` : ''}</span></div>
+      <div class="small quiet" style="margin:2px 0 8px">Fünf Punkte auf einmal, das aktuelle Release zuerst. Was nicht zutrifft oder dich nicht betrifft: überspringen (–). Fehler mit einem Satz notieren.</div>
+      ${next5.map(item).join('') || '<div class="banner" style="margin:0">Nichts offen in den aktuellen Releases. Gut so.</div>'}</section>
     <div class="pcard" id="qUx">${uxCard()}</div>
     <div id="qSelfRes">${QARES ? `<details class="pcard" ${QARES.ok ? '' : 'open'}><summary><b>${QARES.ok ? 'Selbsttest bestanden' : 'Selbsttest mit Fehlern'}</b> <span class="quiet small">${QARES.steps.length} Prüfungen, ${QARES.secs} s${QARES.steps.some(x => x.status === 'warn') ? ', mit Warnungen' : ''}</span></summary>${stepsHtml(QARES).replace(/<div class="verdict[^>]*>[^<]*<\/div>/, '')}</details>` : '<div class="small quiet" style="margin-bottom:10px">Der Selbsttest prüft Vorlagen, Hilfsskripte, Datenbank und Verlauf und spielt die Kernfunktionen mit Demo-Daten in einem leeren Ordner durch. Deine Daten bleiben unberührt.</div>'}</div>
-    ${[...QA.sections].sort((a, z) => (z.version ? 1 : 0) - (a.version ? 1 : 0) || (z.version || '').localeCompare(a.version || '', undefined, { numeric: true })).map(sec => {
+    <div class="row small" style="margin:14px 0 6px"><b>Alle Abschnitte</b><span class="sp"></span><label class="check"><input type="checkbox" id="qRest" ${QAREST ? 'checked' : ''}><span>ältere Releases ruhen lassen</span></label></div>
+    ${[...active].sort((a, z) => (z.version ? 1 : 0) - (a.version ? 1 : 0) || (z.version || '').localeCompare(a.version || '', undefined, { numeric: true })).map(sec => {
       const items = sec.items.filter(i => !QAONLY || i.status === 'offen');
-      const isOpen = first ? (sec.current || (!QA.sections.some(x => x.current) && sec.done < sec.total)) : openSet.has(sec.title);
+      const isOpen = first ? (!next5.length && sec.current) : openSet.has(sec.title);
       return `<details class="pcard qsec" data-qsec="${esc(sec.title)}" ${isOpen ? 'open' : ''}><summary>${esc(sec.title)}${sec.current ? ' <span class="chip tk">dieses Release</span>' : ''}<span class="sp"></span>${sec.fails ? `<span class="chip sq-bad">${sec.fails} Fehler</span>` : ''}<span class="quiet small">${sec.done}/${sec.total}</span><span class="qbar"><i style="width:${Math.round(100 * sec.done / sec.total)}%"></i></span></summary>
         ${items.map(item).join('') || '<div class="quiet small">alles geprüft</div>'}</details>`;
     }).join('')}
+    ${resting.length ? `<div class="quiet small" style="margin:6px 0">${resting.length} ältere Abschnitte ruhen (${restOpen} offen). Sie zählen nicht in «Als Nächstes». Zum Ansehen den Haken oben lösen.</div>` : ''}
     <div class="quiet small">Quelle: <code>${esc(QA.file)}</code>. Je Release kommt ein Abschnitt dazu, nur mit dem, was sich geändert hat.</div>`;
   keep.forEach(([id, v, f]) => { const t = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(id)}"]`); if (t) { t.value = v; if (f) t.focus(); } });
 }
@@ -2319,7 +2486,9 @@ $('viewQa').addEventListener('click', async ev => {
   if (b) {
     const cur = QA.sections.flatMap(x => x.items).find(i => i.id === b.dataset.qset);
     const s2 = cur && cur.status === b.dataset.s ? 'offen' : b.dataset.s;
-    try { await post('/api/qa/set', { id: b.dataset.qset, status: s2, note: s2 === 'fehler' ? (cur.note || '') : '' }); await loadQa(); if (s2 === 'fehler') { const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`); if (ta) ta.focus(); } } catch (e) { toast(e.message); }
+    try { await post('/api/qa/set', { id: b.dataset.qset, status: s2, note: s2 === 'fehler' ? (cur.note || '') : '' });
+      try { const ss = new Set(JSON.parse(sessionStorage.getItem('tinyops.qsess') || '[]')); s2 === 'offen' ? ss.delete(b.dataset.qset) : ss.add(b.dataset.qset); sessionStorage.setItem('tinyops.qsess', JSON.stringify([...ss])); } catch (e2) { /* egal */ }
+      await loadQa(); if (s2 === 'fehler') { const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`); if (ta) ta.focus(); } } catch (e) { toast(e.message); }
     return;
   }
   const tk = t.closest('[data-qtask]');
@@ -2331,6 +2500,7 @@ $('viewQa').addEventListener('click', async ev => {
 });
 $('viewQa').addEventListener('change', async ev => {
   const t = ev.target;
+  if (t.id === 'qRest') { QAREST = t.checked; LS.set('qarest', QAREST); renderQa(); return; }
   if (t.id === 'qOnly') { QAONLY = t.checked; try { localStorage.setItem('tinyops.qaonly', QAONLY ? '1' : '0'); } catch (e) { /* egal */ } renderQa(); return; }
   if (t.dataset.qnote) { try { await post('/api/qa/set', { id: t.dataset.qnote, status: 'fehler', note: t.value }); const it = QA.sections.flatMap(x => x.items).find(i => i.id === t.dataset.qnote); if (it) it.note = t.value; } catch (e) { toast(e.message); } }
 });
@@ -2414,14 +2584,16 @@ async function openRunDlg(id) {
     let text = '';
     try { text = (await post('/api/agents/tail', { run: id, lines: 120 })).text; } catch (e) { text = e.message; }
     const atBottom = !$('agLog') || $('agLog').scrollTop + $('agLog').clientHeight >= $('agLog').scrollHeight - 30;
-    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
+    const gdraft = $('agGateNote') ? $('agGateNote').value : '';
+    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.phase_label || 'Umsetzen')} · ${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
       <div class="quiet small" style="margin:4px 0">${esc(r.title)}</div>
+      ${agCycleHtml(r.ticket, r.id)}
       <div class="quiet small">Ziel: ${esc(r.where)} · ${r.mode === 'export' ? 'Export' : r.mode === 'worktree' ? 'Worktree' : 'Ordner'}: <code>${esc(r.wt || r.workdir)}</code>${r.out_branch ? ' · Ergebnis-Branch: <code>' + esc(r.out_branch) + '</code>' + (r.mode === 'export' && !r.taken ? ' (nach «Übernehmen»)' : '') : ''} · Dauer: ${esc(fmtSecs(r.secs))}</div>
       ${r.note ? `<div class="banner warn">${esc(r.note)}</div>` : ''}
       ${r.question ? agQuestionHtml(r) : ''}
       ${agReportHtml(r)}
       <pre class="log" id="agLog">${esc(text)}</pre>
-      <details style="margin-top:6px"><summary class="quiet small">Prompt</summary><pre class="log" style="max-height:30vh;white-space:pre-wrap">${esc(r.prompt_text || '(nur beim Start gesendet)')}</pre></details>
+      <details style="margin-top:6px"><summary class="quiet small">Gesendeter Prompt</summary>${promptBoxHtml('agSent', 'So ging er an den Agenten', r.prompt_text || '(nur beim Start gesendet)', false)}</details>
       <div class="row" style="margin-top:8px;justify-content:flex-end">
         ${r.attach ? '<button id="agAttach" title="Im Terminal einfügen, um live mitzulesen und einzugreifen">Befehl zum Mitlesen kopieren</button>' : ''}
         <button id="agReload">Aktualisieren</button>
@@ -2439,11 +2611,21 @@ async function openRunDlg(id) {
     if ($('agAnsGo')) $('agAnsGo').onclick = () => sendAnswer($('agAns').value);
     if ($('agAns')) $('agAns').addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); sendAnswer($('agAns').value); } });
     if (draft && $('agAns')) { $('agAns').value = draft.v; if (draft.f) $('agAns').focus(); }
+    if (gdraft && $('agGateNote')) $('agGateNote').value = gdraft;
+    wirePromptBox(box, 'agSent');
+    const mpost = async (i, done, note) => { try { await post('/api/agents/manual', { run: id, i, done, note }); await load(); await draw(); } catch (e) { toast(e.message); } };
+    box.querySelectorAll('[data-mck]').forEach(c => c.onchange = () => mpost(+c.dataset.mck, c.checked, (box.querySelector(`[data-mnote="${c.dataset.mck}"]`) || {}).value || ''));
+    box.querySelectorAll('[data-mnote]').forEach(n => n.onchange = () => mpost(+n.dataset.mnote, !!(box.querySelector(`[data-mck="${n.dataset.mnote}"]`) || {}).checked, n.value));
+    const gate = async (g, note) => { try { await post('/api/agents/gate', { run: id, gate: g, note }); toast(g === 'ok' ? 'Freigegeben' : g === 'back' ? 'Zurückgegeben' : 'Freigabe zurückgenommen'); await load(); await draw(); } catch (e) { toast(e.message); } };
+    if ($('agGateOk')) $('agGateOk').onclick = () => gate('ok', $('agGateNote').value);
+    if ($('agGateBack')) $('agGateBack').onclick = () => { if (!$('agGateNote').value.trim()) { toast('Schreib kurz, was anders werden soll.'); $('agGateNote').focus(); return; } gate('back', $('agGateNote').value); };
+    if ($('agGateReset')) $('agGateReset').onclick = () => gate('', '');
+    if ($('agNext')) $('agNext').onclick = () => { const nx = $('agNext').dataset.ph, aid = $('agNxA').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: aid, phase: nx, parent: r.id, pid: r.project_id }); };
+    if ($('agBackGo')) $('agBackGo').onclick = () => { agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note: r.gate_note, pid: r.project_id }); };
     if ($('agRep')) $('agRep').onclick = async () => { try { await post('/api/agents/report', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
     if ($('agComment')) $('agComment').onclick = async () => { try { copyText((await post('/api/agents/comment', { run: id })).text, 'Kommentar-Entwurf'); } catch (e) { toast(e.message); } };
-    if ($('agPre')) $('agPre').onchange = ev => { const aid = ev.target.value; if (!aid) return; agClose(); openAgentDlg({ ticket: r.ticket, agent: aid, prereview: r.id, pid: r.project_id }); };
     if ($('agFollow')) $('agFollow').onclick = () => { const note = $('agNote').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note, pid: r.project_id }); };
     if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agTake')) $('agTake').onclick = async () => { try { const t = await post('/api/agents/takeover', { run: id }); toast(`Übernommen: Branch ${t.branch} (${t.files.length} Dateien)`); await load(); await draw(); } catch (e) { toast(e.message); } };
@@ -2913,6 +3095,11 @@ async function loadSettings() {
     <h3>Agenten</h3>
     <div id="ag-list"></div><div class="row"><button id="ag-add">Agent hinzufügen</button></div>
     ${field('ag-days', 'Logs, Prompts und Patches der Läufe aufbewahren (Tage, 0 = nie löschen)', S.agent_log_days ?? 30, { type: 'number', err: 'agent_log_days' })}
+    <h3>Leitplanken</h3>
+    <div class="hint">Stehen in jedem Prompt, damit Änderungen klein bleiben und sich leicht reviewen lassen. Geht ein Ergebnis darüber, zeigt der Lauf einen Hinweis. Entscheiden tust du.</div>
+    <div class="grid3">${field('ag-gf', 'Höchstens Dateien je Lauf', (S.agent_guards || {}).max_files ?? 8, { type: 'number', err: 'agent_guards.max_files' })}
+      ${field('ag-gl', 'Etwa so viele geänderte Zeilen', (S.agent_guards || {}).max_lines ?? 300, { type: 'number', err: 'agent_guards.max_lines' })}</div>
+    ${field('ag-gx', 'Im Team vereinbart (optional)', (S.agent_guards || {}).extra || '', { ph: 'z. B. Kein Lombok. Logs auf Englisch. Neue Endpunkte immer mit OpenAPI-Eintrag.', err: 'agent_guards.extra', help: 'Ein, zwei Sätze, die in jeden Prompt kommen. Höchstens 600 Zeichen.' })}
     <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
 
   ${sect('ide', 'IntelliJ', 'Für «In IntelliJ öffnen» beim Testen: tinyops legt neben deinem Checkout einen Worktree genau auf dem Commit des MR an (<code>../.tinyops-wt/</code>) und startet die IDE damit. Geholt wird mit <code>git fetch</code>, gepusht wird nie. Beim Abschliessen räumt tinyops saubere Worktrees wieder weg.', `
@@ -3488,7 +3675,7 @@ function collect() {
   if ($('hd-secret') && $('hd-secret').value.trim()) secrets[val('hd-auth') === 'bearer' ? 'helpdesk_token' : 'helpdesk_password'] = $('hd-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
-    projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), ide_command: val('ide-cmd'),
+    projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), agent_guards: { max_files: val('ag-gf'), max_lines: val('ag-gl'), extra: val('ag-gx') }, ide_command: val('ide-cmd'),
     time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), mcp_url: val('tm-url'),
       send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked,
       bcs: { enabled: $('bc-on').checked, url: val('bc-url'), apprentices: $('bc-appr').checked } },
@@ -3575,7 +3762,7 @@ const ACT = {
   rebase: ['MR öffnen', 'ext'], pipeline: ['Pipeline öffnen', 'ext'], sonar: ['Report kopieren', 'copy'], ci: ['Pipeline', 'ext'],
   threads: ['Offene Punkte', 'chat'], agent_question: ['Antworten', 'chat'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
-  agent_result: ['Ergebnis ansehen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'],
+  agent_result: ['Prüfen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'], agent_back: ['Nachbessern', 'chat'], agent_next: ['Weiter', 'play'],
   retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'], hd_work: ['Ticket ansehen', 'chevron2'],
   do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };

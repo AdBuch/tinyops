@@ -5,6 +5,25 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.31.0]
+
+### Neu
+- **Agenten-Zyklus: Planen → Umsetzen → Review → Test.** Jede Phase ist ein eigener Lauf mit eigener Vorlage und endet mit deiner Freigabe. Die Leiste oben im Agenten-Dialog zeigt, wo das Ticket steht.
+  - **Planen:** Der Agent liest nur und schreibt einen Plan (Ziel, Schritte mit Dateien, Tests, Umfang, Risiken). Erst wenn du ihn freigibst, kann umgesetzt werden. Der Plan geht als Zitat in den Umsetzen-Auftrag.
+  - **Umsetzen** wie bisher, bei kleinen Aufgaben auch ohne Plan.
+  - **Review:** Ein zweiter Agent liest das Ergebnis auf demselben Branch und ändert nichts. Ersetzt «Vorprüfen lassen».
+  - **Test:** Tests ausführen, fehlende ergänzen, Schritte für deinen Test von Hand beschreiben. Produktionscode bleibt unberührt.
+  - **Freigeben** geht erst, wenn alle Prüfpunkte abgehakt sind. **Zurückgeben** braucht einen Satz, was anders werden soll. Er geht direkt in «Nachbessern lassen».
+  - Der nächste Schritt im Fokus kennt die Phasen: «Umsetzen prüfen und freigeben (Prüfpunkte 2 von 6)», «Review starten», «Nachbessern lassen».
+- **Prüfpunkte von Hand je Lauf.** Fürs Review: Diff ganz gelesen, Umfang passt, Tests passen, jedes Akzeptanzkriterium. Für den Test: die Schritte, die der Agent mit dem neuen `tinyops-manual "Schritt" "Erwartet"` beschreibt, plus «Im laufenden System ausprobiert». Abhaken mit optionaler Notiz.
+- **Leitplanken in jedem Prompt.** Klein halten (Standard: höchstens 8 Dateien, etwa 300 Zeilen), nur was die Aufgabe verlangt, einfach vor clever, Test zu jeder Verhaltensänderung, kleine Commits, Bericht für das Review. In Planen und Review zusätzlich: nichts ändern. Werte und eine eigene Team-Regel unter Einstellungen → Coding-Agenten → Leitplanken. Geht ein Ergebnis darüber, zeigt der Lauf einen Hinweis.
+- **Prompts lesbar und kopierbar.** Alle Vorlagen sind jetzt Markdown mit klaren Abschnitten. Im Dialog «Ansehen» (gerendert) oder «Bearbeiten» (Text), dazu «Kopieren». Den gesendeten Prompt eines Laufs gibt es ebenso; Bericht, Plan und Befund des Agenten werden gerendert.
+- **Testsitzung in Prüfen.** Oben «Als Nächstes testen»: die nächsten fünf offenen Punkte, dieses Release zuerst. Ältere Releases ruhen, bis du den Haken «ältere Releases ruhen lassen» löst.
+
+### Geändert
+- «Vorprüfen lassen» heisst jetzt Review und ist Teil des Zyklus. Der Aufruf mit `prereview` geht weiter.
+- Läufe aus früheren Versionen gelten als «Umsetzen».
+
 ## [0.30.0]
 
 ### Neu
