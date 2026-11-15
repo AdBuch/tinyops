@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sqlite3
 import ssl
 import subprocess
@@ -41,6 +42,7 @@ import groups
 from html import escape as html_escape
 import qa
 import review
+import reviewenv
 import timesheet
 import ux
 import fnmatch
@@ -58,7 +60,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.31.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.32.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -1384,6 +1386,7 @@ class App:
         self.config_path = Path(config_path) if config_path else default_config_path()
         self.access_token = secrets.get("access_token") or ""
         self.cache_lock = threading.Lock()
+        self._renv_live = set()          # Läufe, deren Review-Umgebungs-Befehl gerade läuft
         self.sync_lock = threading.Lock()
         self.sync = {"running": False, "steps": [], "started": 0.0, "finished": 0.0, "n": 0}
         self.partial, self.early_stories, self._sync_thread = None, None, None
@@ -2838,9 +2841,10 @@ class App:
         path = (r or {}).get("repo_path") or ""
         return str(Path(path).expanduser()) if path else ""
 
-    def _git(self, repo, *args, timeout=60):
+    def _git(self, repo, *args, timeout=60, env=None):
         try:
-            r = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True, timeout=timeout,
+                               env=dict(os.environ, **env) if env else None, stdin=subprocess.DEVNULL)
         except FileNotFoundError:
             raise UserError("git ist auf diesem Rechner nicht installiert.")
         except subprocess.TimeoutExpired:
@@ -2892,6 +2896,147 @@ class App:
         launched, hint = self._launch_ide(path)
         self.audit("ide.open", ref_key, sha=sha[:12], path=path, launched=launched)
         return {"path": path, "sha": sha, "launched": launched, "hint": hint}
+
+    # -- Ergebnis eines Agenten ausprobieren (0.32): auschecken, IntelliJ, Review-Umgebung
+    def _run_src(self, r):
+        """(Lauf, Branch, Quelle, Umgebung für git): woher der Branch des Laufs kommt."""
+        svc = self.agents
+        a = svc.agent(r["agent"])
+        conn = svc.conn_of(a)
+        repo, _ = svc._paths(a, r["project_id"])
+        branch = r.get("taken") or (r.get("out_branch") if r.get("mode") == "worktree" else "") or ""
+        env = None
+        if conn is not None:
+            argv = agents.ssh_args(conn)[:-2]
+            env = {"GIT_SSH_COMMAND": " ".join(shlex.quote(x) for x in argv), "GIT_TERMINAL_PROMPT": "0"}
+        return branch, reviewenv.source_url(a, conn, repo), env, conn is None
+
+    def run_try(self, rid):
+        """Was du zum Ausprobieren brauchst: Branch, Befehle zum Kopieren, Worktree, Review-Umgebung."""
+        r = self.store.agent_run(rid)
+        if not r:
+            raise UserError("Diesen Lauf gibt es nicht (mehr).")
+        try:
+            branch, src, _, local = self._run_src(r)
+        except agents.AgentError as e:
+            branch, src, local = "", "", True
+            log.info("Lauf %s: Quelle unbekannt: %s", rid, e)
+        clone = self._repo_of("gitlab", r["project_id"]) if r.get("project_id") is not None else ""
+        w = self.store.ide_get("run:%d" % rid)
+        pe = (self.proj_cfg.get(r["project_id"]) or {}).get("review_env") if r.get("project_id") is not None else None
+        try:
+            st = json.loads(r.get("renv") or "{}")
+        except ValueError:
+            st = {}
+        if st.get("state") == "startet" and rid not in self._renv_live:
+            st["state"] = "unklar"                          # tinyops wurde neu gestartet, während der Befehl lief
+        vals = reviewenv.values(r, (w or {}).get("path") or "", (w or {}).get("sha") or "")
+        return {"branch": branch, "src": src, "commands": reviewenv.checkout_commands(src, branch, local), "clone": clone,
+                "worktree": (w or {}).get("path") or "", "sha": ((w or {}).get("sha") or "")[:10],
+                "env": {"kind": pe["kind"], "label": reviewenv.KINDS[pe["kind"]]["label"], "name": vals["name"], "port": vals["port"],
+                        "url": reviewenv.fill(pe.get("url"), vals, quote=False)} if pe else None,
+                "env_state": st, "push": "git push -u origin %s" % shlex.quote(branch) if branch else ""}
+
+    def run_checkout(self, rid, launch=True):
+        """Branch des Laufs in deinen lokalen Checkout holen, eigener Worktree daneben, optional IntelliJ öffnen. Pusht nichts."""
+        r = self.store.agent_run(rid)
+        if not r or r["status"] in ("zugewiesen", "läuft"):
+            raise UserError("Auschecken geht, wenn der Lauf beendet ist.")
+        try:
+            branch, src, env, _ = self._run_src(r)
+        except agents.AgentError as e:
+            raise UserError(str(e))
+        if not branch:
+            raise UserError("Dieser Lauf hat keinen eigenen Branch (gemeinsamer Ordner, oder Export noch nicht übernommen).")
+        clone = self._repo_of("gitlab", r["project_id"]) if r.get("project_id") is not None else ""
+        name = Path(clone).name if clone else "repo"
+        if self.demo and not clone:
+            path, sha = "/home/demo/work/.tinyops-wt/dlp-core-run%d" % rid, "d3m0%06d" % rid
+            self.store.ide_set("run:%d" % rid, "agent", r["project_id"] or 0, rid, sha, path, "/home/demo/work/dlp-core")
+            self.audit("agent.checkout", r["ticket"], run=rid, branch=branch, path=path, demo=True)
+            return {"path": path, "sha": sha, "launched": False, "hint": "Demo: Worktree und IntelliJ nur angedeutet."}
+        if not clone:
+            raise UserError("Für dieses Projekt fehlt dein lokaler Checkout (Einstellungen → IntelliJ und Review-Umgebung → Pfad).")
+        rc, _, err = self._git(clone, "rev-parse", "--git-dir")
+        if rc:
+            raise UserError("%s ist kein Git-Repository: %s" % (clone, err[:200]))
+        ref = "refs/tinyops/run-%d" % rid
+        rc, _, err = self._git(clone, "fetch", "--no-tags", src, "+%s:%s" % (branch, ref), timeout=180, env=env)
+        if rc:
+            raise UserError("Branch %s nicht geholt: %s" % (branch, err[:300]))
+        _, sha, _ = self._git(clone, "rev-parse", ref)
+        path = str(Path(clone).parent / ".tinyops-wt" / ("%s-run%d" % (name, rid)))
+        note = ""
+        if not Path(path).exists():
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            rc, _, err = self._git(clone, "worktree", "add", "--detach", path, sha, timeout=180)
+            if rc:
+                raise UserError("Worktree nicht angelegt: %s" % err[:300])
+        else:
+            _, dirty, _ = self._git(path, "status", "--porcelain")
+            if dirty:
+                note = "Im Worktree gibt es geänderte Dateien. Nicht aktualisiert."
+            else:
+                self._git(path, "checkout", "-q", "--detach", sha)
+        self.store.ide_set("run:%d" % rid, "agent", r["project_id"] or 0, rid, sha, path, clone)
+        launched, hint = self._launch_ide(path) if launch else (False, "")
+        self.audit("agent.checkout", r["ticket"], run=rid, branch=branch, sha=sha[:12], path=path, launched=launched)
+        return {"path": path, "sha": sha, "launched": launched, "hint": " ".join(x for x in (note, hint) if x)}
+
+    def run_env(self, rid, action):
+        """Review-Umgebung starten oder stoppen: nur die Befehle aus den Einstellungen, nur auf Klick, im Worktree des Laufs."""
+        r = self.store.agent_run(rid)
+        if not r:
+            raise UserError("Diesen Lauf gibt es nicht (mehr).")
+        pe = (self.proj_cfg.get(r["project_id"]) or {}).get("review_env") if r.get("project_id") is not None else None
+        if not pe:
+            raise UserError("Für dieses Projekt ist keine Review-Umgebung eingetragen (Einstellungen → IntelliJ und Review-Umgebung).")
+        if rid in self._renv_live:
+            raise UserError("Für diesen Lauf läuft schon ein Befehl. Kurz warten.")
+        tmpl = pe.get("up" if action == "up" else "down") or ""
+        if not tmpl:
+            raise UserError("Für «Stoppen» ist kein Befehl eingetragen.")
+        w = self.store.ide_get("run:%d" % rid)
+        if action == "up" and (not w or not (self.demo or Path(w["path"]).exists())):
+            self.run_checkout(rid, launch=False)
+            w = self.store.ide_get("run:%d" % rid)
+        if not w:
+            raise UserError("Kein Worktree für diesen Lauf.")
+        vals = reviewenv.values(r, w["path"], w["sha"])
+        cmd = reviewenv.fill(tmpl, vals)
+        url = reviewenv.fill(pe.get("url"), vals, quote=False)
+        st = {"state": "startet" if action == "up" else "stoppt", "action": action, "cmd": cmd, "url": url, "ts": time.time(), "log": ""}
+        self.store.agent_run_update(rid, renv=json.dumps(st))
+        self.audit("review.env." + action, r["ticket"], run=rid, kind=pe["kind"], name=vals["name"], cmd=cmd[:300])
+        self._renv_live.add(rid)
+        threading.Thread(target=self._env_worker, args=(rid, cmd, w["path"], vals, st), daemon=True, name="renv-%d" % rid).start()
+        return st
+
+    def _env_worker(self, rid, cmd, path, vals, st):
+        try:
+            if self.demo:
+                time.sleep(0.3)
+                rc, out = 0, "Demo: Befehl nicht ausgeführt:\n%s" % cmd
+            else:
+                shx = shutil.which("sh")
+                if not shx:
+                    rc, out = 127, "Für die Review-Umgebung braucht tinyops «sh» (Windows: Git\\bin von Git for Windows im PATH)."
+                else:
+                    try:
+                        p = subprocess.run([shx, "-c", cmd], cwd=path, capture_output=True, text=True, timeout=1800, stdin=subprocess.DEVNULL,
+                                           env=dict(os.environ, REVIEW_NAME=vals["name"], REVIEW_PORT=vals["port"], COMPOSE_PROJECT_NAME=vals["name"]))
+                        rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
+                    except subprocess.TimeoutExpired:
+                        rc, out = 124, "Nach 30 Minuten abgebrochen."
+                    except OSError as e:
+                        rc, out = 126, str(e)
+            ok = rc == 0
+            st.update(state=("läuft" if ok else "fehler") if st["action"] == "up" else ("gestoppt" if ok else "fehler"), rc=rc,
+                      log=scrub("\n".join(out.splitlines()[-40:]))[-4000:], done=time.time())
+            self.store.agent_run_update(rid, renv=json.dumps(st))
+            self.audit("review.env." + st["action"], str(rid), ok=ok, rc=rc)
+        finally:
+            self._renv_live.discard(rid)
 
     def _launch_ide(self, path):
         cmd = self.cfg.get("ide_command") or "idea {path}"
@@ -3333,6 +3478,19 @@ class App:
                 if not r or r["status"] in ("zugewiesen", "läuft"):
                     raise UserError("Erst wenn der Lauf beendet ist.")
                 return {"text": briefing.comment(svc.run_view(r))}
+            if action == "try":              # Ausprobieren: Branch, Befehle, Worktree, Review-Umgebung
+                return self.run_try(self._rid(b))
+            if action == "checkout":         # Branch in deinen Checkout holen (eigener Worktree), optional IntelliJ
+                return self.run_checkout(self._rid(b), launch=bool(b.get("ide", True)))
+            if action == "env":              # Review-Umgebung starten/stoppen
+                if b.get("do") not in ("up", "down"):
+                    raise UserError("Starten oder stoppen?")
+                return self.run_env(self._rid(b), b["do"])
+            if action == "mrdesc":           # MR-Beschreibung für Reviewer im Team, nur zum Kopieren
+                r = svc.store.agent_run(self._rid(b))
+                if not r or r["status"] in ("zugewiesen", "läuft"):
+                    raise UserError("Erst wenn der Lauf beendet ist.")
+                return {"text": briefing.mr_description(svc.run_view(r))}
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")

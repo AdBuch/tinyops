@@ -28,6 +28,7 @@ import workspaces
 import sprint
 import timesheet
 import tlog
+import reviewenv
 
 log = tlog.get("settings")
 
@@ -1101,8 +1102,9 @@ def view(cfg, config_path, features_default=None):
         "gitlab": {"url": cfg.get("gitlab_url", ""), "ca_bundle": cfg.get("ca_bundle", "")},
         "projects": [{"id": p["id"], "name": p.get("name", str(p["id"])), "sonar_key": p.get("sonar_key", ""),
                       "agent_dir": p.get("agent_dir", ""), "data_class": agents.data_class(p), "cloud_paths": list(p.get("cloud_paths") or []),
-                      "repo_path": p.get("repo_path", "")}
+                      "repo_path": p.get("repo_path", ""), "review_env": p.get("review_env")}
                      for p in cfg.get("projects", [])],
+        "review_kinds": [{"id": k, **v} for k, v in reviewenv.KINDS.items()],
         "connections": [dict(c) for c in cfg.get("connections") or []],
         "github": {"enabled": bool((cfg.get("github") or {}).get("enabled", False)), "api_url": (cfg.get("github") or {}).get("api_url") or github.API_DEFAULT,
                    "repos": [dict(r, data_class=agents.data_class(r), cloud_paths=list(r.get("cloud_paths") or []))
@@ -1221,6 +1223,19 @@ def _clean_class(item, entry, errors, errkey):
         entry.pop("cloud_paths", None)
 
 
+def _clean_review_env(item, entry, errors, errkey):
+    """Review-Umgebung je Projekt (0.32): Docker Compose, Kubernetes oder eigene Befehle. Leer = keine."""
+    if "review_env" not in item:
+        return
+    env, err = reviewenv.clean(item.get("review_env"))
+    if err:
+        errors[errkey] = err
+    elif env:
+        entry["review_env"] = env
+    else:
+        entry.pop("review_env", None)
+
+
 def _clean_repo_path(item, entry, errors, errkey):
     """Lokaler Checkout für «In IntelliJ öffnen» (0.20). Absolut oder mit ~, ohne Zeilenumbruch."""
     if "repo_path" not in item:
@@ -1275,6 +1290,7 @@ def build_config(current, p):
             else:
                 entry.pop("agent_dir", None)
         _clean_repo_path(item, entry, errors, "projects")
+        _clean_review_env(item, entry, errors, "projects")
         _clean_class(item, entry, errors, "projects")
         if pid not in [x["id"] for x in projects]:
             projects.append(entry)

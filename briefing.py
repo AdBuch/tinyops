@@ -266,6 +266,77 @@ def test_brief(run):
     return "\n".join(parts).strip() + "\n"
 
 
+SECTION_KEYS = {"kurz": "short", "zusammenfassung": "short", "ziel": "short", "was und warum": "why", "änderungen": "why", "was geändert": "why",
+                "zuerst ansehen": "first", "für das review": "first", "getestet": "tested", "tests": "tested",
+                "bewusst nicht gemacht": "notdone", "offen": "notdone", "risiken": "notdone"}
+
+
+def report_sections(text):
+    """Bericht des Agenten in Abschnitte zerlegen (Überschriften mit #). Unbekannte Abschnitte bleiben unter «other»."""
+    out, cur = {}, "short"
+    for ln in (text or "").splitlines():
+        m = re.match(r"^\s{0,3}#{1,4}\s+(.+?)\s*:?\s*$", ln)
+        if m:
+            h = m.group(1).strip().lower()
+            cur = next((v for k, v in SECTION_KEYS.items() if h.startswith(k)), "other")
+            continue
+        out.setdefault(cur, []).append(ln)
+    return {k: "\n".join(v).strip() for k, v in out.items() if "\n".join(v).strip()}
+
+
+def _file_reasons(why):
+    """Zeilen «- `pfad` – was – warum» aus dem Abschnitt «Was und warum»: {pfad: text}."""
+    out = {}
+    for ln in (why or "").splitlines():
+        m = re.match(r"^\s*[-*]\s+`?([^`\s]+?)`?\s*(?:–|-|:)\s+(.+)$", ln)
+        if m:
+            out[m.group(1).strip()] = m.group(2).strip()[:300]
+    return out
+
+
+def review_brief(run):
+    """«Kurz vorab» für dein Review: Ziel, was sich geändert hat (je Datei mit Begründung), wo anfangen, wie testen, Belege."""
+    sec = report_sections(run.get("summary") or "")
+    res = run.get("result") or {}
+    reasons = _file_reasons(sec.get("why"))
+    files = []
+    for f in res.get("files") or []:
+        why = reasons.get(f["path"]) or next((t for p, t in reasons.items() if f["path"].endswith("/" + p) or p.endswith("/" + f["path"]) or p == f["path"].rsplit("/", 1)[-1]), "")
+        files.append(dict(f, why=why))
+    rows = run.get("criteria") or []
+    return {"short": (sec.get("short") or "")[:600], "files": files, "without_reason": sum(1 for f in files if not f["why"]),
+            "first": (sec.get("first") or "")[:800], "notdone": (sec.get("notdone") or "")[:800],
+            "manual": [m for m in run.get("manual") or [] if m.get("kind") == "test"],
+            "checks": len(run.get("checks") or []), "checks_ok": sum(1 for c in run.get("checks") or [] if str(c.get("exit")) == "0"),
+            "ak_ok": sum(1 for r in rows if r["state"] == "ok"), "ak": len(rows), "stat": res.get("stat") or "",
+            "branch": run.get("taken") or run.get("out_branch") or ""}
+
+
+def mr_description(run, title=""):
+    """MR-Beschreibung für Reviewer im Team (Markdown für GitLab). tinyops erstellt den MR nicht selbst: zum Kopieren."""
+    b = review_brief(run)
+    out = ["## Worum es geht", "", "%s%s" % ("**%s** – %s" % (run.get("ticket"), title or run.get("title") or "") if run.get("ticket") else "", "\n\n" + b["short"] if b["short"] else ""), ""]
+    if b["files"]:
+        out += ["## Was sich geändert hat und warum", ""]
+        out += ["- `%s` (+%d/−%d)%s" % (f["path"], f.get("add", 0), f.get("del", 0), " – " + f["why"] if f["why"] else "") for f in b["files"][:40]]
+        out.append("")
+    if b["first"]:
+        out += ["## Zuerst ansehen", "", b["first"], ""]
+    steps = b["manual"]
+    if steps or b["checks"]:
+        out += ["## So testest du", ""]
+        out += ["%d. %s%s" % (i, m["step"], " → erwartet: " + m["expect"] if m.get("expect") else "") for i, m in enumerate(steps, 1)]
+        if b["checks"]:
+            out += ["", "Automatisch: %d von %d Prüfungen grün (%s)." % (b["checks_ok"], b["checks"], ", ".join("`%s`" % c["cmd"] for c in (run.get("checks") or [])[:5]))]
+        out.append("")
+    rows = run.get("criteria") or []
+    if rows:
+        out += ["## Akzeptanzkriterien", ""] + ["- [%s] %s" % ("x" if r["state"] == "ok" else " ", r["text"]) for r in rows] + [""]
+    if b["notdone"]:
+        out += ["## Bewusst nicht gemacht", "", b["notdone"], ""]
+    return "\n".join(out).strip() + "\n"
+
+
 def comment(run):
     """Entwurf eines Ticket-Kommentars zum Ergebnis (Jira-Wiki-Markup). tinyops schreibt ihn nicht selbst: Er ist zum Kopieren."""
     out = ["Ergebnis von %s (Lauf %s, %s)" % (run.get("agent_name") or "Agent", run.get("id"), run.get("status") or "")]

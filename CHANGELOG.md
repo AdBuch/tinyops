@@ -5,6 +5,20 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.32.0]
+
+### Neu
+- **Begründen im Bericht, nicht im Code.** Neue Leitplanke in jedem Umsetzen-Prompt: Jede geänderte Datei bekommt im Bericht eine Zeile «Datei – was – warum». Keine Kommentare nur fürs Review, keine auskommentierten Zeilen. Der Bericht hat jetzt feste Abschnitte: Kurz, Was und warum, Zuerst ansehen, Getestet, Bewusst nicht gemacht.
+- **Hinweis bei Kommentar-Rauschen.** tinyops zählt neue Kommentarzeilen je Datei im Diff. Ab fünf zeigt der Freigabe-Kasten einen Hinweis.
+- **«Kurz vorab» im Lauf.** Oben im Ergebnis, in zwei Minuten lesbar: was jetzt anders ist, jede Datei mit +/− und der Begründung aus dem Bericht (oder «Keine Begründung»), wo anfangen, Kriterien und Belege auf einen Blick. Der ganze Bericht ist aufklappbar.
+- **Als MR-Beschreibung kopieren.** Für Reviewer im Team: Worum es geht, Was und warum je Datei, Zuerst ansehen, So testest du (Schritte und Belege), Akzeptanzkriterien als Checkliste. tinyops erstellt keinen MR und pusht nicht.
+- **Ausprobieren.** Im Lauf:
+  - «In IntelliJ öffnen» holt den Branch des Agenten (lokal oder per SSH vom Agenten-Rechner) in deinen Checkout und legt daneben einen eigenen Worktree an. Dein Arbeitsstand bleibt unberührt.
+  - «Befehle kopieren» gibt dir `git fetch`/`git switch` zum Selbermachen, dazu den Push-Befehl für das Team.
+  - **Review-Umgebung** je Projekt (Docker Compose, Kubernetes oder eigene Befehle): starten, stoppen und öffnen per Klick, mit Name und Port je Lauf. Nur auf deinen Klick, auf diesem Rechner. Einstellungen → IntelliJ und Review-Umgebung.
+- **Piktogramme für Repo und Branch.** Jedes Repo hat ein eigenes Muster, jeder Branch einen kleinen Git-Graphen in eigener Farbe. Die Form der Commits zeigt die Art: Kreis für feature, Raute für fix/bug/hotfix, Quadrat für agent. Gleicher Name heisst überall gleiches Bild: im Fokus, in den Listen und im Lauf.
+- **Fokus klarer.** Titel grösser, darunter Repo und Branch als Piktogramm mit Namen.
+
 ## [0.31.0]
 
 ### Neu

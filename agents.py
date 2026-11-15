@@ -331,6 +331,7 @@ def guards_text(g, phase="develop"):
              "- **Einfach vor clever:** bestehende Muster und den Stil des Projekts übernehmen; Namen, die erklären, was passiert.",
              "- **Jede Verhaltensänderung bekommt einen Test**, ausgeführt mit `tinyops-check`.",
              "- **Kleine Commits** mit einer Absicht je Commit und einer Nachricht, die sie nennt.",
+             "- **Begründen im Bericht, nicht im Code:** Jede geänderte Datei bekommt im Bericht eine Zeile «Datei – was – warum». Keine Kommentare, die nur dem Review dienen, keine auskommentierten Zeilen, keine TODOs ohne Ticket. Kommentare im Code nur, wo sie auch in einem Jahr noch helfen.",
              "- **Für das Review schreiben:** Im Bericht zuerst, was ein Reviewer ansehen soll, und was du bewusst nicht gemacht hast."]
     if phase in ("plan", "review"):
         lines[1:3] = ["- **Nichts ändern:** In dieser Phase liest du nur. Keine Dateien bearbeiten, nichts committen.",
@@ -356,6 +357,40 @@ def guard_warnings(result, g):
         out.append("%d Zeilen geändert, Ziel etwa %d. Gross für ein gründliches Review." % (lines, g["max_lines"]))
     if result.get("dirty"):
         out.append("%d Datei%s nicht committet." % (result["dirty"], "" if result["dirty"] == 1 else "en"))
+    nc = sum(f.get("comments") or 0 for f in result.get("files") or [] if isinstance(f, dict))
+    if nc >= COMMENT_WARN:
+        out.append("%d neue Kommentarzeilen im Code. Begründungen gehören in den Bericht. Bleiben sollten nur Kommentare, die in einem Jahr noch helfen." % nc)
+    return out
+
+
+COMMENT_WARN = 5
+CODE_EXT = {"py", "java", "kt", "kts", "js", "mjs", "ts", "tsx", "jsx", "go", "rb", "sh", "bash", "c", "h", "cc", "cpp", "hpp", "cs", "php", "scala",
+            "rs", "sql", "yml", "yaml", "xml", "html", "vue", "svelte", "groovy", "gradle", "swift", "tf", "properties", "toml", "ini", "dockerfile"}
+_COMMENT = re.compile(r"^\s*(//|/\*|\*(\s|/|$)|#(?![!\[{]|include|define|if|endif|region|pragma)|<!--|--\s|;\s)")
+
+
+def diff_counts(diff_lines):
+    """Je Datei: hinzugefügte und entfernte Zeilen, dazu neue Kommentarzeilen (nur in Code-Dateien). Aus `git diff -U0`."""
+    out, cur = {}, None
+    for ln in diff_lines:
+        if ln.startswith("+++ "):
+            p = ln[4:].strip()
+            cur = out.setdefault(p[2:] if p.startswith("b/") else p, {"add": 0, "del": 0, "comments": 0}) if p != "/dev/null" else None
+            continue
+        if ln.startswith("--- ") or ln.startswith("diff --git") or cur is None:
+            if ln.startswith("diff --git"):
+                m = re.search(r" b/(.+)$", ln)
+                cur = out.setdefault(m.group(1), {"add": 0, "del": 0, "comments": 0}) if m else None
+            continue
+        if ln.startswith("+"):
+            cur["add"] += 1
+            path = next((k for k, v in out.items() if v is cur), "")
+            ext = path.rsplit("/", 1)[-1].lower()
+            ext = "dockerfile" if ext.startswith("dockerfile") else ext.rsplit(".", 1)[-1] if "." in ext else ""
+            if ext in CODE_EXT and _COMMENT.match(ln[1:]):
+                cur["comments"] += 1
+        elif ln.startswith("-"):
+            cur["del"] += 1
     return out
 
 
@@ -762,6 +797,9 @@ def parse_result(out):
     except ValueError:
         dirty = 0
     secrets = secretscan.scan_diff("\n".join(sec.get("DIFF") or []), "Ergebnis des Laufs")[:20]
+    counts = diff_counts(sec.get("DIFF") or [])
+    for f in files:
+        f.update(counts.get(f["path"]) or {})
     return {"commits": commits, "files": files, "stat": clean_text(stat, 200), "dirty": dirty, "secrets": secrets}
 
 
@@ -1158,6 +1196,7 @@ class Service:
         v["gate"], v["gate_note"] = r.get("gate") or "", r.get("gate_note") or ""
         v["guard_warnings"] = guard_warnings(v.get("result"), guards_cfg(self.cfg)) if v["phase"] in ("develop", "test") else []
         v["ack"] = bool(r.get("ack"))
+        v["review_brief"] = briefing.review_brief(v) if v["phase"] != "plan" and v.get("result") and r["status"] not in ("zugewiesen", "läuft") else None
         v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
                  where=("lokal" if a and a["connection"] == "local" else conn["name"] if conn else "?"),

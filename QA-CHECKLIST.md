@@ -117,6 +117,15 @@ Format einer Zeile: `- [ ] \`id\` Aufgabe → erwartet`. Ändert sich der Text, 
 - [ ] `r211-05` Windows: SmartScreen-Warnung → «Weitere Informationen → Trotzdem ausführen» startet ihn
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.32.0
+
+- [ ] `r32-01` Fokus → unter dem Titel Repo und Branch als Piktogramm; derselbe Branch hat in der Liste darunter dasselbe Bild
+- [ ] `r32-02` Umsetzen-Lauf fertig → oben «Kurz vorab»: ein Satz, jede Datei mit +/− und Begründung; eine Datei ohne Begründung ist markiert
+- [ ] `r32-03` «Als MR-Beschreibung kopieren» → in einen GitLab-MR einfügen → Vorschau zeigt Abschnitte und Checkliste sauber
+- [ ] `r32-04` Einstellungen → IntelliJ und Review-Umgebung → Pfad zum Checkout eintragen → im Lauf «In IntelliJ öffnen» → IntelliJ öffnet `.tinyops-wt/…-run<nr>`, dein Checkout ist unverändert
+- [ ] `r32-05` Agent auf dem SSH-Rechner → «In IntelliJ öffnen» holt den Branch von dort (dein Schlüssel muss funktionieren)
+- [ ] `r32-06` Review-Umgebung «Docker Compose» für ein Projekt → im Lauf starten → läuft, «Öffnen» geht auf den Port → «Stoppen» räumt auf
+
 ## 0.31.0
 
 - [ ] `r31-01` Prüfen → oben «Als Nächstes testen» mit fünf Punkten aus 0.31.0 → einen auf ok setzen → der nächste rückt nach, «in dieser Sitzung 1 erledigt»

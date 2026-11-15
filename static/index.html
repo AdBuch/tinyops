@@ -305,6 +305,19 @@
   .gatebox textarea { width: 100%; height: 64px; min-height: 54px; margin: 6px 0; font-family: var(--sans); resize: vertical; }
   .gatebox .row { flex-wrap: wrap; }
   .qsess { border: 2px solid var(--focus); }
+  .brief { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--surface); }
+  .brief h3 { margin: 0 0 4px; font-size: 15px; }
+  .brief .bshort { padding: 0; max-height: none; font-size: 14.5px; }
+  .bfacts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; color: var(--quiet); }
+  .warn-t { color: var(--warn); } .bad-t { color: var(--bad); }
+  .bfiles { list-style: none; padding: 0; margin: 6px 0; }
+  .bfiles li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .bfiles .fst { font: 600 12px var(--mono); text-align: center; border-radius: 4px; background: var(--raised); height: 20px; line-height: 20px; }
+  .bfiles .fst.ok { color: var(--ok); } .bfiles .fst.bad { color: var(--bad); }
+  .bfiles .fp code { font-size: 12.5px; overflow-wrap: anywhere; } .bfiles .fn { margin-left: 8px; color: var(--quiet); font-size: 12px; white-space: nowrap; }
+  .bfiles .fw { font-size: 13px; margin-top: 2px; } .bfiles .fw.none { color: var(--warn); font-size: 12.5px; }
+  .renv { padding: 8px 0; border-top: 1px solid var(--line); }
+  .trybox { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
   .gwarn { margin: 8px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .aud { list-style: none; margin: 6px 0 0; padding: 0; }
   .aud li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 12px; padding: 7px 4px; border-top: 1px solid var(--line); font-size: 13px; }
@@ -643,7 +656,13 @@
   .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px 22px; display: grid; gap: 18px;
           background-image: linear-gradient(115deg, color-mix(in srgb, var(--kc) 9%, transparent), transparent 55%); }
   .hero .hhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .hero .htitle { font-size: 17px; font-weight: 650; color: var(--ink); }
+  .hero .htitle { font-size: 21px; font-weight: 680; color: var(--ink); line-height: 1.25; }
+  .hero .fkey { font-size: 15px; }
+  .hero .hpics { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; margin-top: -8px; font-size: 14.5px; }
+  .hero .hpics code { font-size: 13.5px; }
+  .pic { flex: none; vertical-align: middle; color: var(--ink); }
+  .picn { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+  .picn > span, .picn > code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .hero .hnext { display: flex; gap: 24px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
   .hero .hstep { min-width: 0; max-width: 72ch; }
   .hero .hlabel { font-size: 13px; font-weight: 700; color: var(--kc); display: inline-flex; gap: 6px; align-items: center; }
@@ -1448,6 +1467,8 @@ const HELP = {
   agents: `<p><b>Der Zyklus: Planen → Umsetzen → Review → Test</b></p>
     <p>Jede Phase ist ein eigener Lauf und endet mit deiner Freigabe. <b>Planen</b>: Der Agent liest nur und schreibt einen Plan. <b>Umsetzen</b>: Code auf eigenem Branch, nach dem freigegebenen Plan. <b>Review</b>: Ein zweiter Agent (gern ein lokales Modell) liest das Ergebnis und ändert nichts. <b>Test</b>: Tests laufen lassen, fehlende ergänzen und Schritte für deinen Test von Hand beschreiben.</p>
     <p>Freigeben geht erst, wenn du die Prüfpunkte abgehakt hast: fürs Review den Diff gelesen, den Umfang geprüft und jedes Kriterium; für den Test die Schritte, die der Agent mit <code>tinyops-manual</code> beschrieben hat. «Zurückgeben» braucht einen Satz, was anders werden soll. Er geht in den Nachbessern-Auftrag. Kleine Aufgaben kannst du direkt umsetzen lassen, ohne Plan.</p>
+    <p><b>Einfach reviewen</b></p>
+    <p>Agenten begründen jede Datei im Bericht («Datei – was – warum»), nicht als Kommentar im Code. Im Lauf steht oben «Kurz vorab», dazu «In IntelliJ öffnen» (eigener Worktree neben deinem Checkout), «Befehle kopieren» und, falls eingerichtet, die Review-Umgebung. «Als MR-Beschreibung kopieren» ist für Reviewer im Team.</p>
     <p><b>Agent auf einem anderen Rechner (SSH), Schritt für Schritt</b></p>
     <ol><li>Auf <em>diesem</em> Rechner einen Schlüssel ohne Passphrase anlegen (tinyops kann keine Passphrase abfragen):<pre>ssh-keygen -t ed25519 -C tinyops -f ~/.ssh/tinyops_agent -N ""</pre></li>
     <li>Den öffentlichen Teil auf den Zielrechner bringen:<pre>ssh-copy-id -i ~/.ssh/tinyops_agent.pub benutzer@zielrechner</pre></li>
@@ -2110,6 +2131,47 @@ function agQuestionHtml(r) {
     <textarea id="agAns" maxlength="4000" placeholder="Eigene Antwort (Ctrl+Enter schickt)" spellcheck="true"></textarea>
     <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="primary" id="agAnsGo">Antwort schicken</button></div></div>`;
 }
+// «Kurz vorab» (0.32): in zwei Minuten wissen, was sich geändert hat und warum, wo anfangen, wie ausprobieren
+function agBriefHtml(r, b) {
+  const ST = { A: ['neu', 'ok'], M: ['geändert', ''], D: ['gelöscht', 'bad'], R: ['umbenannt', ''] };
+  const files = b.files.map(f => `<li><span class="fst ${(ST[f.st] || ['', ''])[1]}" title="${esc((ST[f.st] || [f.st])[0])}">${esc(f.st)}</span>
+      <div class="fp"><code>${esc(f.path)}</code><span class="fn">+${f.add || 0} −${f.del || 0}${f.comments ? ` · <span class="warn-t" title="Neue Kommentarzeilen. Begründungen gehören in den Bericht.">${f.comments} Kommentar${f.comments === 1 ? '' : 'e'}</span>` : ''}</span>
+      <div class="fw ${f.why ? '' : 'none'}">${f.why ? esc(f.why) : 'Keine Begründung im Bericht.'}</div></div></li>`).join('');
+  return `<section class="brief" aria-label="Kurz vorab"><h3>Kurz vorab</h3>
+    ${b.short ? `<div class="mdv bshort">${mdHtml(b.short)}</div>` : '<div class="small quiet">Der Bericht hat keinen Abschnitt «Kurz».</div>'}
+    <div class="bfacts small">${b.branch ? `<span class="picn">${branchIcon(b.branch, 18)}<code>${esc(b.branch)}</code></span>` : ''}<span>${esc(b.stat || 'keine Änderungen')}</span>
+      ${b.ak ? `<span>${b.ak_ok}/${b.ak} Kriterien gemeldet</span>` : ''}<span class="${b.checks && b.checks_ok === b.checks ? '' : 'warn-t'}">${b.checks ? `${b.checks_ok}/${b.checks} Belege grün` : 'keine Belege'}</span>
+      ${b.files.length ? `<span class="${b.without_reason ? 'warn-t' : ''}">${b.without_reason ? `${b.without_reason} von ${b.files.length} Dateien ohne Begründung` : 'jede Datei begründet'}</span>` : ''}</div>
+    ${files ? `<ul class="bfiles">${files}</ul>` : ''}
+    ${b.first ? `<div class="small"><b>Zuerst ansehen</b><div class="mdv">${mdHtml(b.first)}</div></div>` : ''}
+    ${b.notdone ? `<details class="small"><summary><b>Bewusst nicht gemacht</b></summary><div class="mdv">${mdHtml(b.notdone)}</div></details>` : ''}
+    <div id="agTry" class="trybox" aria-live="polite"></div></section>`;
+}
+async function agTryLoad(id) {
+  const box = $('agTry'); if (!box) return;
+  let t;
+  try { t = await post('/api/agents/try', { run: id }); } catch (e) { box.innerHTML = `<div class="small quiet">${esc(e.message)}</div>`; return; }
+  const es = t.env_state || {}, ESL = { startet: 'startet …', 'läuft': 'läuft', stoppt: 'stoppt …', gestoppt: 'gestoppt', fehler: 'Fehler', unklar: 'unklar (tinyops neu gestartet)' };
+  const busy = es.state === 'startet' || es.state === 'stoppt';
+  box.innerHTML = `<b>Ausprobieren</b>
+    ${!t.branch ? '<div class="small quiet">Dieser Lauf hat keinen eigenen Branch zum Auschecken.</div>' : `<div class="row small" style="flex-wrap:wrap;gap:8px;margin-top:6px">
+      <button class="primary" id="tyIde" ${t.clone || state.demo ? '' : 'disabled'} title="${t.clone ? 'Branch in deinen Checkout holen (eigener Worktree daneben, dein Stand bleibt) und IntelliJ öffnen' : 'Pfad zu deinem lokalen Checkout fehlt: Einstellungen → IntelliJ und Review-Umgebung'}">${ic('ext')} In IntelliJ öffnen</button>
+      <button id="tyCmd" title="git-Befehle, um den Branch selbst zu holen">${ic('copy')} Befehle kopieren</button>
+      ${t.env ? `<button id="tyUp" ${busy ? 'disabled' : ''} title="${esc(t.env.label)}: Start-Befehl aus den Einstellungen, im Worktree des Laufs. Name ${esc(t.env.name)}, Port ${esc(t.env.port)}">${ic('play')} Review-Umgebung starten</button>
+        ${es.state === 'läuft' || es.state === 'fehler' || es.state === 'unklar' ? `<button id="tyDown" ${busy ? 'disabled' : ''}>Stoppen</button>` : ''}
+        ${es.state === 'läuft' && es.url ? `<button id="tyOpen" title="${esc(es.url)}">${ic('ext')} Öffnen</button>` : ''}` : '<span class="quiet">Review-Umgebung (Docker Compose, Kubernetes): Einstellungen → IntelliJ und Review-Umgebung.</span>'}</div>
+      ${t.worktree ? `<div class="small quiet" style="margin-top:4px">Worktree: <code>${esc(t.worktree)}</code> auf <code>${esc(t.sha)}</code></div>` : ''}
+      ${es.state ? `<div class="small" style="margin-top:4px">Review-Umgebung: <b class="${es.state === 'fehler' ? 'bad-t' : ''}">${esc(ESL[es.state] || es.state)}</b>${es.url && es.state === 'läuft' ? ` · <a href="${esc(es.url)}" target="_blank" rel="noopener">${esc(es.url)}</a>` : ''}
+        ${es.log ? `<details><summary class="quiet">Ausgabe</summary><pre class="log" style="max-height:24vh">${esc(es.log)}</pre></details>` : ''}</div>` : ''}`}`;
+  if ($('tyCmd')) $('tyCmd').onclick = () => copyText(t.commands + (t.push ? '\n# Für Reviewer im Team: pushen machst du\n' + t.push + '\n' : ''), 'git-Befehle');
+  if ($('tyIde')) $('tyIde').onclick = async () => { const b2 = $('tyIde'); b2.disabled = true; try { const x = await post('/api/agents/checkout', { run: id, ide: true }); toast(x.launched ? 'IntelliJ öffnet ' + x.path : (x.hint || 'Worktree bereit: ' + x.path)); if (!x.launched) copyText(x.path, 'Pfad'); } catch (e) { toast(e.message); } agTryLoad(id); };
+  const env = async (d) => { if (d === 'up' && !confirm(`Review-Umgebung starten?\n\nDas führt den Start-Befehl aus deinen Einstellungen auf diesem Rechner aus (${t.env.label}, Name ${t.env.name}).`)) return;
+    try { await post('/api/agents/env', { run: id, do: d }); } catch (e) { toast(e.message); } agTryLoad(id); setTimeout(() => agTryLoad(id), 1500); };
+  if ($('tyUp')) $('tyUp').onclick = () => env('up');
+  if ($('tyDown')) $('tyDown').onclick = () => env('down');
+  if ($('tyOpen')) $('tyOpen').onclick = () => window.open(es.url, '_blank', 'noopener');
+  if (busy) setTimeout(() => { if ($('agTry')) agTryLoad(id); }, 3000);
+}
 function agReportHtml(r) {
   const qa = (r.qa || []).map(x => `<li><span class="quiet">Frage ${x.id}:</span> ${esc(x.q)}<br><span class="quiet">Antwort:</span> ${esc(x.a)}</li>`).join('');
   const ck = (r.checks || []).map(c => `<li><span class="chip ${c.exit === 0 ? 'sq-ok' : 'sq-bad'}">Exit ${c.exit}</span><code>${esc(c.cmd)}</code><span class="quiet">${c.secs} s</span></li>`).join('');
@@ -2117,22 +2179,24 @@ function agReportHtml(r) {
   const crit = r.criteria || [];
   const ak = crit.map(c => `<li><span class="chip ${AKS[c.state][0]}">${AKS[c.state][1]}</span><span class="txt"><b>AK${c.n}</b> ${esc(c.text)}</span>${c.note ? `<span class="note">${esc(c.note)}</span>` : ''}</li>`).join('');
   if (r.active && !qa && !ck && !ak) return '';
-  const parts = [];
+  const parts = [], rb = !r.active ? r.review_brief : null;
   if (!r.active) parts.push(`<div class="row" style="justify-content:space-between"><h3 style="margin:0">Ergebnis</h3><button class="quiet-btn" id="agRep" title="Bericht, Belege und Änderungen neu vom Zielrechner lesen">Neu lesen</button></div>`);
+  if (rb) parts.push(agBriefHtml(r, rb));
   if (ak) parts.push(`<div class="small"><b>Akzeptanzkriterien</b> <span class="quiet">${r.active ? '(Stand bei Abschluss)' : `${r.ak.ok} von ${r.ak.total} als erfüllt gemeldet. Das sind Angaben des Agenten: Beleg prüfen.`}</span><ul class="aklist">${ak}</ul></div>`);
   const res = r.result;
   if (!r.active && res && res.secrets && res.secrets.length) parts.push(secretList(res.secrets, 'Vor dem Übernehmen ansehen'));
   if (!r.active && res) parts.push(`<div class="small"><b>Änderungen</b> <span class="quiet">${res.stat ? esc(res.stat) : 'keine gegenüber dem Ausgangsstand'} · ${res.commits.length} Commit${res.commits.length === 1 ? '' : 's'}${res.dirty ? ` · ${res.dirty} Datei${res.dirty === 1 ? '' : 'en'} nicht committet` : ''}</span>
     ${res.commits.length ? `<ul class="agfiles">${res.commits.map(c => `<li><code>${esc(c.sha)}</code><span>${esc(c.subject)}</span></li>`).join('')}</ul>` : ''}
-    ${res.files.length ? `<details><summary class="quiet">${res.files.length} Datei${res.files.length === 1 ? '' : 'en'}</summary><ul class="agfiles">${res.files.map(f => `<li><b title="A neu, M geändert, D gelöscht, R umbenannt">${esc(f.st)}</b><code>${esc(f.path)}</code></li>`).join('')}</ul></details>` : ''}</div>`);
+    ${res.files.length && !rb ? `<details><summary class="quiet">${res.files.length} Datei${res.files.length === 1 ? '' : 'en'}</summary><ul class="agfiles">${res.files.map(f => `<li><b title="A neu, M geändert, D gelöscht, R umbenannt">${esc(f.st)}</b><code>${esc(f.path)}</code></li>`).join('')}</ul></details>` : ''}</div>`);
   parts.push(ck ? `<div class="small"><b>Belege</b> <span class="quiet">(mit tinyops-check gelaufen, Exit-Code zählt)</span><ul class="agchk">${ck}</ul></div>`
     : (!r.active ? '<div class="small quiet">Keine Belege: Der Agent hat keine Tests über <code>tinyops-check</code> laufen lassen. Was er im Bericht «getestet» nennt, ist nicht belegt.</div>' : ''));
-  if (!r.active) parts.push(r.summary ? `<div class="small"><b>${r.phase === 'plan' ? 'Plan des Agenten' : r.phase === 'review' ? 'Befund des Agenten' : 'Bericht des Agenten'}</b> <span class="quiet">(seine Angaben, nicht geprüft)</span><div class="mdv">${mdHtml(r.summary)}</div></div>`
+  if (!r.active) parts.push(r.summary ? `<details class="small" ${rb && r.phase !== 'review' ? '' : 'open'}><summary><b>${r.phase === 'plan' ? 'Plan des Agenten' : r.phase === 'review' ? 'Befund des Agenten' : 'Ganzer Bericht des Agenten'}</b> <span class="quiet">(seine Angaben, nicht geprüft)</span></summary><div class="mdv">${mdHtml(r.summary)}</div></details>`
     : '<div class="small quiet">Kein Bericht (<code>tinyops-report</code> nicht benutzt). Das Log unten zeigt, was passiert ist.</div>');
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
   if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow"><input type="text" id="agNote" maxlength="1000" placeholder="Was soll nachgebessert werden? (optional)" aria-label="Anmerkung für die Nachbesserung">
     <button id="agFollow" title="Neuer Lauf desselben Agenten: offene Kriterien, fehlgeschlagene Belege und deine Anmerkung. Er baut auf dem Branch dieses Laufs auf.">Nachbessern …</button>
-    <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button></div>`);
+    <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button>
+    ${rb ? '<button id="agMrDesc" title="Beschreibung für den MR: worum es geht, was und warum je Datei, wie testen. Für Reviewer im Team. tinyops erstellt keinen MR.">Als MR-Beschreibung kopieren</button>' : ''}</div>`);
   parts.push(agManualHtml(r), agGateHtml(r));
   return `<div class="agrep">${parts.join('')}</div>`;
 }
@@ -2613,6 +2677,8 @@ async function openRunDlg(id) {
     if (draft && $('agAns')) { $('agAns').value = draft.v; if (draft.f) $('agAns').focus(); }
     if (gdraft && $('agGateNote')) $('agGateNote').value = gdraft;
     wirePromptBox(box, 'agSent');
+    if ($('agTry')) agTryLoad(id);
+    if ($('agMrDesc')) $('agMrDesc').onclick = async () => { try { copyText((await post('/api/agents/mrdesc', { run: id })).text, 'MR-Beschreibung'); } catch (e) { toast(e.message); } };
     const mpost = async (i, done, note) => { try { await post('/api/agents/manual', { run: id, i, done, note }); await load(); await draw(); } catch (e) { toast(e.message); } };
     box.querySelectorAll('[data-mck]').forEach(c => c.onchange = () => mpost(+c.dataset.mck, c.checked, (box.querySelector(`[data-mnote="${c.dataset.mck}"]`) || {}).value || ''));
     box.querySelectorAll('[data-mnote]').forEach(n => n.onchange = () => mpost(+n.dataset.mnote, !!(box.querySelector(`[data-mck="${n.dataset.mnote}"]`) || {}).checked, n.value));
@@ -3102,9 +3168,12 @@ async function loadSettings() {
     ${field('ag-gx', 'Im Team vereinbart (optional)', (S.agent_guards || {}).extra || '', { ph: 'z. B. Kein Lombok. Logs auf Englisch. Neue Endpunkte immer mit OpenAPI-Eintrag.', err: 'agent_guards.extra', help: 'Ein, zwei Sätze, die in jeden Prompt kommen. Höchstens 600 Zeichen.' })}
     <div class="ferr" data-err="connections"></div><div class="ferr" data-err="agents"></div>`)}
 
-  ${sect('ide', 'IntelliJ', 'Für «In IntelliJ öffnen» beim Testen: tinyops legt neben deinem Checkout einen Worktree genau auf dem Commit des MR an (<code>../.tinyops-wt/</code>) und startet die IDE damit. Geholt wird mit <code>git fetch</code>, gepusht wird nie. Beim Abschliessen räumt tinyops saubere Worktrees wieder weg.', `
+  ${sect('ide', 'IntelliJ und Review-Umgebung', 'Für «In IntelliJ öffnen» beim Testen: tinyops legt neben deinem Checkout einen Worktree genau auf dem Commit des MR oder auf dem Branch eines Agenten an (<code>../.tinyops-wt/</code>) und startet die IDE damit. Geholt wird mit <code>git fetch</code>, gepusht wird nie. Beim Abschliessen räumt tinyops saubere Worktrees wieder weg.', `
     ${field('ide-cmd', 'Befehl zum Öffnen', S.ide_command, { ph: 'idea {path}', err: 'ide_command', help: '<code>{path}</code> wird durch den Worktree ersetzt. macOS ohne Launcher: <code>open -na "IntelliJ IDEA.app" --args {path}</code>. Windows: Pfad zu <code>idea64.exe</code>.' })}
     <div id="ide-list"></div>
+    <h3>Review-Umgebung je Projekt</h3>
+    <div class="hint">Startet das Ergebnis eines Agenten zum Ausprobieren: nur auf deinen Klick, auf diesem Rechner, im Worktree des Laufs. Platzhalter: <code>{name}</code> (review-ticket-lauf), <code>{port}</code>, <code>{path}</code>, <code>{branch}</code>, <code>{sha}</code>, <code>{ticket}</code>. Dieselben Werte stehen als <code>REVIEW_NAME</code>, <code>REVIEW_PORT</code> und <code>COMPOSE_PROJECT_NAME</code> in der Umgebung.</div>
+    <div id="renv-list"></div>
     <div class="ferr" data-err="projects"></div><div class="ferr" data-err="github.repos"></div>`)}
 
   ${sect('time', 'Zeiterfassung', 'Zeit läuft, solange ein Vorhaben als Fokus angeheftet ist und du das Panel benutzt. Daraus entstehen Entwürfe je Ticket. Gebucht wird erst nach «Bestätigen», über die Wrapper-API deines MCP (Projectron).', `
@@ -3457,6 +3526,26 @@ $('viewSettings').addEventListener('click', ev => {
   if (t) $('ji-types').value = uniq(split(val('ji-types')).concat(t.dataset.addtype)).join(', ');
 });
 
+// Review-Umgebung je Projekt (0.32)
+function renderReviewEnvs() {
+  const box = $('renv-list'); if (!box) return;
+  const K = S.review_kinds || [];
+  box.innerHTML = P.length ? P.map((p, i) => { const e = p.review_env || {}; return `<div class="renv">
+    <div class="row" style="gap:8px"><span class="picn">${repoIcon(p.name || String(p.id), 18)}<b>${esc(p.name || '#' + p.id)}</b></span>
+      <select data-rek="${i}" aria-label="Art der Review-Umgebung für ${esc(p.name)}"><option value="">keine</option>${K.map(k => `<option value="${k.id}" ${e.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
+    ${e.kind ? `<div class="grid3" style="margin-top:6px">${['up', 'down', 'url'].map(f => `<label class="sm">${{ up: 'Starten', down: 'Stoppen', url: 'Adresse zum Öffnen' }[f]}<input type="text" data-ref="${i}:${f}" value="${esc(e[f] || '')}" spellcheck="false" style="font-family:var(--mono);font-size:12.5px"></label>`).join('')}</div>` : ''}</div>`; }).join('')
+    : '<div class="empty">Erst Projekte unter GitLab wählen.</div>';
+}
+$('viewSettings').addEventListener('change', ev => {
+  const k = ev.target.dataset.rek; if (k === undefined) return;
+  const p = P[+k], d = (S.review_kinds || []).find(x => x.id === ev.target.value);
+  p.review_env = d ? { kind: d.id, up: d.up, down: d.down, url: d.url } : null;
+  renderReviewEnvs();
+});
+$('viewSettings').addEventListener('input', ev => {
+  const k = ev.target.dataset.ref; if (k === undefined) return;
+  const [i, f] = k.split(':'); P[+i].review_env = Object.assign({}, P[+i].review_env, { [f]: ev.target.value });
+});
 // Lokale Checkouts für IntelliJ (0.20)
 function renderIdeRepos() {
   const box = $('ide-list'); if (!box) return;
@@ -3483,7 +3572,7 @@ function renderProjects() {
     <input type="text" data-pcp="${i}" value="${esc(pathsStr(p.cloud_paths))}" placeholder="${p.data_class === 'internal' ? 'ganzes Repo' : '—'}" ${p.data_class === 'internal' ? '' : 'disabled'} aria-label="Freigegebene Pfade für Cloud-Agenten">
     <button class="quiet-btn" data-pdel="${i}" title="Projekt entfernen" aria-label="Projekt entfernen">×</button></div>`).join('') + '</div>'
     : '<div class="empty">Noch kein Projekt.</div>';
-  renderIdeRepos();
+  renderIdeRepos(); renderReviewEnvs();
 }
 $('viewSettings').addEventListener('input', ev => { const i = ev.target.dataset.pn; if (i !== undefined) P[+i].name = ev.target.value; const k = ev.target.dataset.pk; if (k !== undefined) P[+k].sonar_key = ev.target.value; const a = ev.target.dataset.pa; if (a !== undefined) P[+a].agent_dir = ev.target.value; });
 const pathsStr = x => Array.isArray(x) ? x.join(', ') : (x || '');
@@ -3815,15 +3904,39 @@ function trackHtml(d, big, pick) {
     return `<li class="${s}"${st}><i></i>${big ? `<span>${esc(p.label)}</span>` : ''}</li>`;
   }).join('') + '</ol>';
 }
+// -- 0.32: Piktogramme. Repo: symmetrisches 5×5-Muster, Branch: kleiner Git-Graph. Beide aus dem Namen errechnet,
+// gleicher Name = gleiches Bild überall. Branch-Art steckt in der Form der Commits: feature ● · fix/bug/hotfix ◆ · agent ■ · sonst ●.
+function hash32(s) { let h = 0x811c9dc5; for (const ch of String(s || '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; }
+function repoIcon(name, sz = 18) {
+  const h = hash32('repo:' + name), hue = h % 360, cells = [];
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 3; x++) if ((h >>> (y * 3 + x + 6)) & 1) { cells.push([x, y]); if (x < 2) cells.push([4 - x, y]); }
+  return `<svg class="pic" width="${sz}" height="${sz}" viewBox="0 0 7 7" role="img" aria-label="Repo ${esc(name)}"><title>Repo ${esc(name)}</title><rect width="7" height="7" rx="1.6" fill="hsl(${hue} 60% 50%)" fill-opacity=".18"/>${cells.map(([x, y]) => `<rect x="${x + 1}" y="${y + 1}" width="1" height="1" fill="hsl(${hue} 60% 42%)"/>`).join('')}</svg>`;
+}
+function branchKind(b) { const l = String(b || '').toLowerCase(); return /^(fix|bug|bugfix|hotfix)[/-]/.test(l) ? 'fix' : /^agent\//.test(l) ? 'agent' : /^feat(ure)?[/-]/.test(l) ? 'feature' : 'other'; }
+function branchIcon(name, sz = 18) {
+  if (!name) return '';
+  const h = hash32('branch:' + name), hue = (h % 12) * 30 + 8, n = 1 + (h >>> 8) % 3, fy = 13 - (h >>> 11) % 2 * 2, k = branchKind(name);
+  const col = `hsl(${hue} 65% 42%)`, ys = [fy - 4, fy - 8, fy - 12].slice(0, n).map(y => Math.max(y, 2.5));
+  const dot = (x, y) => k === 'fix' ? `<rect x="${x - 1.7}" y="${y - 1.7}" width="3.4" height="3.4" transform="rotate(45 ${x} ${y})" fill="${col}"/>`
+    : k === 'agent' ? `<rect x="${x - 1.6}" y="${y - 1.6}" width="3.2" height="3.2" rx=".5" fill="${col}"/>` : `<circle cx="${x}" cy="${y}" r="1.8" fill="${col}"/>`;
+  return `<svg class="pic" width="${sz}" height="${sz}" viewBox="0 0 18 18" role="img" aria-label="Branch ${esc(name)}"><title>Branch ${esc(name)}</title><rect width="18" height="18" rx="4" fill="${col}" fill-opacity=".14"/>
+    <path d="M5 16V2" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/><path d="M5 ${fy}C5 ${fy - 2.5} 12 ${fy - 1.5} 12 ${ys[0] + .5}V${ys[ys.length - 1]}" fill="none" stroke="${col}" stroke-width="1.6"/>
+    <circle cx="5" cy="${fy}" r="1.5" fill="currentColor" fill-opacity=".55"/>${ys.map(y => dot(12, y)).join('')}</svg>`;
+}
+function picLine(c, sz = 18) {
+  // Repo und Branch einer Karte als Piktogramme mit Namen
+  const items = (c.items || []), proj = [...new Set(items.map(x => x.project).filter(Boolean))], brs = [...new Set(items.map(x => x.branch).filter(Boolean))];
+  return `${proj.slice(0, 2).map(p => `<span class="picn">${repoIcon(p, sz)}<span>${esc(short(p, 28))}</span></span>`).join('')}${brs.slice(0, 2).map(b => `<span class="picn">${branchIcon(b, sz)}<code>${esc(short(b, 44))}</code></span>`).join('')}${brs.length > 2 ? `<span class="quiet">+${brs.length - 2}</span>` : ''}`;
+}
 function metaOf(e) {
   if (e.t === 'hd') { const h = e.h; return `<span class="hdst">${esc(h.status)}</span>${h.priority ? `<span>${esc(h.priority)}</span>` : ''}${h.reporter ? `<span>von ${esc(h.reporter)}</span>` : ''}${h.age_h != null ? `<span class="${h.over_sla ? 'fflag' : ''}" title="${h.over_sla ? 'Über dem SLA' : 'Offen seit'}">seit ${hAge(h.age_h)}</span>` : ''}${h.outdated ? '<span class="fflag">veraltet</span>' : ''}`; }
   if (e.t === 'review') return `<span class="fm">${ic('mr')}${esc(e.r.project)}</span><span>von ${esc(e.r.author || '?')}</span><span>seit ${e.r.age_days} d</span>`;
   const c = e.c, d = e.d, p = [];
   const mrs = c.items.filter(x => x.iid), br = c.items.filter(x => !x.iid);
   if (mrs.length) p.push(`<span class="fm" title="Merge Requests">${ic('mr')}${mrs.map(x => esc(mrNo(x))).join(' ')}</span>`);
-  if (br.length) p.push(`<span class="fm" title="${esc(br.map(x => x.branch).join(', '))}">${ic('branch')}${esc(br.length === 1 ? short(br[0].branch, 36) : br.length + ' Branches')}</span>`);
+  if (br.length) p.push(`<span class="fm" title="${esc(br.map(x => x.branch).join(', '))}">${branchIcon(br[0].branch, 15)}${esc(br.length === 1 ? short(br[0].branch, 36) : br.length + ' Branches')}</span>`);
   const proj = [...new Set(c.items.map(x => x.project))];
-  if (proj.length) p.push(`<span>${esc(short(proj.join(', '), 40))}</span>`);
+  if (proj.length) p.push(`<span class="fm">${repoIcon(proj[0], 15)}${esc(short(proj.join(', '), 40))}</span>`);
   if (d.checks.total) p.push(`<span class="fm" title="Teilschritte">${ic('check')}${d.checks.done}/${d.checks.total}</span>`);
   (d.flags || []).forEach(f => p.push(`<span class="fflag">${esc(f)}</span>`));
   return p.join('');
@@ -3865,6 +3978,7 @@ function heroHtml(e, g) {
   const bl = pin && g.blockers.length ? `<button class="quiet-btn fblk" data-fopen="${esc(g.blockers[0].id)}" title="${esc(g.blockers.map(b => eKey(b) + ': ' + b.d.next.label).join('\n'))}">${ic('alert')} ${g.blockers.length} Blocker anderswo</button>` : '';
   return `<section class="hero k-${esc(n.kind)}" data-fid="${esc(e.id)}">
     <div class="hhead">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="htitle" href="${esc(url)}" target="_blank" rel="noopener">${esc(eTitle(e))}</a>` : `<span class="htitle">${esc(eTitle(e))}</span>`}</div>
+    ${e.t === 'card' && (e.c.items || []).length ? `<div class="hpics">${picLine(e.c, 26)}</div>` : e.t === 'review' ? `<div class="hpics"><span class="picn">${repoIcon(e.r.project, 26)}<span>${esc(e.r.project)}</span></span>${e.r.branch ? `<span class="picn">${branchIcon(e.r.branch, 26)}<code>${esc(short(e.r.branch, 44))}</code></span>` : ''}</div>` : ''}
     ${trackHtml(e.d, true)}
     ${pin ? timeChip(e) : ''}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
@@ -4099,8 +4213,8 @@ function fxItem(c, x) {
   }
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   if (F().testenv && x.iid) b.push(`<button class="ibtn" data-fxdeploy="${x.project_id}:${x.iid}">${ic('flask')} Testumgebung</button>`);
-  return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : ic('branch')}
-    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><code>${esc(short(x.branch, 48))}</code><span>${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+  return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : branchIcon(x.branch, 20)}
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code>${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
 }
 function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); }

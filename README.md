@@ -459,6 +459,19 @@ Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. W
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5d. Einfach reviewen und ausprobieren (neu in 0.32.0)
+
+**Kurz vorab.** Jeder fertige Lauf beginnt mit einer kurzen Übersicht: was jetzt anders ist, jede Datei mit Umfang und Begründung, wo du anfangen sollst, Kriterien und Belege. Begründungen stehen im Bericht, nicht als Kommentar im Code. Fehlt eine, steht dort «Keine Begründung». Kommen fünf oder mehr neue Kommentarzeilen dazu, erscheint ein Hinweis.
+
+**Für andere.** «Als MR-Beschreibung kopieren» gibt eine fertige Beschreibung für GitLab: worum es geht, was und warum, wie testen. Pushen und MR erstellen machst du.
+
+**Ausprobieren.**
+- «In IntelliJ öffnen» holt den Branch des Agenten in einen eigenen Worktree neben deinem Checkout (`../.tinyops-wt/<repo>-run<nr>`). Dafür braucht es unter Einstellungen → IntelliJ und Review-Umgebung den Pfad zu deinem Checkout.
+- «Befehle kopieren» gibt dir die git-Befehle zum Selbermachen.
+- **Review-Umgebung:** Je Projekt Start- und Stopp-Befehl eintragen. Vorlagen gibt es für Docker Compose und Kubernetes. Platzhalter `{name}` (review-ticket-lauf), `{port}` (20000 + Lauf), `{path}`, `{branch}`, `{sha}`, `{ticket}`. Die Befehle laufen nur auf deinen Klick, auf diesem Rechner, im Worktree des Laufs.
+
+**Piktogramme.** Repo und Branch haben je ein eigenes Bild, aus dem Namen errechnet. Die Form der Commits im Branch-Bild zeigt die Art: Kreis für feature, Raute für fix, Quadrat für agent.
+
 ## 5c. Agenten-Zyklus, Leitplanken, Testsitzung (neu in 0.31.0)
 
 **Zyklus.** Ein Ticket durchläuft mit Agenten vier Phasen, jede mit deiner Freigabe:
