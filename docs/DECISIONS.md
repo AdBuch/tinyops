@@ -13,13 +13,13 @@ Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis
 | 2026-11-05 | tinyops läuft auf deinem Rechner | Handy später über VPN |
 | 2026-11-05 | Confluence hat keine Priorität | nicht im Plan |
 | 2026-11-15 | Bis 0.45 vor allem aufräumen; neu nur Projekte tracken, KI-Projekte, zweiter Bereich und App | Plan 0.33–0.45 in der Roadmap |
+| 2026-11-15 | **E1:** Gebucht wird nur über BCS | Projectron-Export (0.19), MCP-Einstellungen und `/api/time/export` entfallen in 0.34; bisherige Entwürfe bleiben lesbar |
+| 2026-11-15 | **E2:** Direkt ausführen reicht. Prompts und Shell-Befehle zum Kopieren bleiben, für den Fall, dass kein Agent eingerichtet ist | Helm-Deploy je MR, Jobs, alte Agenten-Knöpfe pro MR und `deploy/` entfallen in 0.34. Die Review-Umgebung (0.32) führt direkt aus, auch für MRs. Review-Brief, Smoke-Test und Repro-Test bleiben als «Prompt kopieren» am MR, dazu die Befehle der Review-Umgebung und zum Auschecken zum Kopieren |
 
 ## Offen
 
 | Nr. | Frage | Optionen | Empfehlung | Bis |
 |---|---|---|---|---|
-| E1 | Wie wird gebucht? | a) nur BCS · b) BCS und Projectron-Export (0.19) | **a**, wenn BCS dein Buchungssystem ist. Der Projectron-Export und seine Einstellungen entfallen, bestehende Entwürfe bleiben lesbar | 0.34 |
-| E2 | Was passiert mit der alten Testumgebung je MR? | a) geht in der Review-Umgebung (0.32) auf · b) bleibt daneben | **a**: Die Review-Umgebung bekommt MRs als zweite Quelle. «Testumgebungen» unter Weiteres und `deploy/` entfallen | 0.34 |
 | E3 | Spielstand (Punkte, Serie, Review-Punkte)? | a) behalten, ein Zähler an einer Stelle, abschaltbar · b) streichen · c) so lassen | **a** | 0.35 |
 | E4 | Fokus-Begriffe? | a) **Fokus** (woran du bist, mit Sitzung) und **Bereiche** (Wochenziel) · b) so lassen | **a**: Fokus-Modus und Fokus-Leiste sind Teil der Sitzung, kein eigener Begriff | 0.35 |
 | E5 | Standard-Zyklus der Agenten? | a) Umsetzen → Review, Planen und Test zuschaltbar · b) immer alle vier Phasen | **a** | 0.39 |

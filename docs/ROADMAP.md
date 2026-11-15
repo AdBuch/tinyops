@@ -18,7 +18,7 @@
 | Version | Thema | Art | Entscheid nötig |
 |---|---|---|---|
 | **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
-| 0.34.0 | Doppelungen I: eine Review-Umgebung, ein Buchungsweg | Entscheid + Entfernen | E1, E2 |
+| 0.34.0 | Doppelungen I: eine Review-Umgebung, ein Buchungsweg | Entscheid + Entfernen | E1, E2 ✓ entschieden |
 | 0.35.0 | Weniger Begriffe: Fokus, Spielstand, ungenutzte Ansichten | Entscheid + Vereinfachen | E3, E4 |
 | 0.36.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
 | 0.37.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
@@ -35,8 +35,8 @@
 
 | Nr. | Frage | Empfehlung | Bis |
 |---|---|---|---|
-| E1 | Buchen: nur BCS oder auch der Projectron-Export (0.19)? | Nur BCS, wenn BCS dein Buchungssystem ist. Den Projectron-Export entfernen | 0.34 |
-| E2 | Alte Testumgebung je MR (Kubernetes, standardmässig ausgeblendet) und neue Review-Umgebung (0.32)? | Zusammenführen: Die Review-Umgebung bekommt auch MRs als Quelle, die alte Testumgebung und `deploy/k8s.py` entfallen | 0.34 |
+| E1 | Buchen: nur BCS oder auch der Projectron-Export (0.19)? | **Entschieden 2026-11-15: nur BCS** | 0.34 |
+| E2 | Alte Testumgebung je MR (Kubernetes, standardmässig ausgeblendet) und neue Review-Umgebung (0.32)? | **Entschieden 2026-11-15:** direkt ausführen über die Review-Umgebung, auch für MRs; Prompts und Shell-Befehle bleiben zum Kopieren, falls kein Agent da ist | 0.34 |
 | E3 | Spielstand: Punkte, Serie, Review-Punkte behalten? | Behalten, aber als ein Zähler an einer Stelle, abschaltbar | 0.35 |
 | E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | Zwei Begriffe: **Fokus** (woran du gerade bist, mit Sitzung) und **Bereiche** (Wochenziel). Modus und Leiste werden Teil der Sitzung | 0.35 |
 | E5 | Standard-Zyklus der Agenten? | Umsetzen → Review als Standard; Planen und Test je Ticket zuschaltbar | 0.39 |
@@ -58,8 +58,8 @@
 - **Fertig, wenn:** UI-Tests laufen in CI, und weniger als 60 Punkte bleiben von Hand offen.
 
 **0.34.0 – Doppelungen I**
-- E2: Review-Umgebung für Agenten-Läufe und MRs aus einem Modul (`reviewenv.py`). Die alte Testumgebung, die Funktion «testenv» und `deploy/` entfallen.
-- E1: einen Buchungsweg behalten. Daten des anderen bleiben lesbar und exportierbar.
+- E2: Review-Umgebung für Agenten-Läufe und MRs aus einem Modul (`reviewenv.py`). Die alte Testumgebung (Helm, Jobs, alte Agenten-Knöpfe), die Funktion «testenv» und `deploy/` entfallen. Prompts (Review-Brief, Smoke-Test, Repro-Test) und die Befehle der Review-Umgebung und zum Auschecken bleiben zum Kopieren am MR, für den Fall, dass kein Agent eingerichtet ist.
+- E1: nur BCS. Projectron-Export, MCP-Einstellungen und `/api/time/export` entfallen; bestehende Entwürfe bleiben lesbar.
 - `usage.py` (KI-Kontingent) und `ux.py` (Nutzung der Oberfläche) bekommen eindeutige Namen.
 - **Fertig, wenn:** Jede Funktion gibt es einmal, und der Changelog listet alles Entfernte.
 
