@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 import urllib.request
-from datetime import datetime
+from datetime import date, datetime, time as dtime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -127,7 +127,8 @@ class AppTime(unittest.TestCase):
 
     def seed(self, a, key="DLP-101", minutes=50):
         now = time.time()
-        a.timebook.add_segment(key, "t", now - minutes * 60 - 5, now - 5)
+        start = max(now - minutes * 60 - 5, datetime.combine(date.today(), dtime.min).timestamp() + 60)   # nie über Mitternacht (CI läuft auch um 00:01)
+        a.timebook.add_segment(key, "t", start, start + minutes * 60)
         d = a.time_day()
         return next(x for x in d["drafts"] if x["ticket"] == key)
 

@@ -19,6 +19,9 @@ Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** un
 - **Piktogramme für Repo und Branch.** Jedes Repo hat ein eigenes Muster, jeder Branch einen kleinen Git-Graphen in eigener Farbe. Die Form der Commits zeigt die Art: Kreis für feature, Raute für fix/bug/hotfix, Quadrat für agent. Gleicher Name heisst überall gleiches Bild: im Fokus, in den Listen und im Lauf.
 - **Fokus klarer.** Titel grösser, darunter Repo und Branch als Piktogramm mit Namen.
 
+### Behoben
+- Selbsttest und Zeit-Tests schlugen kurz nach Mitternacht fehl, weil der Test-Zeitraum über Mitternacht in den Vortag reichte.
+
 ## [0.31.0]
 
 ### Neu
