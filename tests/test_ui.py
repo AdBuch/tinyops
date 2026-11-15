@@ -185,8 +185,10 @@ class Detail(UiCase):
         self.assertEqual(pg.evaluate("document.activeElement.id"), "ideaQuick")
         pg.keyboard.press("Escape")
         self.wait_js("!document.getElementById('ideaDlg').open")
+        pg.locator("body").click(position={"x": 5, "y": 300})                              # Fokus aus dem Dialog zurück auf die Seite
+        self.wait_js("!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)")
         pg.keyboard.press("n")
-        self.assertEqual(pg.evaluate("document.activeElement.id"), "fAdd")                    # n: neue Aufgabe
+        self.wait_js("document.activeElement.id === 'fAdd'")                                 # n: neue Aufgabe
         pg.locator("body").click(position={"x": 5, "y": 300})
         pg.keyboard.press("Enter")
         self.wait_js("!document.getElementById('fx').hidden")                               # Enter öffnet das Detail
