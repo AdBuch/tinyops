@@ -1,0 +1,28 @@
+# Entscheide
+
+Offene und getroffene Entscheide für tinyops. Jeder Eintrag sagt, was zur Wahl steht, was ich empfehle und bis wann es feststehen muss.
+Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis ein neuer Eintrag sie ersetzt.
+
+## Getroffen
+
+| Datum | Entscheid | Folge |
+|---|---|---|
+| 2026-11-05 | Agenten auf DLP-/Restricted-Repos nur mit lokalen Modellen | Datenklassen je Projekt, Cloud-Agent nur mit Freigabe |
+| 2026-11-05 | GitLab bleibt nur lesend | kein Approve, Ready oder Merge aus tinyops |
+| 2026-11-05 | Agenten über SSH/tmux, kein CI-Gateway | Worktree je Lauf, Zeitlimit |
+| 2026-11-05 | tinyops läuft auf deinem Rechner | Handy später über VPN |
+| 2026-11-05 | Confluence hat keine Priorität | nicht im Plan |
+| 2026-11-15 | Bis 0.45 vor allem aufräumen; neu nur Projekte tracken, KI-Projekte, zweiter Bereich und App | Plan 0.33–0.45 in der Roadmap |
+
+## Offen
+
+| Nr. | Frage | Optionen | Empfehlung | Bis |
+|---|---|---|---|---|
+| E1 | Wie wird gebucht? | a) nur BCS · b) BCS und Projectron-Export (0.19) | **a**, wenn BCS dein Buchungssystem ist. Der Projectron-Export und seine Einstellungen entfallen, bestehende Entwürfe bleiben lesbar | 0.34 |
+| E2 | Was passiert mit der alten Testumgebung je MR? | a) geht in der Review-Umgebung (0.32) auf · b) bleibt daneben | **a**: Die Review-Umgebung bekommt MRs als zweite Quelle. «Testumgebungen» unter Weiteres und `deploy/` entfallen | 0.34 |
+| E3 | Spielstand (Punkte, Serie, Review-Punkte)? | a) behalten, ein Zähler an einer Stelle, abschaltbar · b) streichen · c) so lassen | **a** | 0.35 |
+| E4 | Fokus-Begriffe? | a) **Fokus** (woran du bist, mit Sitzung) und **Bereiche** (Wochenziel) · b) so lassen | **a**: Fokus-Modus und Fokus-Leiste sind Teil der Sitzung, kein eigener Begriff | 0.35 |
+| E5 | Standard-Zyklus der Agenten? | a) Umsetzen → Review, Planen und Test zuschaltbar · b) immer alle vier Phasen | **a** | 0.39 |
+| E6 | Oberfläche mit oder ohne Build-Schritt? | a) ohne: ES-Module direkt aus `static/` · b) mit npm und Bundler | **a**: der Launcher bleibt einfach | 0.38 |
+| E7 | Privat und Geschäft? | a) zwei getrennte Instanzen mit Umschalter · b) eine Datenbank mit zwei Bereichen | **a**: Daten, Secrets und Audit bleiben sicher getrennt | 0.45 |
+| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · b) mehr | **a**. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.44 |

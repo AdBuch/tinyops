@@ -17,7 +17,7 @@
 
 | Version | Thema | Art | Entscheid nötig |
 |---|---|---|---|
-| 0.33.0 | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann | Aufräumen | – |
+| **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
 | 0.34.0 | Doppelungen I: eine Review-Umgebung, ein Buchungsweg | Entscheid + Entfernen | E1, E2 |
 | 0.35.0 | Weniger Begriffe: Fokus, Spielstand, ungenutzte Ansichten | Entscheid + Vereinfachen | E3, E4 |
 | 0.36.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |

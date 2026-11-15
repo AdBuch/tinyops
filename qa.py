@@ -35,12 +35,18 @@ def parse_checklist(text):
         m = LINE.match(ln)
         if m and cur is not None:
             iid, body = m.group(1), m.group(2)
+            am = AUTO.search(body)
+            auto = am.group(1) if am else ""
+            body = AUTO.sub("", body).rstrip() if am else body
             if iid in seen:
                 raise ValueError("Prüfpunkt «%s» steht doppelt in der Prüfliste." % iid)
             seen.add(iid)
             task, _, expect = body.rpartition(" → ") if " → " in body else (body, "", "")
-            cur["items"].append({"id": iid, "text": task.strip(), "expect": expect.strip(), "hash": hashlib.sha256(body.encode()).hexdigest()[:12]})
+            cur["items"].append({"id": iid, "text": task.strip(), "expect": expect.strip(), "hash": hashlib.sha256(body.encode()).hexdigest()[:12], "auto": auto})
     return [s for s in sections if s["items"]]
+
+
+AUTO = re.compile(r"\s*\[auto:\s*([A-Za-z0-9_.]+)\]\s*$")      # «[auto: test_ui.AgentCycle]»: prüft ein automatischer Test (0.33)
 
 
 class QaBook:
@@ -88,8 +94,11 @@ def view(sections, states):
             changed = bool(st and st["hash"] != it["hash"])
             items.append(dict(it, status="offen" if not st or changed else st["status"], note=(st or {}).get("note", ""),
                               checked_in=(st or {}).get("version", ""), ts=(st or {}).get("ts"), changed=changed))
-        n = len(items)
-        out.append(dict(s, items=items, done=sum(1 for i in items if i["status"] != "offen"), fails=sum(1 for i in items if i["status"] == "fehler"), total=n))
+            if it.get("auto") and items[-1]["status"] == "offen":
+                items[-1]["status"] = "auto"            # zählt nicht als offen: der automatische Test prüft es bei jedem Release
+        hand = [i for i in items if i["status"] != "auto"]
+        out.append(dict(s, items=items, done=sum(1 for i in hand if i["status"] != "offen"), fails=sum(1 for i in hand if i["status"] == "fehler"),
+                        total=len(hand), auto=len(items) - len(hand)))
     return out
 
 

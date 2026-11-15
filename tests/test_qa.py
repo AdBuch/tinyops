@@ -60,6 +60,37 @@ class Checklist(unittest.TestCase):
         self.assertGreaterEqual(sum(len(x["items"]) for x in s if not x["version"]), 40)       # Grundprüfung deckt alles ab
 
 
+class AutoMarks(unittest.TestCase):
+    """«[auto: modul.Klasse]» in der Prüfliste muss auf einen Test zeigen, den es gibt (0.33). Sonst wäre die Markierung eine Behauptung."""
+
+    def test_every_auto_reference_exists(self):
+        import importlib
+        s = qa.parse_checklist((ROOT / "QA-CHECKLIST.md").read_text(encoding="utf-8"))
+        refs = sorted({i["auto"] for x in s for i in x["items"] if i["auto"]})
+        self.assertGreater(len(refs), 20)
+        for ref in refs:
+            mod, _, cls = ref.partition(".")
+            m = importlib.import_module(mod)
+            self.assertTrue(cls and isinstance(getattr(m, cls, None), type) and issubclass(getattr(m, cls), unittest.TestCase), ref)
+
+    def test_hand_items_stay_few(self):
+        s = qa.parse_checklist((ROOT / "QA-CHECKLIST.md").read_text(encoding="utf-8"))
+        hand = [i["id"] for x in s for i in x["items"] if not i["auto"]]
+        self.assertLess(len(hand), 60, "Prüfliste: höchstens 59 Punkte von Hand (Plan 0.33)")
+
+    def test_auto_marker_is_parsed_and_not_open(self):
+        s = qa.parse_checklist("## 0.1.0\n\n- [ ] `a-1` Tu was → geht [auto: test_qa.Checklist]\n- [ ] `a-2` Von Hand → ok\n")
+        it = s[0]["items"][0]
+        self.assertEqual((it["auto"], it["expect"], it["text"]), ("test_qa.Checklist", "geht", "Tu was"))
+        plain = qa.parse_checklist("## 0.1.0\n\n- [ ] `a-1` Tu was → geht\n")[0]["items"][0]
+        self.assertEqual(it["hash"], plain["hash"])                  # Markierung setzen lässt Abgehaktes gültig
+        v = qa.view(s, {})[0]
+        self.assertEqual([i["status"] for i in v["items"]], ["auto", "offen"])
+        self.assertEqual((v["total"], v["done"], v["auto"]), (1, 0, 1))
+        v = qa.view(s, {"a-1": {"status": "fehler", "hash": it["hash"], "note": "kaputt", "version": "", "ts": 0}})[0]
+        self.assertEqual(v["items"][0]["status"], "fehler")         # ein von Hand gemeldeter Fehler bleibt sichtbar
+
+
 class AppQa(unittest.TestCase):
     def setUp(self):
         os.environ["TINYOPS_HOME"] = tempfile.mkdtemp()

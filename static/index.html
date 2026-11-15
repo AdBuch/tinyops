@@ -305,6 +305,8 @@
   .gatebox textarea { width: 100%; height: 64px; min-height: 54px; margin: 6px 0; font-family: var(--sans); resize: vertical; }
   .gatebox .row { flex-wrap: wrap; }
   .qsess { border: 2px solid var(--focus); }
+  .qauto { margin-top: 8px; } .qauto ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--quiet); }
+  .qauto li { margin: 3px 0; } .qauto code { margin-left: 6px; font-size: 11.5px; }
   .brief { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--surface); }
   .brief h3 { margin: 0 0 4px; font-size: 15px; }
   .brief .bshort { padding: 0; max-height: none; font-size: 14.5px; }
@@ -1464,6 +1466,9 @@ const HELP = {
   github: `<ol><li>Auf github.com unter Settings → Developer settings ein «Fine-grained token» anlegen, nur lesend: Contents, Pull requests, Metadata.</li><li>Token eintragen, Repos wählen.</li></ol>
     <p>Für GitHub Enterprise die API-Adresse anpassen (<code>https://github.firma.ch/api/v3</code>).</p>`,
   sonar: `<p>Adresse und ein Benutzer-Token eintragen. Den Sonar-Schlüssel je Projekt trägst du bei den Projekten ein. tinyops fragt nur das Quality Gate ab.</p>`,
+  more: `<p>Hier schaltest du Funktionen ein, die nicht jeder braucht. Ausgeschaltet verschwinden sie aus der Oberfläche, ihre Daten bleiben erhalten.</p>
+    <p><b>Ideenbox:</b> Einfälle festhalten (Taste <code>i</code>), bewerten lassen und als Ticket ausformulieren. <b>Testumgebungen:</b> die ältere Testumgebung je MR über Helm. Ab 0.34 geht sie in der Review-Umgebung auf (Einstellungen → IntelliJ und Review-Umgebung). <b>KI-Konten:</b> von Hand gepflegte Übersicht.</p>
+    <p><b>UI-Nutzung erfassen:</b> Zählt Klicks, Mausweg, gewechselte Ansichten, Tasten ausserhalb von Feldern, Fehlermeldungen und langsame Antworten. Nie Eingaben, Titel oder Inhalte. Alles bleibt auf diesem Rechner. Den Bericht kopierst du unter «Prüfen» und gibst ihn weiter, wenn du willst.</p>`,
   agents: `<p><b>Der Zyklus: Planen → Umsetzen → Review → Test</b></p>
     <p>Jede Phase ist ein eigener Lauf und endet mit deiner Freigabe. <b>Planen</b>: Der Agent liest nur und schreibt einen Plan. <b>Umsetzen</b>: Code auf eigenem Branch, nach dem freigegebenen Plan. <b>Review</b>: Ein zweiter Agent (gern ein lokales Modell) liest das Ergebnis und ändert nichts. <b>Test</b>: Tests laufen lassen, fehlende ergänzen und Schritte für deinen Test von Hand beschreiben.</p>
     <p>Freigeben geht erst, wenn du die Prüfpunkte abgehakt hast: fürs Review den Diff gelesen, den Umfang geprüft und jedes Kriterium; für den Test die Schritte, die der Agent mit <code>tinyops-manual</code> beschrieben hat. «Zurückgeben» braucht einen Satz, was anders werden soll. Er geht in den Nachbessern-Auftrag. Kleine Aufgaben kannst du direkt umsetzen lassen, ohne Plan.</p>
@@ -2535,10 +2540,12 @@ function renderQa() {
     <div id="qSelfRes">${QARES ? `<details class="pcard" ${QARES.ok ? '' : 'open'}><summary><b>${QARES.ok ? 'Selbsttest bestanden' : 'Selbsttest mit Fehlern'}</b> <span class="quiet small">${QARES.steps.length} Prüfungen, ${QARES.secs} s${QARES.steps.some(x => x.status === 'warn') ? ', mit Warnungen' : ''}</span></summary>${stepsHtml(QARES).replace(/<div class="verdict[^>]*>[^<]*<\/div>/, '')}</details>` : '<div class="small quiet" style="margin-bottom:10px">Der Selbsttest prüft Vorlagen, Hilfsskripte, Datenbank und Verlauf und spielt die Kernfunktionen mit Demo-Daten in einem leeren Ordner durch. Deine Daten bleiben unberührt.</div>'}</div>
     <div class="row small" style="margin:14px 0 6px"><b>Alle Abschnitte</b><span class="sp"></span><label class="check"><input type="checkbox" id="qRest" ${QAREST ? 'checked' : ''}><span>ältere Releases ruhen lassen</span></label></div>
     ${[...active].sort((a, z) => (z.version ? 1 : 0) - (a.version ? 1 : 0) || (z.version || '').localeCompare(a.version || '', undefined, { numeric: true })).map(sec => {
-      const items = sec.items.filter(i => !QAONLY || i.status === 'offen');
+      const items = sec.items.filter(i => i.status !== 'auto' && (!QAONLY || i.status === 'offen')), autos = sec.items.filter(i => i.status === 'auto');
       const isOpen = first ? (!next5.length && sec.current) : openSet.has(sec.title);
-      return `<details class="pcard qsec" data-qsec="${esc(sec.title)}" ${isOpen ? 'open' : ''}><summary>${esc(sec.title)}${sec.current ? ' <span class="chip tk">dieses Release</span>' : ''}<span class="sp"></span>${sec.fails ? `<span class="chip sq-bad">${sec.fails} Fehler</span>` : ''}<span class="quiet small">${sec.done}/${sec.total}</span><span class="qbar"><i style="width:${Math.round(100 * sec.done / sec.total)}%"></i></span></summary>
-        ${items.map(item).join('') || '<div class="quiet small">alles geprüft</div>'}</details>`;
+      return `<details class="pcard qsec" data-qsec="${esc(sec.title)}" ${isOpen ? 'open' : ''}><summary>${esc(sec.title)}${sec.current ? ' <span class="chip tk">dieses Release</span>' : ''}<span class="sp"></span>${sec.fails ? `<span class="chip sq-bad">${sec.fails} Fehler</span>` : ''}<span class="quiet small">${sec.total ? `${sec.done}/${sec.total}` : 'alles automatisch'}</span><span class="qbar"><i style="width:${sec.total ? Math.round(100 * sec.done / sec.total) : 100}%"></i></span></summary>
+        ${items.map(item).join('') || (sec.total ? '<div class="quiet small">alles geprüft</div>' : '')}
+        ${autos.length ? `<details class="qauto"><summary class="quiet small">${autos.length} Punkt${autos.length === 1 ? '' : 'e'} prüft ein automatischer Test bei jedem Release</summary>
+          <ul>${autos.map(i => `<li><span>${md(i.text)}${i.expect ? ` → ${md(i.expect)}` : ''}</span><code>${esc(i.auto)}</code></li>`).join('')}</ul></details>` : ''}</details>`;
     }).join('')}
     ${resting.length ? `<div class="quiet small" style="margin:6px 0">${resting.length} ältere Abschnitte ruhen (${restOpen} offen). Sie zählen nicht in «Als Nächstes». Zum Ansehen den Haken oben lösen.</div>` : ''}
     <div class="quiet small">Quelle: <code>${esc(QA.file)}</code>. Je Release kommt ein Abschnitt dazu, nur mit dem, was sich geändert hat.</div>`;

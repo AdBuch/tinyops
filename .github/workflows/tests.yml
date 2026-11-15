@@ -18,6 +18,10 @@ jobs:
           python-version: "3.13"
       - name: tmux für die Agenten-Tests
         run: sudo apt-get update -q && sudo apt-get install -y -q tmux
+      - name: Playwright und Chromium für die UI-Tests (tests/test_ui.py)
+        run: |
+          python -m pip install -q playwright==1.63.0
+          python -m playwright install --with-deps chromium
       - name: Tests
         working-directory: tests
         env:

@@ -5,6 +5,34 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.33.0]
+
+Das erste Release des Plans 0.33–0.45: absichern, bevor aufgeräumt wird. Keine neuen Funktionen.
+
+### Neu
+- **UI-Tests im Repo** (`tests/test_ui.py`): Playwright spielt die Oberfläche im echten Browser gegen den Demo-Server durch. Dazu gehören:
+  - alle Ansichten
+  - Handy-Breite ohne seitliches Scrollen
+  - Tasten j/k/Enter/n/i/Esc
+  - Detail öffnen und schliessen (auch per Klick daneben)
+  - Anheften mit Zeit und Pause
+  - Fokus-Sitzung mit Parken, Klein machen und Wieder öffnen
+  - Agenten-Zyklus von Planen bis zur Freigabe mit «Kurz vorab»
+  - Testsitzung in Prüfen
+  - Hilfe in jedem Einstellungsabschnitt
+
+  Jeder JavaScript-Fehler lässt den Test scheitern. Sie laufen auf GitHub bei jedem Push mit. Ohne Playwright werden sie übersprungen.
+- **Prüfliste mit `[auto: …]`:** Punkte, die ein automatischer Test prüft, sind so markiert. Sie zählen nicht als offen, kommen nicht in «Als Nächstes testen» und stehen je Abschnitt zugeklappt unter «… prüft ein automatischer Test». Ein Test stellt sicher, dass jede Markierung auf einen echten Test zeigt.
+- **`docs/DECISIONS.md`:** getroffene und offene Entscheide (E1–E8) mit Empfehlung und Termin.
+
+### Geändert
+- **Prüfliste: 187 statt 198 Punkte, davon nur noch 59 von Hand:**
+  - 128 Punkte prüft jetzt ein automatischer Test.
+  - Verbindungstests, BCS-Buchen, Microsoft-365-Anmeldung, die Windows-Punkte und das KI-Kontingent sind je zu einem Punkt zusammengefasst.
+  - Zwei Punkte zur Oberfläche vor 0.31 («Vorprüfen lassen», «Ergebnis des Agenten prüfen») sind entfernt.
+  - Ebenso entfernt sind die Prüfung von GitHub Actions und Release: Ohne grüne Tests entsteht kein Release.
+- Einstellungen → Weiteres hat jetzt auch eine Hilfe. Der neue UI-Test hatte sie als fehlend gemeldet.
+
 ## [0.32.1]
 
 Gleicher Inhalt wie 0.32.0. Der Tag v0.32.0 zeigt auf einen Stand, dessen Zeit-Tests kurz nach Mitternacht fehlschlugen. Deshalb gab es dafür kein Release.

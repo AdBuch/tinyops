@@ -438,7 +438,7 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. Wird der Entwurf nach einem Fehlschlag geändert, gibt es einen neuen Schlüssel.
 
-**Prüfen (Tab «Prüfen»):** Prüfliste aus `QA-CHECKLIST.md` zum Abhaken (ok, Fehler mit Notiz, übersprungen), «Ergebnis kopieren», Fehler als Aufgabe ins Board. **Selbsttest** (Knopf oder `python3 server.py --selftest`): Vorlagen, Hilfsskripte, Datenbank, Kette des Verlaufs und ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner.
+**Prüfen (Tab «Prüfen»):** Oben «Als Nächstes testen» mit fünf Punkten. Punkte mit `[auto: …]` prüft ein automatischer Test bei jedem Release (darunter `tests/test_ui.py` im echten Browser), sie zählen nicht als offen. Prüfliste aus `QA-CHECKLIST.md` zum Abhaken (ok, Fehler mit Notiz, übersprungen), «Ergebnis kopieren», Fehler als Aufgabe ins Board. **Selbsttest** (Knopf oder `python3 server.py --selftest`): Vorlagen, Hilfsskripte, Datenbank, Kette des Verlaufs und ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner.
 
 ## 4x. Ideen bewerten, Ticket aus Idee, IntelliJ auf dem MR, Review-App (neu in 0.20.0)
 
@@ -758,7 +758,8 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     review.py            Offene Review-Punkte: lesen, Prompt und JSON
     timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe, Vertrag mit dem MCP
     qa.py                Prüfliste und Selbsttest
-    QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt
+    QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt; [auto: …] prüft ein Test
+    docs/DECISIONS.md    getroffene und offene Entscheide
     start.py, start.cmd  Starter: neueste Version holen, prüfen, starten
     launcher/            Launcher zum Herunterladen (Skript, Zipapp, PyInstaller über .github/workflows)
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
