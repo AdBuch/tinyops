@@ -5079,9 +5079,9 @@ def run_selftest(cfg):
         a.flow_action("pin", {"id": "DLP-104"})
         now = time.time()
         a.timebook.stop()
-        start = max(now - 3000, datetime.now().replace(hour=0, minute=1, second=0, microsecond=0).timestamp())   # nicht über Mitternacht
-        a.timebook.add_segment("DLP-104", "Installer: Upgrade-Test", start, start + 3000)
-        day = a.time_day()
+        yday = (datetime.fromtimestamp(now) - timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)   # gestern: unabhängig von der Uhrzeit
+        a.timebook.add_segment("DLP-104", "Installer: Upgrade-Test", yday.timestamp(), yday.timestamp() + 3000)
+        day = a.time_day(yday.strftime("%Y-%m-%d"))
         dr = next((x for x in day["drafts"] if x["ticket"] == "DLP-104"), None)
         ok = bool(dr) and dr["minutes"] in (45, 60)
         if ok:

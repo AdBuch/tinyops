@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 import urllib.request
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -126,10 +126,12 @@ class AppTime(unittest.TestCase):
         return a
 
     def seed(self, a, key="DLP-101", minutes=50):
-        now = time.time()
-        start = max(now - minutes * 60 - 5, datetime.combine(date.today(), dtime.min).timestamp() + 60)   # nie über Mitternacht (CI läuft auch um 00:01)
+        # Fester Tag in der Vergangenheit (gestern ab 09:00): unabhängig von der Uhrzeit, zu der die Tests laufen (CI auch um 00:01)
+        self._slot = getattr(self, "_slot", 0) + 1
+        y = date.fromtimestamp(time.time()) - timedelta(days=1)
+        start = datetime.combine(y, dtime(9, 0)).timestamp() + self._slot * 7200
         a.timebook.add_segment(key, "t", start, start + minutes * 60)
-        d = a.time_day()
+        d = a.time_day(y.isoformat())
         return next(x for x in d["drafts"] if x["ticket"] == key)
 
     def test_pin_starts_and_switch_stops(self):
