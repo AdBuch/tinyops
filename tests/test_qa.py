@@ -50,7 +50,13 @@ class Checklist(unittest.TestCase):
 
     def test_repo_checklist_has_section_for_this_release(self):
         s = qa.parse_checklist((ROOT / "QA-CHECKLIST.md").read_text(encoding="utf-8"))
-        self.assertIn(server.VERSION, [x["version"] for x in s], "QA-CHECKLIST.md braucht einen Abschnitt «## %s» mit dem, was sich geändert hat" % server.VERSION)
+        want = server.VERSION if server.VERSION.endswith(".0") else None          # Patch-Release: der Abschnitt der Minor-Version reicht
+        have = [x["version"] for x in s]
+        if want:
+            self.assertIn(want, have, "QA-CHECKLIST.md braucht einen Abschnitt «## %s» mit dem, was sich geändert hat" % want)
+        else:
+            mm = server.VERSION.rsplit(".", 1)[0]
+            self.assertTrue(any(v and v.rsplit(".", 1)[0] == mm for v in have), "QA-CHECKLIST.md braucht einen Abschnitt für %s.x" % mm)
         self.assertGreaterEqual(sum(len(x["items"]) for x in s if not x["version"]), 40)       # Grundprüfung deckt alles ab
 
 

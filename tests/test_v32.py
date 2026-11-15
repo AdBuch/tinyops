@@ -188,6 +188,13 @@ class TryIt(unittest.TestCase):
         self.assertIn("keine Review-Umgebung", str(cm.exception))
 
 
+class QaPatch(unittest.TestCase):
+    def test_patch_release_uses_minor_section(self):
+        a = server.App(dict(server.load_config(None), data_dir=tempfile.mkdtemp()), True, {}, Path("/nonexistent/c.json"), watchdog=False)
+        cur = [s["version"] for s in a.qa_view()["sections"] if s["current"]]
+        self.assertEqual(cur, [server.VERSION.rsplit(".", 1)[0] + ".0"] if not server.VERSION.endswith(".0") else [server.VERSION])
+
+
 class Ui(unittest.TestCase):
     def test_static(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

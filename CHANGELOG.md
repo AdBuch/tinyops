@@ -5,6 +5,14 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.32.1]
+
+Gleicher Inhalt wie 0.32.0. Der Tag v0.32.0 zeigt auf einen Stand, dessen Zeit-Tests kurz nach Mitternacht fehlschlugen. Deshalb gab es dafür kein Release.
+
+### Behoben
+- Selbsttest und Zeit-Tests prüfen den Zeitentwurf an einem festen Tag (gestern) und hängen nicht mehr von der Uhrzeit ab.
+- Prüfen: Bei einem Patch-Release gilt der Abschnitt derselben Minor-Version als aktuell (zuerst in «Als Nächstes testen»).
+
 ## [0.32.0]
 
 ### Neu
@@ -18,9 +26,6 @@ Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** un
   - **Review-Umgebung** je Projekt (Docker Compose, Kubernetes oder eigene Befehle): starten, stoppen und öffnen per Klick, mit Name und Port je Lauf. Nur auf deinen Klick, auf diesem Rechner. Einstellungen → IntelliJ und Review-Umgebung.
 - **Piktogramme für Repo und Branch.** Jedes Repo hat ein eigenes Muster, jeder Branch einen kleinen Git-Graphen in eigener Farbe. Die Form der Commits zeigt die Art: Kreis für feature, Raute für fix/bug/hotfix, Quadrat für agent. Gleicher Name heisst überall gleiches Bild: im Fokus, in den Listen und im Lauf.
 - **Fokus klarer.** Titel grösser, darunter Repo und Branch als Piktogramm mit Namen.
-
-### Behoben
-- Selbsttest und Zeit-Tests schlugen kurz nach Mitternacht fehl, weil der Test-Zeitraum über Mitternacht in den Vortag reichte.
 
 ## [0.31.0]
 

@@ -60,7 +60,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.32.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.32.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -4283,8 +4283,10 @@ class App:
 
     def qa_view(self):
         secs = qa.view(self._checklist(), self.qabook.states())
-        for s_ in secs:
-            s_["current"] = s_["version"] == VERSION
+        exact = any(s_["version"] == VERSION for s_ in secs)
+        mm = VERSION.rsplit(".", 1)[0]
+        for s_ in secs:                     # Patch-Release ohne eigenen Abschnitt: der Abschnitt derselben Minor-Version gilt als aktuell
+            s_["current"] = s_["version"] == VERSION or (not exact and bool(s_["version"]) and s_["version"].rsplit(".", 1)[0] == mm)
         return {"version": VERSION, "sections": secs, "file": str(BASE / "QA-CHECKLIST.md")}
 
     def qa_action(self, action, b):
