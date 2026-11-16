@@ -348,6 +348,54 @@ class QaSession(UiCase):
         pg.wait_for_timeout(1200)
         self.assertIn("in dieser Sitzung 1 erledigt", pg.locator(".qsess").inner_text())
 
+    def test_text_click_opens_note(self):
+        """0.35: Klick auf den Text eines Prüfpunkts (im Nutzungsbericht 27 tote Klicks) öffnet eine Notiz."""
+        pg = self.pg
+        self.tab("Prüfen")
+        pg.wait_for_selector("[data-qtxt]")
+        qid = pg.locator("[data-qtxt]").first.get_attribute("data-qtxt")
+        pg.locator('[data-qtxt="%s"] .tx' % qid).first.click()
+        self.wait_js("!!document.querySelector('#viewQa textarea[data-qnote=\"%s\"]')" % qid)
+        self.assertEqual(pg.evaluate("document.activeElement.dataset.qnote"), qid)
+
+    def test_auto_items_folded_and_not_next(self):
+        """0.33 (r33-01/02): Punkte mit Test stehen zugeklappt unten und nie in «Als Nächstes testen»."""
+        pg = self.pg
+        self.tab("Prüfen")
+        pg.wait_for_selector("details.qauto", state="attached")
+        self.assertIn("prüft ein automatischer Test", pg.locator("details.qauto summary").first.text_content())
+        nxt = pg.evaluate("[...document.querySelectorAll('.qsess [data-qset]')].map(b => b.dataset.qset)")
+        autos = pg.evaluate("QA.sections.flatMap(s => s.items).filter(i => i.status === 'auto').map(i => i.id)")
+        self.assertTrue(autos)
+        self.assertFalse(set(nxt) & set(autos))
+
+
+class Offline(UiCase):
+    def test_banner_and_reconnect(self):
+        """0.35: Ist tinyops kurz weg, kommt ein Hinweis oben statt Fehlermeldungen, und er verschwindet beim Wiederverbinden."""
+        pg = self.pg
+        pg.route("**/api/overview*", lambda r: r.abort())
+        pg.evaluate("load()")
+        pg.wait_for_selector("#offline", state="visible")
+        self.assertIn("Keine Verbindung", pg.locator("#offline").inner_text())
+        pg.unroute("**/api/overview*")
+        pg.locator("#offRetry").click()
+        self.wait_js("!document.getElementById('offline')")
+
+
+class Terms(UiCase):
+    def test_score_switch_and_areas(self):
+        """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""
+        pg = self.pg
+        self.tab("Einstellungen")
+        self.wait_js("!!document.getElementById('ft-score')")
+        txt = pg.locator("#viewSettings").inner_text()
+        self.assertIn("Bereiche und Wochenziel", txt)
+        self.assertNotIn("Fokusbereiche", txt)
+        self.tab("Fokus")
+        self.assertNotIn("Fokus-Modus", pg.locator("#viewFocus").inner_text())
+        self.assertEqual(pg.locator("#viewFocus .lvl").count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

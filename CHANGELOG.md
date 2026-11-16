@@ -5,6 +5,30 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.35.0]
+
+Weniger Begriffe (E3, E4) aus dem Plan, dazu tote Klicks, Fehler und der Worktree-Wunsch aus deinem Nutzungsbericht und dem Verlauf vom 16.11.
+
+### Behoben
+- **«Panel nicht erreichbar»** (5× im Nutzungsbericht): Ist tinyops kurz weg, kommt keine Fehlermeldung mehr bei jedem Abgleich. Oben steht ein Hinweis mit Countdown, das Panel verbindet sich selbst wieder (2, 3, 5, 10, 20, dann alle 30 s) und hat «Jetzt verbinden».
+- **Board: Aufgabe aus der letzten Kategorie nehmen** endete im Verlauf mit einem Fehler. Jetzt fragt tinyops, ob ein tiny-Ticket zurück in den Ideenpool soll. Nein ändert nichts.
+- **Workspaces: «Fetch» fehlgeschlagen** zeigte die rohe git-Ausgabe. Jetzt steht dort kurz, was fehlt: SSH-Schlüssel, Netz oder Rechte.
+- **Prüfen: doppelte Häkchen** (im Verlauf zweimal derselbe Eintrag): Ein Doppelklick auf ok oder Fehler sendet nur einmal, die Anzeige wechselt sofort.
+- Ein Speichern ohne Änderung landet nicht mehr als leerer Eintrag im Verlauf.
+
+### Neu
+- **Worktrees in Workspaces** (dein Wunsch: «AI creates worktrees»): Zahl oben, Filter «Worktrees», alte und saubere Worktrees sind markiert. «Entfernen» geht nur, wenn der Worktree sauber ist und sein Commit noch auf einem Branch oder Remote liegt.
+- **Tote Klicks weg** (Nutzungsbericht):
+  - Prüfen: Klick auf den Text eines Punkts öffnet eine Notiz, Klick auf einen Befehl kopiert ihn (27 tote Klicks auf Text und «erwartet»).
+  - KI-Tempo in der Seitenleiste öffnet die Details zum Kontingent (16 tote Klicks, 3 Wutklicks).
+  - Bereiche in der Seitenleiste starten eine Sitzung dafür.
+  - Die Zahlen oben in Workspaces filtern die Liste.
+
+### Geändert
+- **E3 Spielstand:** eine Karte im Fokus, ohne Level-Balken. Neu abschaltbar unter Einstellungen → Weiteres → «Spielstand»; dann auch keine XP-Meldungen.
+- **E4 Begriffe:** «Fokus» (woran du bist, mit Sitzung) und «Bereiche» (Wochenziel). Aus «Fokusbereiche» wird «Bereiche und Wochenziel», aus «Fokus-Modus» der Knopf «Vollbild», die Leiste heisst nicht mehr eigens.
+- Ungenutzte Ansichten bleiben vorerst sichtbar: sieben Tage Nutzung reichen dafür nicht (siehe Roadmap, «Auswertung 16.11.»).
+
 ## [0.34.0]
 
 Doppelungen I aus dem Plan, dazu Korrekturen und Wünsche aus deinem Prüf- und Nutzungsbericht vom 16.11.

@@ -60,7 +60,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.34.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.35.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -112,7 +112,7 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
-    "features": {"ideas": True, "ai": False},
+    "features": {"ideas": True, "ai": False, "score": True},   # score (0.35, E3): Spielstand, abschaltbar
     "data_dir": "",               # leer = ./data (Ideenbox)
     "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
     "log_dir": "",                # leer = ~/.config/tinyops/logs
@@ -1949,7 +1949,11 @@ class App:
             else:
                 stage = (st.stages().get(key) or {}).get("stage", "")
                 if kind == "ticket" and links.is_local_key(key) and stage not in ("", "idea") and len(st.pools_of(key)) <= 1:
-                    raise UserError("%s braucht eine Kategorie. Erst in eine andere Kategorie legen oder zurück in den Ideenpool schieben." % key)
+                    if not body.get("to_pool"):
+                        e = UserError("%s braucht eine Kategorie. Zurück in den Ideenpool legen?" % key)
+                        e.data = {"to_pool": True}
+                        raise e
+                    self._local(st.stage_set, key, "idea")       # 0.35: zurück in den Ideenpool statt Sackgasse (aus dem Verlauf)
                 st.remove_item(pid, kind, key)
             self.cache_t = 0.0
             return {}
@@ -2277,7 +2281,7 @@ class App:
                 ok, err = workspaces.fetch(r["path"])
             self.audit("workspace.fetch", r["name"], ok=ok, path=r["path"], error=err or None)
             if not ok:
-                raise UserError("Abholen fehlgeschlagen: %s" % (err or "git fetch meldet einen Fehler"))
+                raise UserError(workspaces.fetch_hint(err))
             self.ws_cache = None
             return self.workspaces_state(True)
         if action == "task":
@@ -2294,6 +2298,17 @@ class App:
             self.audit("workspace.task", key, repo=r["name"], branch=branch, project_id=r["project"]["pid"])
             self.cache_t = 0.0
             return {"key": key, "title": title, "project_id": r["project"]["pid"], "branch": branch}
+        if action == "wt_remove":
+            # 0.35: Worktrees aufräumen (Wunsch: «AI erstellt Worktrees, die müssen wir auch tracken»). Nur saubere, nichts geht verloren.
+            wt = str(b.get("worktree") or "")
+            if not any(w["path"] == wt for w in r.get("worktrees") or []):
+                raise UserError("Diesen Worktree gibt es in %s nicht (mehr). Einmal neu einlesen." % r["name"])
+            ok, msg = (True, "Demo: nichts entfernt.") if self.demo else workspaces.worktree_remove(r["path"], wt)
+            self.audit("workspace.worktree_remove", r["name"], ok=ok, path=wt, message=msg)
+            if not ok:
+                raise UserError(msg)
+            self.ws_cache = None
+            return dict(self.workspaces_state(True), message=msg)
         raise UserError("Unbekannte Aktion.")
 
     def helpdesk_seen(self, b):
@@ -4715,7 +4730,8 @@ def make_handler(app):
                     return self._send(400, {"error": "Secret konnte nicht gespeichert werden.", "errors": serr})
                 settings.write_config(app.config_path, new)
                 changed = sorted(k for k in set(disk) | set(new) if disk.get(k) != new.get(k))
-                app.audit("settings.save", "", sections=changed, stored=sorted(where))
+                if changed or where:                           # 0.35: Speichern ohne Änderung steht nicht im Verlauf
+                    app.audit("settings.save", "", sections=changed, stored=sorted(where))
                 log.info("Einstellungen gespeichert: GitLab %s, Jira %s, %d Projekt(e), Secrets neu: %s",
                          new.get("gitlab_url") or "-", (new.get("jira") or {}).get("url") or "-", len(new["projects"]),
                          ", ".join(where) or "keine")

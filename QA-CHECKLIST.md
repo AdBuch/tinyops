@@ -107,6 +107,15 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
 
+## 0.35.0
+
+- [ ] `r35-01` Workspaces → Zahl «Worktrees» anklicken → nur Repos mit Worktrees; ein sauberer, alter Worktree eines Agenten → «Entfernen» → weg, `git worktree list` zeigt ihn nicht mehr; ein Worktree mit offenen Dateien hat keinen Knopf
+- [ ] `r35-02` Board: ein tiny-Ticket aus seiner einzigen Kategorie nehmen → Frage «zurück in den Ideenpool?» → ja: es steht bei den Ideen, nein: nichts ändert sich
+- [ ] `r35-03` Einstellungen → Weiteres → «Spielstand» aus, speichern → im Fokus keine Punkte-Karte, beim Abhaken und Sitzungsende keine XP; wieder an → alles wie vorher
+- [ ] `r35-04` Workspaces → «Fetch» bei einem Repo ohne Zugriff → eine kurze Meldung mit dem nächsten Schritt statt der rohen git-Ausgabe [auto: test_v35.FetchHint]
+- [ ] `r35-05` Prüfen → Klick auf den Text eines Punkts → Notizfeld; Klick auf einen Befehl im Text → kopiert [auto: test_ui.QaSession]
+- [ ] `r35-06` tinyops neu starten, während das Panel offen ist → oben «Keine Verbindung … Neuer Versuch in …», danach verschwindet der Hinweis von selbst [auto: test_ui.Offline]
+
 ## 0.34.0
 
 - [ ] `r34-01` Helpdesk: ein Ticket aus der Queue oder «Ich beobachte» öffnen → «Als Fokus anheften, Zeit starten» → Hero zeigt das Ticket, «Zeit läuft»; Tab «Zeit» zeigt einen Abschnitt darauf
@@ -117,9 +126,8 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 ## 0.33.0
 
-- [ ] `r33-01` Prüfen → ein älterer Abschnitt aufklappen → unten «… Punkte prüft ein automatischer Test», die Zahl im Kopf zählt nur die Punkte von Hand
-- [ ] `r33-02` «Als Nächstes testen» → kein Punkt mit automatischem Test dabei; insgesamt deutlich weniger offen als vorher
-
+- [ ] `r33-01` Prüfen → ein älterer Abschnitt aufklappen → unten «… Punkte prüft ein automatischer Test», die Zahl im Kopf zählt nur die Punkte von Hand [auto: test_ui.QaSession]
+- [ ] `r33-02` «Als Nächstes testen» → kein Punkt mit automatischem Test dabei; insgesamt deutlich weniger offen als vorher [auto: test_ui.QaSession]
 ## 0.32.0
 
 - [ ] `r32-01` Fokus → unter dem Titel Repo und Branch als Piktogramm; derselbe Branch hat in der Liste darunter dasselbe Bild [auto: test_ui.Views]
@@ -228,7 +236,7 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 ## 0.24.0
 
 - [ ] `r24-01` Fokus: bei einem Helpdesk-Ticket «Ticket ansehen» → Details öffnen sich im Panel mit Beschreibung und Kommentaren, kein neuer Tab
-- [ ] `r24-02` Im Panel «Als Fokus anheften, Zeit starten» → Fokus-Leiste unter der Kopfzeile zeigt das Ticket und «Zeit läuft, ohne Zeitbox»
+- [ ] `r24-02` Im Panel «Als Fokus anheften, Zeit starten» → die Leiste unter der Kopfzeile zeigt das Ticket und «Zeit läuft, ohne Zeitbox»
 - [ ] `r24-03` Gruppe «Ich beobachte» → deine beobachteten Tickets, geänderte fett; eines anklicken → lesbar im Panel, danach nicht mehr fett [auto: test_v24.AppHd]
 - [ ] `r24-04` «Alle gesehen» bei «Ich beobachte» → nichts mehr fett; die Queue bleibt unverändert [auto: test_v24.AppHd]
 - [ ] `r24-05` Einstellungen → Helpdesk: Vorschlag unter «Queue» anklicken → Abfrage steht im Feld; «Verbindung testen» zeigt die Schritte «Queue» und «Ich beobachte»
@@ -243,12 +251,11 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r23-01` Einstellungen → Helpdesk: Adresse, «basic», Benutzername und Passwort eintragen → «Verbindung testen» zeigt Jira 8.5.1, «Angemeldet als …» und die Anzahl deiner Tickets
 - [ ] `r23-02` Speichern → im Fokus erscheint eine Gruppe mit deinen Helpdesk-Tickets; ein Ticket über dem SLA steht oben und zeigt «seit … h» rot [auto: test_v23.AppFocus]
 - [ ] `r23-03` Queue-JQL eintragen, speichern → «Queue …» zeigt neue Tickets fett; «Alle gesehen» → nichts mehr fett, nach dem nächsten Abgleich nur wirklich neue [auto: test_v23.AppFocus]
-- [ ] `r23-04` Ein Helpdesk-Ticket öffnen → «Als Fokus anheften» → Hero zeigt das Ticket, «Zeit läuft»; Tab «Zeit» zeigt einen Abschnitt auf das Helpdesk-Ticket
 - [ ] `r23-05` Einstellungen → Fokusbereiche: bei Berufsbildung einen Block für jetzt eintragen, speichern → über dem Fokus erscheint das Band «Berufsbildung-Block bis …» [auto: test_v23.Plan]
 - [ ] `r23-06` Seitenleiste «Fokuszeit diese Woche» → Berufsbildung mit Ziel, Strich «Soll bis jetzt» und «… h hinter Plan» [auto: test_v23.Plan]
 - [ ] `r23-07` «Berufsbildung-Block starten» → Tätigkeit «Betreuung Lernende», 25 min → Vollbild mit Uhr, Aufgabe und Tätigkeit; die Tasten j/k/i tun nichts
 - [ ] `r23-08` Im Fokus-Modus einen Gedanken eintippen, Enter → «Geparkt in der Ideenbox», das Feld ist leer und behält den Cursor [auto: test_ui.FocusSession]
-- [ ] `r23-09` Tätigkeit wechseln, dann «Klein machen» (oder Esc) → die Uhr läuft in der Kopfzeile weiter; Klick darauf öffnet den Fokus-Modus wieder
+- [ ] `r23-09` Tätigkeit wechseln, dann «Klein machen» (oder Esc) → die Uhr läuft in der Kopfzeile weiter; Klick darauf öffnet das Vollbild wieder
 - [ ] `r23-10` «Erledigt» nach mehr als 20 Minuten → Meldung mit +15 XP; Tab «Zeit» → der Entwurf für Berufsbildung nennt die Tätigkeiten im Text [auto: test_v23.AppFocus]
 - [ ] `r23-11` Fokusbereiche: Ziele über 100 % oder einen Block wie «Mo 9-10» speichern → verständliche Fehlermeldung am Feld [auto: test_v23.Config]
 - [ ] `r23-12` Log → Verlauf → «Fokus-Sitzung gestartet» und «beendet» mit Bereich, Minuten und Ergebnis [auto: test_v23.AppFocus]

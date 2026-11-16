@@ -1,6 +1,6 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-15. Ab hier gilt der Plan 0.33–0.45. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-16. Ab hier gilt der Plan 0.33–0.45. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
 ## Plan 0.33 – 0.45: aufräumen, entscheiden, dann wenig Neues
 
@@ -19,7 +19,7 @@
 |---|---|---|---|
 | **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
 | **0.34.0** ✓ | Doppelungen I: eine Review-Umgebung, ein Buchungsweg; dazu Helpdesk-Fehler r23-04, Review-Umgebung vorbefüllt mit Umsystemen, Checkout aus Workspaces (geliefert 2026-11-16) | Entscheid + Entfernen | E1, E2 ✓ |
-| 0.35.0 | Weniger Begriffe: Fokus, Spielstand, ungenutzte Ansichten | Entscheid + Vereinfachen | E3, E4 |
+| **0.35.0** ✓ | Weniger Begriffe: Fokus und Bereiche, Spielstand abschaltbar; dazu tote Klicks, Verbindungshinweis, Worktrees in Workspaces (geliefert 2026-11-16) | Entscheid + Vereinfachen | E3, E4 ✓ |
 | 0.36.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
 | 0.37.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
 | 0.38.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
@@ -37,8 +37,8 @@
 |---|---|---|---|
 | E1 | Buchen: nur BCS oder auch der Projectron-Export (0.19)? | **Entschieden 2026-11-15: nur BCS** | 0.34 |
 | E2 | Alte Testumgebung je MR (Kubernetes, standardmässig ausgeblendet) und neue Review-Umgebung (0.32)? | **Entschieden 2026-11-15:** direkt ausführen über die Review-Umgebung, auch für MRs; Prompts und Shell-Befehle bleiben zum Kopieren, falls kein Agent da ist | 0.34 |
-| E3 | Spielstand: Punkte, Serie, Review-Punkte behalten? | Behalten, aber als ein Zähler an einer Stelle, abschaltbar | 0.35 |
-| E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | Zwei Begriffe: **Fokus** (woran du gerade bist, mit Sitzung) und **Bereiche** (Wochenziel). Modus und Leiste werden Teil der Sitzung | 0.35 |
+| E3 | Spielstand: Punkte, Serie, Review-Punkte behalten? | **Entschieden 2026-11-16:** behalten, eine Karte im Fokus, abschaltbar | 0.35 |
+| E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | **Entschieden 2026-11-16:** **Fokus** (mit Sitzung) und **Bereiche** (Wochenziel); «Fokus-Modus» heisst «Vollbild» | 0.35 |
 | E5 | Standard-Zyklus der Agenten? | Umsetzen → Review als Standard; Planen und Test je Ticket zuschaltbar | 0.39 |
 | E6 | Oberfläche weiter ohne Build-Schritt (kein npm)? | Ja: ES-Module direkt aus `static/`, damit der Launcher einfach bleibt | 0.38 |
 | E7 | Privat und Geschäft: eine Datenbank mit zwei Bereichen oder zwei getrennte Instanzen? | Zwei getrennte Instanzen (eigene Daten, Secrets, Audit, Port) mit Umschalter. Keine Vermischung möglich | 0.45 |
@@ -63,10 +63,11 @@
 - `usage.py` (KI-Kontingent) und `ux.py` (Nutzung der Oberfläche) bekommen eindeutige Namen.
 - **Fertig, wenn:** Jede Funktion gibt es einmal, und der Changelog listet alles Entfernte.
 
-**0.35.0 – Weniger Begriffe**
-- E3 und E4 umsetzen, Texte in Oberfläche und Hilfe angleichen.
-- Was im Nutzungsbericht 30 Tage ungenutzt ist, wird ausgeblendet, mit «Weitere Funktionen» zum Zurückholen. Dafür brauche ich deinen aktuellen Bericht.
-- **Fertig, wenn:** Jeder Begriff in der Oberfläche hat eine Bedeutung, und die Hauptnavigation ist kürzer.
+**0.35.0 – Weniger Begriffe** ✓
+- E3 und E4 umgesetzt, Texte in Oberfläche und Hilfe angeglichen.
+- Ungenutzte Ansichten ausblenden: verschoben. Der Bericht deckt erst sieben Tage ab; neu bewertet wird mit 0.41 (siehe Auswertung unten).
+- Dazu aus dem Nutzungsbericht: tote Klicks in Prüfen, Seitenleiste und Workspaces; Verbindungshinweis statt «Panel nicht erreichbar»; Worktrees in Workspaces.
+- **Fertig, wenn:** Jeder Begriff in der Oberfläche hat eine Bedeutung. Die kürzere Hauptnavigation folgt erst mit genug Daten.
 
 **0.36.0 – Server zerlegen I**
 - `make_handler` (720 Zeilen) wird eine Routentabelle in `routes.py`.
@@ -143,6 +144,38 @@
 - Ein Umschalter oben wechselt zwischen den beiden. Der Launcher startet beide.
 - **App:** tinyops als installierbare Web-App (PWA), auf dem Handy über VPN mit Zugriffstoken. Keine eigene native App.
 - **Fertig, wenn:** Ein privates Vorhaben ist in der Geschäfts-Instanz nicht sichtbar, und die App läuft auf dem Handy.
+
+### Auswertung 16.11.: Prüf- und Nutzungsbericht 0.33, Verlauf
+
+**Was die Berichte zeigen**
+- **Prüfliste:** 16 von 67 geprüft, ein Fehler (r23-04, in 0.34 behoben). Offen sind vor allem Punkte mit echten Systemen: BCS (r29), Microsoft 365 (r28), Agenten über SSH (r27). Diese Punkte kann kein automatischer Test ersetzen.
+- **Ansichten:**
+  - Fokus 55 %, Einstellungen 23 %, Prüfen 9 %. Workspaces, Board, Listen und Zeit liegen je unter 5 %.
+  - Einstellungen kosten zu viel Zeit: «Verbindung testen» beim Helpdesk 14×, Agent «Testen» 13×, 3 s Zögern im JQL-Feld, die Hilfe zu Microsoft 365 18× aufgeklappt.
+- **Detail-Panel:** Es ist das Arbeitspferd: 68 Klicks auf Einträge, 31× «Schliessen». Dazu kommen 27 tote Klicks auf den leeren Hintergrund im Fokus. Vermutung: Du willst das Panel mit einem Klick daneben schliessen.
+- **Bildschirm:** Fast immer 2844 px breit, bei Pixeldichte 0.9. Auf dieser Breite bleibt viel Platz leer.
+- **Verlauf:**
+  - Ein echter Vibe-Lauf auf der devops-Maschine lief durch.
+  - Fehler, die in 0.35 behoben sind: Kategorie lösen und roher Fetch-Fehler.
+  - Fehler, die nicht mehr auftreten können: der Test der alten MCP-Verbindung (8 s) und «kube_context fehlt». Beide Funktionen sind seit 0.34 entfernt.
+- **Wünsche:**
+  - Erledigt in 0.34: Checkout aus Workspaces, vorbefüllte Review-Befehle, Compose-Datei und Umsysteme zum Zusammenklicken.
+  - Erledigt in 0.35: Worktrees in Workspaces.
+  - Offen: mehrere Repos als **ein** Projekt. Beispiel: Mailhandler mit Frontend, Redis, ActiveMQ und PostgreSQL in IntelliJ und in der Review-Umgebung zusammen.
+
+**Empfehlungen für die nächsten Releases**
+
+| Wann | Empfehlung | Warum |
+|---|---|---|
+| **vor 0.36** | Pause bis zum 19.11. oder bis die Prüfabschnitte 0.34 und 0.35 durch sind. Dabei BCS (r29) und Review-Umgebung (r34-04) mit echten Systemen prüfen. | 0.33 bis 0.35 kamen in zwei Tagen, die Regel erlaubt höchstens zwei Releases pro Woche. |
+| Korrektur-Platz 0.36 | Klick neben das Detail-Panel schliesst es. Klick auf den Titel einer Zeile (`span.tt`) öffnet sie. | 27 + 16 tote Klicks. Das ist klein und gehört vor das Zerlegen, weil Refactoring kein Verhalten ändern darf. |
+| 0.36/0.37 | Beim Zerlegen das Testen der Verbindungen in Schritten zeigen (GitLab 5.8 s, GitHub 2.2 s). Das KI-Kontingent zwischenspeichern (`/api/usage` bis 2.3 s). | Langsame Antworten im Bericht. |
+| 0.38 | Breites Layout ab 2000 px: Das Detail-Panel steht neben der Liste statt darüber. | 2844 px, 31× Schliessen. |
+| 0.40 | Einstellungen nach Schema mit geführter Ersteinrichtung je Anbindung: erst Adresse, dann Test, dann Feinheiten. Für Helpdesk-JQL nur Vorschläge zum Anklicken. | 23 % der Zeit in Einstellungen. |
+| 0.41 | Ungenutzte Ansichten mit 30 Tagen Daten neu bewerten. Kandidat: «Listen» in Board und Workspaces aufgehen lassen. «Zeit» bleibt, weil dort gebucht wird. | Sieben Tage reichen nicht. |
+| 0.42 | Microsoft 365 Schritt für Schritt einrichten, mit einem fertigen Text für die IT (App-Registrierung, delegierte Rechte, kein Secret). Vorher mit der IT klären, ob es eine App-Registrierung gibt. | Hilfe 18× aufgeklappt, r28 noch ungeprüft. |
+| 0.43 | «Weitere Projekte» als **Projektgruppe**: mehrere Repos und Umsysteme unter einem Namen. Die Gruppe öffnet zusammen in IntelliJ und startet zusammen als Review-Umgebung. | Offener Wunsch vom 16.11. |
+| 0.45 | Getrennte Instanzen für Privat und Geschäft wie geplant (E7). | Im Bericht tauchte ein privates Projekt neben der Arbeit auf. |
 
 ### Bewusst nicht im Plan bis 0.45
 - Native App (iOS/Android), zentrale Datenbank, Agenten-Cluster über mehrere Rechner

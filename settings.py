@@ -38,7 +38,8 @@ JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER
 SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token",
                  "helpdesk_token", "helpdesk_password", "bcs_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
-CONFIG_KEYS_FEATURES = ("ideas", "ai")      # 0.34: «testenv» entfällt (E2)
+CONFIG_KEYS_FEATURES = ("ideas", "ai", "score")      # 0.34: «testenv» entfällt (E2); 0.35: «score» (E3)
+FEATURE_DEFAULTS = {"score": True}                   # fehlt der Schlüssel, bleibt der Spielstand an (wie vor 0.35)
 
 
 # ------------------------------------------------------------ Bericht
@@ -1112,7 +1113,7 @@ def view(cfg, config_path, features_default=None):
         "sonar": {"enabled": bool((cfg.get("sonar") or {}).get("enabled", False)), "url": (cfg.get("sonar") or {}).get("url", ""),
                   "cache_seconds": (cfg.get("sonar") or {}).get("cache_seconds", 300), "max_items": (cfg.get("sonar") or {}).get("max_items", 40),
                   "report_max": (cfg.get("sonar") or {}).get("report_max", 200)},
-        "features": {k: bool(feats.get(k, False)) for k in CONFIG_KEYS_FEATURES},
+        "features": {k: bool(feats.get(k, FEATURE_DEFAULTS.get(k, False))) for k in CONFIG_KEYS_FEATURES},
         "secrets": {n: secret_state(cfg, n, [cfg.get("token_env")] if n == "gitlab_token" else ()) for n in SECRET_FIELDS},
         "storage": {"keyring": bool(kr), "file": str(store.secrets_file()),
                     "text": "Schlüsselbund des Betriebssystems" if kr else
@@ -1551,7 +1552,7 @@ def build_config(current, p):
         cfg["agents"] = agents.clean_agents(p.get("agents") if "agents" in p else cfg.get("agents"), {c["id"] for c in conns}, current.get("agents"), errors)
 
     f = p.get("features") or {}
-    cfg["features"] = {k: bool(f.get(k, False)) for k in CONFIG_KEYS_FEATURES}
+    cfg["features"] = {k: bool(f.get(k, FEATURE_DEFAULTS.get(k, False))) for k in CONFIG_KEYS_FEATURES}
     return cfg, errors
 
 

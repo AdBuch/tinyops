@@ -305,6 +305,7 @@
   .gatebox textarea { width: 100%; height: 64px; min-height: 54px; margin: 6px 0; font-family: var(--sans); resize: vertical; }
   .gatebox .row { flex-wrap: wrap; }
   .qsess { border: 2px solid var(--focus); }
+  .qtxt { cursor: text; } .qtxt code { cursor: copy; }
   .qauto { margin-top: 8px; } .qauto ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--quiet); }
   .qauto li { margin: 3px 0; } .qauto code { margin-left: 6px; font-size: 11.5px; }
   .brief { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--surface); }
@@ -826,7 +827,11 @@
   .hdcm { display: grid; gap: 8px; } .hdcm > div { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
   .hdcm small { color: var(--quiet); display: block; margin-bottom: 2px; } .hdcm p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
   .jqlp { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; } .jqlp button { font-size: 12px; padding: 3px 9px; }
-  .aipace { cursor: help; } .rcard.score { cursor: pointer; }
+  .aipace { cursor: pointer; } .rcard.score { cursor: pointer; }
+  .offline { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 90; background: var(--warn-bg); color: var(--ink); border: 1px solid var(--warn);
+    border-radius: 10px; padding: 8px 12px; font-size: 13.5px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.12); max-width: calc(100vw - 32px); }
+  .farea[data-fsess] { cursor: pointer; } .farea[data-fsess]:hover { background: var(--raised); border-radius: 8px; }
+  .wssum div[data-wsf] { cursor: pointer; border-radius: 8px; padding: 2px 6px; margin: -2px -6px; } .wssum div[data-wsf]:hover { background: var(--raised); }
   @media (max-width: 700px) { .hdq .q { grid-template-columns: 10px 76px minmax(0, 1fr); } .hdq .q > :nth-child(n+4) { display: none; } }
 
 
@@ -915,7 +920,7 @@
   <button id="refresh" title="GitLab, Jira und Sonar jetzt abgleichen">Neu laden</button>
 </header>
 
-<div id="fbar" hidden role="status" aria-label="Fokus-Leiste"></div>
+<div id="fbar" hidden role="status" aria-label="Fokus: woran du bist"></div>
 <div id="updBanner" hidden></div>
 <div id="viewFocus">
   <section id="fMain">
@@ -928,7 +933,7 @@
 </div>
 <aside id="fx" hidden aria-label="Details"></aside>
 <dialog id="fsDlg" style="width:min(560px,94vw)"><div id="fsBody"></div></dialog>
-<div id="fmode" hidden role="dialog" aria-modal="true" aria-label="Fokus-Modus"></div>
+<div id="fmode" hidden role="dialog" aria-modal="true" aria-label="Fokus-Sitzung im Vollbild"></div>
 <div id="viewOverview" hidden>
   <section id="left">
     <div id="banners"></div>
@@ -1052,7 +1057,11 @@ async function api(method, path, body) {
   const track = !/^\/api\/ux\//.test(path) && typeof uxPush === 'function';
   let r;
   try { r = await fetch(path, { method, headers: H, body: body ? JSON.stringify(body) : undefined }); }
-  catch (e) { if (track) uxPush({ k: 'fail', t: ep, e: { m: 'Panel nicht erreichbar' } }); throw e; }
+  catch (e) {
+    if (track && !OFFLINE) uxPush({ k: 'fail', t: ep, e: { m: 'Panel nicht erreichbar' } });
+    const x = new Error('Keine Verbindung zu tinyops. Es läuft nicht oder startet gerade neu.'); x.offline = true; throw x;
+  }
+  if (OFFLINE) setOffline(false);
   const data = await r.json().catch(() => ({}));
   const ms = Math.round(performance.now() - t0);
   if (track && ms > 1500 && ep !== 'GET /api/overview') uxPush({ k: 'slow', t: ep, e: { ms } });
@@ -1485,6 +1494,18 @@ const HELP = {
   where: `<p>Die config.json enthält keine Geheimnisse: Tokens liegen im Schlüsselbund des Systems oder in der Datei daneben mit Rechten nur für dich. Das Protokoll zeigt jede schreibende Aktion.</p>`,
 };
 let firstLoad = true, pollT = null;
+// 0.35: Verbindung weg (Neustart, Update, Rechner schlief): ein Hinweis oben, selbst wieder verbinden statt Fehlermeldungen
+let OFFLINE = false, offT = null, offN = 0;
+function setOffline(on) {
+  OFFLINE = on; clearTimeout(offT);
+  let b = $('offline');
+  if (!on) { offN = 0; if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'offline'; b.className = 'offline'; b.setAttribute('role', 'status'); document.body.appendChild(b); }
+  const wait = Math.min(30, [2, 3, 5, 10, 20][offN] || 30); offN++;
+  b.innerHTML = `Keine Verbindung zu tinyops. Neuer Versuch in ${wait} s. <button id="offRetry">Jetzt verbinden</button>`;
+  $('offRetry').onclick = () => { clearTimeout(offT); load(); };
+  offT = setTimeout(load, wait * 1000);
+}
 async function load() {
   clearTimeout(pollT);
   try {
@@ -1499,7 +1520,7 @@ async function load() {
     if (view === 'time') loadTime();
     if (state.features.ideas) renderIdeas();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
-  } catch (e) { toast(e.message); }
+  } catch (e) { if (e.offline) { setOffline(true); return; } toast(e.message); }
   // Solange synchronisiert wird, schnell nachfragen: Teilergebnisse erscheinen, ohne dass man warten muss
   if (state && state.sync && state.sync.running) pollT = setTimeout(load, 900);
 }
@@ -1666,7 +1687,7 @@ function renderUsageBox() {
 }
 document.addEventListener('click', ev => {
   const a = ev.target.closest && ev.target.closest('.aipace');
-  if (a) toast('Tempo: Der Strich im Balken zeigt, wie viel Zeit vom Fenster übrig ist. Liegt der Balken rechts vom Strich, hast du Vorsprung; links davon bist du schneller als die Zeit.');
+  if (a) { const d = $('usageDet'); if (d && !d.open) { d.open = true; d.scrollIntoView({ block: 'nearest' }); } else toast('Tempo: Der Strich im Balken zeigt, wie viel Zeit vom Fenster übrig ist. Rechts vom Strich: Vorsprung; links davon: schneller als die Zeit.'); }
   const sc = ev.target.closest && ev.target.closest('.rcard.score');
   if (sc && !ev.target.closest('button, a')) { LS.set('scoreOpen', !LS.get('scoreOpen', false)); renderRail(); }
 });
@@ -1835,7 +1856,13 @@ $('viewBoard').addEventListener('click', async ev => {
   }
   if (b.dataset.bpoolrem) {
     const c = find(b.dataset.bpoolrem);
-    await act(() => post('/api/board/unassign', c.key ? { key: c.key, pool_id: +b.dataset.pool } : { ref: c.id, pool_id: +b.dataset.pool }), 'Aus der Kategorie genommen');
+    const body = c.key ? { key: c.key, pool_id: +b.dataset.pool } : { ref: c.id, pool_id: +b.dataset.pool };
+    try { await post('/api/board/unassign', body); toast('Aus der Kategorie genommen'); await load(); }
+    catch (e) {
+      if (e.data && e.data.to_pool && confirm(e.message + '\n\nDie Aufgabe kommt zurück in die Ideen und behält ihren Text.')) {
+        try { await post('/api/board/unassign', Object.assign({ to_pool: true }, body)); toast('Zurück im Ideenpool'); await load(); } catch (e2) { toast(e2.message); }
+      } else if (!(e.data && e.data.to_pool)) toast(e.message);
+    }
     return;
   }
   if (b.dataset.bmove) {
@@ -2500,6 +2527,7 @@ $('viewQa').addEventListener('change', ev => { if (ev.target.id === 'uxDays') lo
 
 // ------------------------------------------------ Prüfen (0.19): Prüfliste je Release und Selbsttest
 let QA = null, QAONLY = false, QARES = null, QAREST = LS.get('qarest', true);
+const QNOTE = new Set(), QPEND = new Set();   // 0.35: Notiz per Klick auf den Text; Doppelklicks auf ok/Fehler nicht doppelt senden
 try { QAONLY = localStorage.getItem('tinyops.qaonly') === '1'; } catch (e) { /* egal */ }
 async function loadQa() {
   loadUx();
@@ -2513,9 +2541,10 @@ function renderQa() {
   const md = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
   const item = i => `<div class="qitem st-${esc(i.status)}"><span class="qb" role="group" aria-label="Ergebnis">
       <button class="${i.status === 'ok' ? 'on ok' : ''}" data-qset="${esc(i.id)}" data-s="ok" title="ok">${ic('check')}</button><button class="${i.status === 'fehler' ? 'on fehler' : ''}" data-qset="${esc(i.id)}" data-s="fehler" title="Fehler">${ic('x')}</button><button class="${i.status === 'übersprungen' ? 'on übersprungen' : ''}" data-qset="${esc(i.id)}" data-s="übersprungen" title="übersprungen">–</button></span>
-    <div><div class="tx">${md(i.text)}</div>${i.expect ? `<div class="ex">erwartet: ${md(i.expect)}</div>` : ''}${i.changed ? '<div class="ex" style="color:var(--warn)">Text geändert, bitte neu prüfen</div>' : ''}</div>
+    <div class="qtxt" data-qtxt="${esc(i.id)}" title="Klick: Notiz schreiben · Klick auf Code: kopieren"><div class="tx">${md(i.text)}</div>${i.expect ? `<div class="ex">erwartet: ${md(i.expect)}</div>` : ''}${i.changed ? '<div class="ex" style="color:var(--warn)">Text geändert, bitte neu prüfen</div>' : ''}</div>
     <span class="qid" title="${i.checked_in ? 'geprüft in ' + esc(i.checked_in) : ''}">${esc(i.id)}</span>
-    ${i.status === 'fehler' ? `<textarea data-qnote="${esc(i.id)}" placeholder="Was ist passiert? (wird mit «Ergebnis kopieren» mitgegeben)">${esc(i.note)}</textarea><div style="grid-column:2/-1"><button class="quiet-btn" data-qtask="${esc(i.id)}">Als Aufgabe ins Board</button></div>` : ''}</div>`;
+    ${i.status === 'fehler' ? `<textarea data-qnote="${esc(i.id)}" placeholder="Was ist passiert? (wird mit «Ergebnis kopieren» mitgegeben)">${esc(i.note)}</textarea><div style="grid-column:2/-1"><button class="quiet-btn" data-qtask="${esc(i.id)}">Als Aufgabe ins Board</button></div>`
+      : QNOTE.has(i.id) || i.note ? `<textarea data-qnote="${esc(i.id)}" data-keep="1" placeholder="Notiz zu diesem Punkt (geht mit ok oder Fehler mit)">${esc(i.note)}</textarea>` : ''}</div>`;
   // Testsitzung (0.31): die nächsten fünf offenen Punkte, dieses Release zuerst. Ältere Releases ruhen, bis du sie holst.
   const vnum = v => (v || '0.0.0').split('.').map(Number);
   const cur = vnum(QA.version), recent = sec => !sec.version || sec.current || (vnum(sec.version)[0] === cur[0] && cur[1] - vnum(sec.version)[1] <= 1);
@@ -2552,11 +2581,26 @@ $('viewQa').addEventListener('click', async ev => {
   const t = ev.target;
   const b = t.closest('[data-qset]');
   if (b) {
+    if (QPEND.has(b.dataset.qset)) return;
     const cur = QA.sections.flatMap(x => x.items).find(i => i.id === b.dataset.qset);
     const s2 = cur && cur.status === b.dataset.s ? 'offen' : b.dataset.s;
-    try { await post('/api/qa/set', { id: b.dataset.qset, status: s2, note: s2 === 'fehler' ? (cur.note || '') : '' });
+    const ta0 = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`);
+    const note = ta0 ? ta0.value : (cur && cur.note) || '';
+    QPEND.add(b.dataset.qset);
+    if (cur) { cur.status = s2; cur.note = note; renderQa(); }              // sofort zeigen, dann speichern
+    try { await post('/api/qa/set', { id: b.dataset.qset, status: s2, note: s2 === 'offen' ? '' : note });
       try { const ss = new Set(JSON.parse(sessionStorage.getItem('tinyops.qsess') || '[]')); s2 === 'offen' ? ss.delete(b.dataset.qset) : ss.add(b.dataset.qset); sessionStorage.setItem('tinyops.qsess', JSON.stringify([...ss])); } catch (e2) { /* egal */ }
-      await loadQa(); if (s2 === 'fehler') { const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`); if (ta) ta.focus(); } } catch (e) { toast(e.message); }
+      QNOTE.delete(b.dataset.qset);
+      await loadQa(); if (s2 === 'fehler') { const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(b.dataset.qset)}"]`); if (ta) ta.focus(); } } catch (e) { toast(e.message); await loadQa(); }
+    finally { QPEND.delete(b.dataset.qset); }
+    return;
+  }
+  const cd = t.closest('.qtxt code');
+  if (cd) { copyText(cd.textContent, 'Befehl'); return; }
+  const qt = t.closest('[data-qtxt]');
+  if (qt && !window.getSelection().toString()) {
+    const id = qt.dataset.qtxt; QNOTE.has(id) ? QNOTE.delete(id) : QNOTE.add(id); renderQa();
+    const ta = document.querySelector(`#viewQa textarea[data-qnote="${CSS.escape(id)}"]`); if (ta) ta.focus();
     return;
   }
   const tk = t.closest('[data-qtask]');
@@ -2570,6 +2614,7 @@ $('viewQa').addEventListener('change', async ev => {
   const t = ev.target;
   if (t.id === 'qRest') { QAREST = t.checked; LS.set('qarest', QAREST); renderQa(); return; }
   if (t.id === 'qOnly') { QAONLY = t.checked; try { localStorage.setItem('tinyops.qaonly', QAONLY ? '1' : '0'); } catch (e) { /* egal */ } renderQa(); return; }
+  if (t.dataset.qnote && t.dataset.keep) { const it = QA.sections.flatMap(x => x.items).find(i => i.id === t.dataset.qnote); if (it) { it.note = t.value; if (it.status !== 'offen') { try { await post('/api/qa/set', { id: it.id, status: it.status, note: t.value }); } catch (e) { toast(e.message); } } } return; }
   if (t.dataset.qnote) { try { await post('/api/qa/set', { id: t.dataset.qnote, status: 'fehler', note: t.value }); const it = QA.sections.flatMap(x => x.items).find(i => i.id === t.dataset.qnote); if (it) it.note = t.value; } catch (e) { toast(e.message); } }
 });
 
@@ -3048,7 +3093,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokusbereiche</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Bereiche</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -3187,7 +3232,7 @@ async function loadSettings() {
     </div>
     <label class="check"><input type="checkbox" id="bc-appr" ${(S.time.bcs || {}).apprentices !== false ? 'checked' : ''}><span>Lernende in der Zeit-Ansicht zeigen <span class="quiet small">(nur lesen, was BCS dir zeigt)</span></span></label>`)}
 
-  ${sect('focusareas', 'Fokusbereiche', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
+  ${sect('focusareas', 'Bereiche und Wochenziel', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
     <div class="grid3">
       ${field('fo-hours', 'Arbeitsstunden pro Woche', S.focus.week_hours, { type: 'number', err: 'focus.week_hours' })}
       ${field('fo-start', 'Arbeitstag ab', S.focus.day_start, { ph: '08:00', err: 'focus.day_start' })}
@@ -3287,6 +3332,7 @@ async function loadSettings() {
 
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
+    <label class="check"><input type="checkbox" id="ft-score" ${S.features.score !== false ? 'checked' : ''}><span>Spielstand <span class="quiet small">(Punkte und Serie für erledigte Schritte, eine Karte im Fokus)</span></span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
     <label class="check"><input type="checkbox" id="ux-on" ${S.ux.enabled ? 'checked' : ''}><span>UI-Nutzung lokal erfassen <span class="quiet small">(Klicks, Mausweg, Tasten ausserhalb von Feldern, nie Eingaben oder Titel; Bericht unter «Prüfen», zum Kopieren für die Verbesserung der Oberfläche)</span></span></label>
     ${field('ux-days', 'UI-Nutzung aufbewahren (Tage)', S.ux.days, { type: 'number', err: 'ux.days' })}`)}
@@ -3789,7 +3835,7 @@ function collect() {
     usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
-    features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked },
+    features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked, score: $('ft-score').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     workspaces: { enabled: $('ws-on').checked, roots: val('ws-roots'), depth: val('ws-depth'), stale_days: val('ws-stale'), scan_minutes: val('ws-scan') },
     m365: { enabled: $('m3-on').checked, tenant: val('m3-tenant'), client_id: val('m3-client'), mail: $('m3-mail').checked, calendar: $('m3-cal').checked,
@@ -4064,7 +4110,7 @@ function renderFocus() {
 // Neue Erfolge seit dem letzten Blick: kurz feiern
 function celebrateNew() {
   const s = state.flow && state.flow.stats;
-  if (!s) return;
+  if (!s || F().score === false) return;
   const last = LS.get('fxLast', null);
   LS.set('fxLast', s.last_id);
   if (last === null || s.last_id <= last) return;
@@ -4092,7 +4138,7 @@ function burstAt(el) {
   document.body.appendChild(b); setTimeout(() => b.remove(), 900);
 }
 function renderRail() {
-  const s = state.flow && state.flow.stats;
+  const s = F().score === false ? null : state.flow && state.flow.stats;      // E3 (0.35): Spielstand an einer Stelle, abschaltbar
   let h = '';
   if (s) {
     const C = 2 * Math.PI * 34, pct = Math.min(1, s.today_steps / Math.max(1, s.goal));
@@ -4106,11 +4152,10 @@ function renderRail() {
       <div class="sinfo"><b>${s.goal_met ? 'Tagesziel geschafft' : left === s.goal ? 'Erster Schritt wartet' : `Noch ${left} bis zum Tagesziel`}</b>
         <span class="xp">+${s.today_xp} XP heute</span>
         <span class="streak ${s.streak ? '' : 'off'}" title="Tage in Folge mit mindestens einem Schritt">${ic('flame')} ${s.streak ? s.streak + (s.streak === 1 ? ' Tag' : ' Tage') + ' in Folge' : 'Noch keine Serie'}</span></div>
-      <div class="lvl"><span>Level ${s.level}</span><div class="lbar"><i style="width:${(100 * s.level_xp / s.level_size).toFixed(0)}%"></i></div><span>${s.level_xp}/${s.level_size}</span></div>
       <div class="week" aria-label="Schritte der letzten 7 Tage">${s.week.map(w => `<i class="${w.n ? '' : 'zero'} ${w.day === today ? 'today' : ''}" style="--h:${(w.n / mx).toFixed(2)}" title="${esc(w.day)}: ${w.n} Schritt${w.n === 1 ? '' : 'e'}"></i>`).join('')}</div>
       <div class="wdays">${s.week.map(w => `<span>${wd(w.day)}</span>`).join('')}</div>
       ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, LS.get('scoreOpen', false) ? 12 : 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
-      <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Abnahmen und Fokus-Sitzungen ab 20 min. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
+      <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Teilschritte, Abnahmen, Reviews und Fokus-Sitzungen ab 20 min. Abschalten: Einstellungen → Weiteres. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
     </section>`;
   }
   h += m365Rail();
@@ -4160,7 +4205,7 @@ function renderFx() {
       ${(c.companions || []).map(x => `<div class="fxitem"><div class="nm"><b>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.key)}</a>` : esc(x.key)} ${typeChip(x.type)}</b><small>${esc(x.summary)} · ${esc(x.status || '')} · ${esc(x.why || '')}</small></div></div>`).join('')}
       <button class="quiet-btn" data-grp="${esc(c.key)}">Gruppieren …</button></div>`;
     if (!c.idea_id) {
-      body += `<div><h3>Teilschritte <small>Kleine Haken, je erledigter +3 XP</small></h3><ul class="ck">${e.d.checklist.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-fck="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(x.text)}"><span>${esc(x.text)}</span><button data-fckdel="${x.id}" title="Entfernen" aria-label="Entfernen">${ic('x')}</button></li>`).join('')}</ul>
+      body += `<div><h3>Teilschritte <small>Kleine Haken${F().score === false ? '' : ', je erledigter +3 XP'}</small></h3><ul class="ck">${e.d.checklist.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-fck="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(x.text)}"><span>${esc(x.text)}</span><button data-fckdel="${x.id}" title="Entfernen" aria-label="Entfernen">${ic('x')}</button></li>`).join('')}</ul>
         <div class="ckadd"><input id="fxCkNew" maxlength="200" placeholder="${e.d.checklist.length ? 'Nächster kleiner Schritt …' : 'In kleine Schritte zerlegen, z. B. «Test für Retry schreiben»'}" autocomplete="off"><button data-fckadd="1">Hinzufügen</button></div></div>`;
     }
     if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
@@ -4386,7 +4431,7 @@ function renderFbar() {
   el.dataset.over = over ? '1' : '';
   const right = `<span class="clock ${over ? 'over' : ''}" id="fbClock" title="${over ? 'Zeitbox vorbei' : 'Rest der Zeitbox'}">${over ? 'vorbei' : mmss(left)}</span>
       ${over ? `<span class="soll" id="fbAuto">${fbAutoText(m.ses)}</span><button data-fbext="15" title="Zeitbox um 15 Minuten ab jetzt verlängern">+15 min</button><button class="go" data-fbopen="1">Abschliessen</button>`
-        : '<button class="go" data-fbopen="1" title="Fokus-Modus öffnen: Uhr, Gedanken parken, abschliessen">Fokus-Modus</button>'}
+        : '<button class="go" data-fbopen="1" title="Sitzung im Vollbild: Uhr, Gedanken parken, abschliessen">Vollbild</button>'}
       <i class="prog" id="fbProg" style="width:${Math.max(0, Math.min(100, 100 * (1 - left / (m.ses.planned_min * 60)))).toFixed(1)}%"></i>`;
   el.innerHTML = `<span class="tag">${esc(m.tag)}</span><div class="now"><b title="${esc(m.title)}">${esc(m.title)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div>
     ${m.soll ? `<span class="soll" title="Der feste Block gehört zu einem anderen Bereich als diese Sitzung">${esc(m.soll)}</span>` : ''}${m.warn ? '<span class="soll">anderer Bereich</span>' : ''}${right}`;
@@ -4401,7 +4446,7 @@ function focusRail() {
     const max = Math.max(a.target_secs, a.secs, 1);
     const tgt = a.target_pct ? ` von ${H(a.target_secs)} (${a.target_pct} %)` : '';
     const lag = a.target_pct && a.behind_secs >= 1800 ? `<span class="lag">${H(a.behind_secs)} hinter Plan</span>` : a.target_pct && a.secs ? `<span class="lead">im Plan${a.ahead_secs >= 1800 ? ', ' + H(a.ahead_secs) + ' voraus' : ''}</span>` : '';
-    return `<div class="farea ${arCls(a.id)}"><div class="l1"><b>${esc(a.name)}</b><span>${H(a.secs)}${tgt}</span></div>
+    return `<div class="farea ${arCls(a.id)}" ${f.session ? '' : `data-fsess="area:${esc(a.id)}" role="button" tabindex="0" title="Sitzung für ${esc(a.name)} starten"`}><div class="l1"><b>${esc(a.name)}</b><span>${H(a.secs)}${tgt}</span></div>
       ${a.target_pct ? `<div class="fabar" title="Soll bis jetzt: ${H(a.due_secs)}"><i style="width:${(100 * a.secs / max).toFixed(1)}%"></i><em style="left:${(100 * a.due_secs / max).toFixed(1)}%"></em></div>` : ''}
       ${lag}${a.target_pct ? `<button class="quiet-btn" data-fsess="area:${esc(a.id)}" style="justify-self:start">${ic('play')} ${esc(a.name)}-Block starten</button>` : ''}</div>`;
   }).join('');
@@ -4525,7 +4570,7 @@ $('fmode').addEventListener('click', async ev => {
     try {
       const r = await post('/api/focus/end', { result: en.dataset.fmend });
       FM_OPEN = false; state.focus = r; renderFmode(); document.title = 'tinyops';
-      toast(`Sitzung beendet: ${r.ended.minutes} min${r.ended.xp ? ` · +${r.ended.xp} XP` : ''}${r.ended.parked ? ` · ${r.ended.parked} geparkt` : ''}`);
+      toast(`Sitzung beendet: ${r.ended.minutes} min${r.ended.xp && F().score !== false ? ` · +${r.ended.xp} XP` : ''}${r.ended.parked ? ` · ${r.ended.parked} geparkt` : ''}`);
       await load();
     } catch (e) { toast(e.message); }
   }
@@ -4590,8 +4635,8 @@ function wsRepo(r, i) {
   const wts = (r.worktrees || []).map(w => {
     const run = WS.runs[w.branch];
     return `<div class="wsbr"><code title="${esc(w.path)}">${esc(w.path)}</code><span class="up">${w.detached ? 'Commit ' + esc(w.sha) : esc(w.branch)}</span>
-      <span class="ah">${w.missing ? '<b>Ordner fehlt</b>' : w.dirty ? `<b>${w.dirty} offen</b>` : '<small>sauber</small>'}</span><small>${w.agent ? 'Agent' : ''}</small>
-      <span class="wsact">${run ? `<button class="chip ${AG_ST[run.status] || ''}" data-arun="${run.id}">${esc(run.agent)} · ${esc(run.status)}</button>` : ''}<button class="quiet-btn" data-wscopy="${esc(w.path)}">${ic('copy')} Pfad</button></span></div>`; }).join('');
+      <span class="ah">${w.missing ? '<b>Ordner fehlt</b>' : w.dirty ? `<b>${w.dirty} offen</b>` : '<small>sauber</small>'}</span><small>${w.agent ? (w.path.includes('.tinyops-wt') ? 'tinyops' : 'Agent') : ''}</small>
+      <span class="wsact">${run ? `<button class="chip ${AG_ST[run.status] || ''}" data-arun="${run.id}">${esc(run.agent)} · ${esc(run.status)}</button>` : ''}<button class="quiet-btn" data-wscopy="${esc(w.path)}">${ic('copy')} Pfad</button>${!w.dirty ? `<button class="quiet-btn" data-wtrm="${esc(w.path)}" data-wtrepo="${esc(r.path)}" title="${w.missing ? 'Eintrag entfernen, der Ordner fehlt schon' : 'Worktree entfernen. Nur wenn sauber, und nur wenn sein Commit noch auf einem Branch liegt'}">${w.missing ? 'Eintrag entfernen' : 'Entfernen'}</button>` : ''}</span></div>`; }).join('');
   return `<details class="wsrepo ${cls}" ${LS.get('wsOpen.' + r.path, false) ? 'open' : ''} data-wsrepo="${esc(r.path)}"><summary>
       <div class="wsname"><b>${esc(r.name)}</b><span class="st st-${hk}">${hl}</span>${known}<small title="${esc(r.path)}">${esc(r.rel || r.path)}${r.remote ? ' · ' + esc(r.remote) : ''}${r.head ? ' · auf ' + esc(r.head) : ''}</small></div>
       <div class="wsfacts">${wsFacts(r)}</div>
@@ -4605,17 +4650,20 @@ function renderWs() {
   if (!WS) { el.innerHTML = '<div class="empty">Durchsuche die Workspaces …</div>'; return; }
   if (WS.enabled === false) { el.innerHTML = '<div class="empty">Workspaces sind ausgeschaltet (Einstellungen → Workspaces).</div>'; return; }
   const t = WS.totals || {}, repos = WS.repos || [];
-  const flt = { todo: r => r.todo || !r.ok, all: () => true, agent: r => r.agent_branches || (r.worktrees || []).some(w => w.agent), unknown: r => !r.project };
+  const flt = { todo: r => r.todo || !r.ok, all: () => true, agent: r => r.agent_branches || (r.worktrees || []).some(w => w.agent), unknown: r => !r.project,
+                wt: r => (r.worktrees || []).length };
+  const wtAll = t.worktrees || 0, wtStale = t.worktrees_tidy || 0;
   const shown = repos.map((r, i) => [r, i]).filter(([r]) => (flt[WSF] || flt.all)(r));
   const fbtn = (k, l, n) => `<button class="${WSF === k ? 'on' : ''}" data-wsf="${k}">${l}${n != null ? ' ' + n : ''}</button>`;
   const roots = (WS.roots || []).map(r => `<div class="wsplain"><code>${esc(r.path)}</code><span class="quiet small">${esc(r.why)}</span><span class="sp"></span><span class="${r.ok ? 'quiet' : 'chip bad'} small">${r.ok ? `${r.repos} Repos${r.plain ? ', ' + r.plain + ' ohne Git' : ''}` : 'Ordner nicht gefunden'}</span></div>`).join('');
   el.innerHTML = `<div class="wshead"><h2>Workspaces</h2><span class="quiet small">${WS.ts ? 'Stand ' + new Date(WS.ts * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : ''}${WS.secs ? ` · ${WS.secs} s` : ''}${WS.partial ? ' · unvollständig (Zeitlimit)' : ''}</span><span class="sp"></span>
       <button id="wsReload" ${WSBUSY ? 'disabled' : ''}>${WSBUSY ? 'Lese …' : 'Neu einlesen'}</button></div>
     ${WS.error ? `<div class="banner bad">${esc(WS.error)}</div>` : ''}
-    <div class="wssum"><div><b class="${t.todo ? 'hot' : ''}">${t.todo || 0}</b><span>von ${t.repos || 0} Repos mit lokaler Arbeit</span></div><div><b class="${t.commits ? 'hot' : ''}">${t.commits || 0}</b><span>Commits nicht gepusht</span></div>
-      <div><b>${t.dirty || 0}</b><span>Repos mit offenen Dateien</span></div><div><b>${t.stashes || 0}</b><span>Stashes</span></div><div><b>${t.agent_branches || 0}</b><span>Agent-Branches</span></div></div>
+    <div class="wssum"><div data-wsf="todo" role="button" tabindex="0" title="Diese Repos zeigen"><b class="${t.todo ? 'hot' : ''}">${t.todo || 0}</b><span>von ${t.repos || 0} Repos mit lokaler Arbeit</span></div><div data-wsf="todo" role="button" tabindex="0" title="Repos mit nicht gepushten Commits zeigen"><b class="${t.commits ? 'hot' : ''}">${t.commits || 0}</b><span>Commits nicht gepusht</span></div>
+      <div data-wsf="todo" role="button" tabindex="0"><b>${t.dirty || 0}</b><span>Repos mit offenen Dateien</span></div><div data-wsf="todo" role="button" tabindex="0"><b>${t.stashes || 0}</b><span>Stashes</span></div><div data-wsf="agent" role="button" tabindex="0" title="Repos mit Agent-Branches zeigen"><b>${t.agent_branches || 0}</b><span>Agent-Branches</span></div>
+      <div data-wsf="wt" role="button" tabindex="0" title="Repos mit Worktrees zeigen"><b class="${wtStale ? 'hot' : ''}">${wtAll}</b><span>Worktrees${wtStale ? `, ${wtStale} aufzuräumen` : ''}</span></div></div>
     ${!(WS.roots || []).length ? `<div class="banner warn">Noch kein Workspace bekannt. Trage unter Einstellungen → Workspaces den Ordner ein, in dem deine Projekte liegen (z. B. <code>~/work</code>).</div>` : ''}
-    <div class="wsfilter">${fbtn('todo', 'Mit lokaler Arbeit', t.todo || 0)}${fbtn('all', 'Alle', repos.length)}${fbtn('agent', 'Agenten', repos.filter(flt.agent).length)}${fbtn('unknown', 'Nicht in tinyops', t.unknown || 0)}</div>
+    <div class="wsfilter">${fbtn('todo', 'Mit lokaler Arbeit', t.todo || 0)}${fbtn('all', 'Alle', repos.length)}${fbtn('agent', 'Agenten', repos.filter(flt.agent).length)}${fbtn('unknown', 'Nicht in tinyops', t.unknown || 0)}${fbtn('wt', 'Worktrees', repos.filter(flt.wt).length)}</div>
     ${shown.map(([r, i]) => wsRepo(r, i)).join('') || `<div class="empty">${WSF === 'todo' && repos.length ? 'Alles gepusht. Nichts liegt nur auf diesem Rechner.' : 'Keine Repos in dieser Ansicht.'}</div>`}
     ${(WS.plain || []).length ? `<h3 style="margin:22px 0 6px">Projekte ohne Git <small class="quiet">nicht versioniert, nicht gesichert</small></h3>${WS.plain.map(p => `<div class="wsplain"><b>${esc(p.name)}</b><span class="chip">${esc(p.kind)}</span><span class="quiet small">${esc(p.rel)}</span><span class="sp"></span><button class="quiet-btn" data-wscopy="git -C &quot;${esc(p.path)}&quot; init" title="Befehl kopieren">${ic('copy')} git init</button></div>`).join('')}` : ''}
     ${roots ? `<h3 style="margin:22px 0 6px">Durchsuchte Ordner</h3>${roots}<div class="small quiet" style="margin-top:8px">tinyops liest nur lokal und pusht nie. «Voraus» und «hinter» gelten für den Stand des letzten Abholens.</div>` : ''}`;
@@ -4664,7 +4712,7 @@ function openMeetBook(id) {
   const opts = [...new Set([ev.key, pin && !pin.startsWith('hd:') ? pin : '', ...(f ? f.areas.map(a => a.ticket || a.name) : [])].filter(Boolean))];
   $('wsDlgBody').innerHTML = `<div style="display:grid;gap:12px"><div><strong>Termin als Zeit übernehmen</strong><div class="quiet small">${esc(ev.subject)}, ${hhmm(ev.start)}–${hhmm(ev.end)} (${Math.round((ev.end - ev.start) / 60)} min). Landet in der Zeiterfassung; gebucht wird erst, wenn du den Entwurf bestätigst.</div></div>
     <div class="field"><label for="mbKey">Worauf</label><input id="mbKey" class="full" list="mbOpts" value="${esc(opts[0] || '')}" placeholder="Ticket (z. B. DLP-120) oder Bereich"><datalist id="mbOpts">${opts.map(o => `<option value="${esc(o)}">`).join('')}</datalist></div>
-    ${f ? `<div class="field"><label for="mbArea">Fokusbereich</label><select id="mbArea" class="full"><option value="">automatisch</option>${f.areas.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>` : ''}
+    ${f ? `<div class="field"><label for="mbArea">Bereich</label><select id="mbArea" class="full"><option value="">automatisch</option>${f.areas.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>` : ''}
     <div class="row"><button class="primary" id="mbGo">Übernehmen</button><button id="mbNo">Abbrechen</button></div></div>`;
   $('wsDlg').showModal(); $('mbKey').focus();
   $('mbNo').onclick = () => $('wsDlg').close();
@@ -4713,6 +4761,11 @@ document.addEventListener('click', async ev => {
   if (!t.closest('#viewWs')) return;
   if (t.id === 'wsReload') { loadWs(true); return; }
   const f = t.closest('[data-wsf]'); if (f) { WSF = f.dataset.wsf; LS.set('wsFilter', WSF); renderWs(); return; }
+  const wr = t.closest('[data-wtrm]');
+  if (wr) { ev.preventDefault();
+    if (!confirm(`Worktree entfernen?\n\n${wr.dataset.wtrm}\n\ntinyops entfernt ihn nur, wenn er sauber ist und sein Commit noch auf einem Branch oder Remote liegt.`)) return;
+    try { const res = await post('/api/workspaces/wt_remove', { path: wr.dataset.wtrepo, worktree: wr.dataset.wtrm }); WS = res; toast(res.message || 'Entfernt'); renderWs(); } catch (e) { toast(e.message); }
+    return; }
   const c = t.closest('[data-wscopy]'); if (c) { ev.preventDefault(); await copyText(c.dataset.wscopy, 'Kopiert'); toast('Kopiert'); return; }
   const fe = t.closest('[data-wsfetch]');
   if (fe) { ev.preventDefault(); const r = WS.repos[+fe.dataset.wsfetch]; fe.disabled = true; fe.textContent = 'Hole …';

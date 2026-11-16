@@ -449,6 +449,22 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5e. Weniger Begriffe, Worktrees, Verbindung (neu in 0.35.0)
+
+**Zwei Begriffe statt fünf** (Entscheid E4):
+- **Fokus** ist das, woran du gerade bist, mit Sitzung. Die Leiste unter der Kopfzeile und das Vollbild gehören zur Sitzung.
+- **Bereiche** verteilen deine Woche (Einstellungen → Bereiche und Wochenziel). Klick auf einen Bereich in der Seitenleiste startet eine Sitzung dafür.
+
+**Spielstand** (Entscheid E3): Punkte und Serie stehen nur noch auf einer Karte im Fokus, ohne Level-Balken. Abschalten unter Einstellungen → Weiteres → «Spielstand». Dann gibt es auch keine XP-Meldungen.
+
+**Worktrees in Workspaces.** Agenten und tinyops legen Worktrees an. Workspaces zählt sie oben, die Zahl filtert auf Repos mit Worktrees. Ein Worktree lässt sich entfernen, wenn er sauber ist und sein Commit noch auf einem Branch oder Remote liegt. Sonst fehlt der Knopf, damit keine Arbeit verloren geht.
+
+**Kleinigkeiten aus dem Nutzungsbericht:**
+- Ist tinyops kurz weg (Neustart, Update, Rechner schlief), steht oben ein Hinweis, und das Panel verbindet sich selbst wieder.
+- Prüfen: Klick auf den Text eines Punkts öffnet eine Notiz, Klick auf einen Befehl kopiert ihn.
+- Ein fehlgeschlagenes «Fetch» sagt kurz, was zu tun ist (Schlüssel, Netz, Rechte).
+- Nimmst du ein tiny-Ticket aus seiner letzten Kategorie, fragt tinyops, ob es zurück in den Ideenpool soll.
+
 ## 5d. Einfach reviewen und ausprobieren (neu in 0.32.0)
 
 **Kurz vorab.** Jeder fertige Lauf beginnt mit einer kurzen Übersicht: was jetzt anders ist, jede Datei mit Umfang und Begründung, wo du anfangen sollst, Kriterien und Belege. Begründungen stehen im Bericht, nicht als Kommentar im Code. Fehlt eine, steht dort «Keine Begründung». Kommen fünf oder mehr neue Kommentarzeilen dazu, erscheint ein Hinweis.
@@ -580,7 +596,7 @@ Der Tab «Workspaces» zeigt je lokalem Repo, was nur auf deinem Rechner liegt: 
   ```json
   "helpdesk": {"watch_jql": "watcher = currentUser() AND (assignee is EMPTY OR assignee != currentUser()) AND resolution = Unresolved ORDER BY updated DESC"}
   ```
-- **Fokus-Leiste:** Der Balken unter der Kopfzeile zeigt in jeder Ansicht die laufende Sitzung, die laufende Zeit oder den Block, der jetzt dran wäre.
+- **Leiste unter der Kopfzeile** (bis 0.34 «Fokus-Leiste»): Der Balken zeigt in jeder Ansicht die laufende Sitzung, die laufende Zeit oder den Block, der jetzt dran wäre.
 
 ## 4ö. Helpdesk, Fokusbereiche und Fokus-Modus (neu in 0.23.0)
 
@@ -596,12 +612,12 @@ Der Tab «Workspaces» zeigt je lokalem Repo, was nur auf deinem Rechner liegt: 
              "queue_jql": "project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC", "sla_hours": 24, "area": "hd"}
 ```
 
-**Fokusbereiche** (Einstellungen → Fokusbereiche) verteilen deine Woche. Standard ist Berufsbildung mit 30 %.
+**Fokusbereiche** (Einstellungen → Bereiche und Wochenziel) verteilen deine Woche. Standard ist Berufsbildung mit 30 %.
 - Die Seitenleiste zeigt je Bereich Ist, Ziel und «Soll bis jetzt», dazu den Rückstand in Stunden.
 - Feste Blöcke (`Di 13:30-17:00, Do 08:00-10:00`) erscheinen zur Blockzeit als Band über dem Fokus.
 - Zeit ohne Vorhaben (z. B. «Betreuung Lernende») bucht auf das Buchungsziel des Bereichs, sonst auf seinen Namen.
 
-**Fokus-Sitzung:** Aufgabe oder Bereich wählen, Tätigkeit, 25/50/90 Minuten. Der Fokus-Modus blendet alles andere aus.
+**Fokus-Sitzung:** Aufgabe oder Bereich wählen, Tätigkeit, 25/50/90 Minuten. «Vollbild» (bis 0.34 «Fokus-Modus») blendet alles andere aus.
 - Was dir dazwischen einfällt, parkst du mit einem Satz in der Ideenbox.
 - «Klein machen» lässt die Sitzung als Uhr in der Kopfzeile weiterlaufen.
 - Braucht die Zeiterfassung (Einstellungen → Zeit).

@@ -296,6 +296,60 @@ def inspect(path, hosts=None, projects=(), now=None):
     return info
 
 
+def fetch_hint(err):
+    """Lesbare Meldung statt der rohen Ausgabe von git fetch (0.35, aus dem Verlauf: «project … could not be found»)."""
+    e = (err or "").lower()
+    if "host key verification failed" in e or "publickey" in e:
+        return "Abholen geht nicht: Der SSH-Schlüssel wird abgelehnt oder der Server ist noch unbekannt (ssh -T einmal von Hand)."
+    if "could not resolve host" in e or "timed out" in e or "connection refused" in e or "network is unreachable" in e:
+        return "Abholen geht nicht: Der Server ist nicht erreichbar (VPN? Netz?)."
+    if "could not be found" in e or "not found" in e or "permission" in e or "access denied" in e:
+        return "Abholen geht nicht: Das Remote kennt dieses Projekt nicht oder du hast keinen Zugriff. Prüfe die Remote-URL (git remote -v) und ob das Projekt umgezogen ist."
+    first = next((ln.strip() for ln in (err or "").splitlines() if ln.strip() and not set(ln.strip()) <= set("=-")
+                  and ln.strip().lower() not in ("remote:",)), "")
+    return "Abholen fehlgeschlagen: %s" % (first[:200] or "git fetch meldet einen Fehler")
+
+
+def wt_tidy(w):
+    """Kann dieser Worktree weg? Ordner fehlt, oder sauber und von tinyops oder einem Agenten angelegt (0.35)."""
+    return bool(w.get("missing") or (not w.get("dirty") and w.get("agent")))
+
+
+def worktree_remove(repo, wt_path):
+    """Einen Worktree sicher entfernen. Nur sauber, und nur wenn sein Commit noch auf einem Branch oder Remote liegt.
+    Fehlt der Ordner, räumt git worktree prune den Eintrag weg. Gibt (ok, meldung) zurück."""
+    rc, out, err = _git(repo, "worktree", "list", "--porcelain")
+    if rc:
+        return False, (err or "git worktree list geht nicht")[:200]
+    paths = {}
+    cur = None
+    for line in out.splitlines() + [""]:
+        if line.startswith("worktree "):
+            cur = {"path": line[9:], "sha": "", "branch": ""}
+        elif cur is not None and line.startswith("HEAD "):
+            cur["sha"] = line[5:]
+        elif cur is not None and line.startswith("branch "):
+            cur["branch"] = line[7:]
+        elif cur is not None and not line:
+            paths[os.path.realpath(cur["path"])] = cur
+            cur = None
+    w = paths.get(os.path.realpath(wt_path))
+    if not w or os.path.realpath(wt_path) == os.path.realpath(repo):
+        return False, "Diesen Worktree kennt das Repo nicht."
+    if not os.path.isdir(wt_path):
+        rc, _, err = _git(repo, "worktree", "prune")
+        return (rc == 0), ("Eintrag entfernt (Ordner fehlte)." if rc == 0 else err[:200])
+    st = status_of(wt_path)
+    if st and st["total"]:
+        return False, "Im Worktree gibt es %d geänderte Dateien. Erst ansehen, dann selbst aufräumen." % st["total"]
+    if not w["branch"]:
+        rc, out, _ = _git(repo, "for-each-ref", "--contains", w["sha"], "--count=1", "--format=%(refname)", "refs/heads", "refs/remotes")
+        if rc or not out.strip():
+            return False, "Der Commit %s liegt auf keinem Branch und keinem Remote. Beim Entfernen ginge er verloren." % w["sha"][:10]
+    rc, _, err = _git(repo, "worktree", "remove", wt_path)
+    return (rc == 0), ("Worktree entfernt." if rc == 0 else (err or "git worktree remove geht nicht")[:200])
+
+
 def summary(r):
     """Kennzahlen eines Repos: Was würde verloren gehen, wenn die Platte stirbt?"""
     unpushed = [b for b in r["branches"] if b["ahead"] > 0]
@@ -364,7 +418,9 @@ def totals(res, stale_days=2):
             "plain": len((res or {}).get("plain") or []), "unknown": sum(1 for r in repos if not r.get("project")),
             "secrets": sum(len(r.get("secrets") or []) for r in repos), "secret_repos": [r["name"] for r in repos if r.get("secrets")][:5],
             "stale": [{"name": r["name"], "days": r.get("oldest_days") or r.get("stash_age_days"), "commits": r["unpushed_commits"]} for r in stale[:5]],
-            "oldest_days": max([r.get("oldest_days") or 0 for r in todo] or [0]), "ts": (res or {}).get("ts"), "partial": bool((res or {}).get("partial"))}
+            "oldest_days": max([r.get("oldest_days") or 0 for r in todo] or [0]), "ts": (res or {}).get("ts"), "partial": bool((res or {}).get("partial")),
+            "worktrees": sum(len(r.get("worktrees") or []) for r in repos),
+            "worktrees_tidy": sum(1 for r in repos for w in r.get("worktrees") or [] if wt_tidy(w))}
 
 
 def fetch(path):
