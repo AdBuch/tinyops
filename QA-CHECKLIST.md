@@ -111,10 +111,13 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 - [ ] `r35-01` Workspaces → Zahl «Worktrees» anklicken → nur Repos mit Worktrees; ein sauberer, alter Worktree eines Agenten → «Entfernen» → weg, `git worktree list` zeigt ihn nicht mehr; ein Worktree mit offenen Dateien hat keinen Knopf
 - [ ] `r35-02` Board: ein tiny-Ticket aus seiner einzigen Kategorie nehmen → Frage «zurück in den Ideenpool?» → ja: es steht bei den Ideen, nein: nichts ändert sich
-- [ ] `r35-03` Einstellungen → Weiteres → «Spielstand» aus, speichern → im Fokus keine Punkte-Karte, beim Abhaken und Sitzungsende keine XP; wieder an → alles wie vorher
+- [ ] `r35-03` Einstellungen → Fokus → «Spielstand im Fokus zeigen» aus, speichern → im Fokus keine Punkte-Karte, beim Abhaken und Sitzungsende keine XP; wieder an → alles wie vorher
 - [ ] `r35-04` Workspaces → «Fetch» bei einem Repo ohne Zugriff → eine kurze Meldung mit dem nächsten Schritt statt der rohen git-Ausgabe [auto: test_v35.FetchHint]
 - [ ] `r35-05` Prüfen → Klick auf den Text eines Punkts → Notizfeld; Klick auf einen Befehl im Text → kopiert [auto: test_ui.QaSession]
 - [ ] `r35-06` tinyops neu starten, während das Panel offen ist → oben «Keine Verbindung … Neuer Versuch in …», danach verschwindet der Hinweis von selbst [auto: test_ui.Offline]
+- [ ] `r351-01` Config von vor 0.35 (ohne «score») → Fokus zeigt die Spielstand-Karte oben rechts [auto: test_v35.V351]
+- [ ] `r351-02` Einstellungen → BCS-Token eintragen, speichern → oben unter «Zugänge» steht BCS grün [auto: test_v35.V351]
+- [ ] `r351-03` Einstellungen öffnen → «Zugänge» zugeklappt ganz oben, aufklappen → «Eintragen» springt zum Abschnitt [auto: test_ui.Tokens]
 
 ## 0.34.0
 
@@ -162,7 +165,7 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 ## 0.29.0
 
-- [ ] `r29-01` Einstellungen → Zeiterfassung → BCS-Middleware: Adresse `http://127.0.0.1:3210` (und Token, falls gesetzt) speichern → in der Zeit-Ansicht erscheint die Karte «BCS» mit Anwesenheit und den Einträgen des Tages
+- [ ] `r29-01` Einstellungen → Zeiterfassung → BCS-Middleware: Adresse `http://127.0.0.1:3210` oder, mit Haken «Middleware im eigenen Netz», die Adresse des Windows-Hosts (und Token, falls gesetzt) speichern → in der Zeit-Ansicht erscheint die Karte «BCS» mit Anwesenheit und den Einträgen des Tages
 - [ ] `r29-02` Eine Adresse ausserhalb von 127.0.0.1/localhost wird beim Speichern abgelehnt [auto: test_v29.Unit]
 - [ ] `r29-03` Entwurf bestätigen → «BCS-Aufgabe wählen» → Suche findet die Aufgabe, «oft gebucht» zeigt Vorschläge; mit «für alle DLP-… merken» haben auch andere DLP-Entwürfe die Aufgabe
 - [ ] `r29-04` «In BCS prüfen» → Dialog zeigt die Buchungen mit «DLP-… …», in BCS ist noch nichts gebucht; dann «In BCS buchen» → «In BCS gebucht», in BCS stehen die Einträge genau einmal

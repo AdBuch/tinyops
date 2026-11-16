@@ -453,9 +453,9 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Zwei Begriffe statt fünf** (Entscheid E4):
 - **Fokus** ist das, woran du gerade bist, mit Sitzung. Die Leiste unter der Kopfzeile und das Vollbild gehören zur Sitzung.
-- **Bereiche** verteilen deine Woche (Einstellungen → Bereiche und Wochenziel). Klick auf einen Bereich in der Seitenleiste startet eine Sitzung dafür.
+- **Bereiche** verteilen deine Woche (Einstellungen → Fokus). Klick auf einen Bereich in der Seitenleiste startet eine Sitzung dafür.
 
-**Spielstand** (Entscheid E3): Punkte und Serie stehen nur noch auf einer Karte im Fokus, ohne Level-Balken. Abschalten unter Einstellungen → Weiteres → «Spielstand». Dann gibt es auch keine XP-Meldungen.
+**Spielstand** (Entscheid E3): Punkte und Serie stehen nur noch auf einer Karte im Fokus, ohne Level-Balken. Ein- und abschalten unter Einstellungen → Fokus → «Spielstand im Fokus zeigen». Dann gibt es auch keine XP-Meldungen.
 
 **Worktrees in Workspaces.** Agenten und tinyops legen Worktrees an. Workspaces zählt sie oben, die Zahl filtert auf Repos mit Worktrees. Ein Worktree lässt sich entfernen, wenn er sauber ist und sein Commit noch auf einem Branch oder Remote liegt. Sonst fehlt der Knopf, damit keine Arbeit verloren geht.
 
@@ -508,6 +508,11 @@ Einstellungen → Zeiterfassung → BCS-Middleware: «In BCS buchen» einschalte
 ```json
 "time": {"enabled": true, "bcs": {"enabled": true, "url": "http://127.0.0.1:3210", "apprentices": true}}
 ```
+
+**Middleware auf einem anderen Rechner** (0.35.1), z. B. tinyops in WSL oder einer VM und die Middleware auf dem Windows-Host. Am einfachsten bleibt es bei `127.0.0.1`:
+- WSL: `networkingMode=mirrored` unter `[wsl2]` in `%UserProfile%\.wslconfig`, danach `wsl --shutdown`.
+- Sonst ein SSH-Tunnel: `ssh -N -L 3210:127.0.0.1:3210 du@windows-host`.
+- Direkt geht es mit dem Haken «Middleware im eigenen Netz» (`"allow_lan": true`), nur für private Adressen. Die Middleware muss dann Anfragen aus dem Netz annehmen, sonst antwortet sie mit 403.
 
 In der Zeit-Ansicht: Entwürfe bestätigen → je Entwurf «BCS-Aufgabe wählen» (einmal je Projekt reicht) → «In BCS prüfen» → «In BCS buchen». Nur was die Middleware als `committed` meldet, gilt als gebucht. Bricht die Verbindung ab, sind die Entwürfe «unklar», bis du «Mit BCS abgleichen» wählst; tinyops wiederholt nie von selbst.
 
@@ -612,7 +617,7 @@ Der Tab «Workspaces» zeigt je lokalem Repo, was nur auf deinem Rechner liegt: 
              "queue_jql": "project = SD AND assignee is EMPTY AND resolution = Unresolved ORDER BY created DESC", "sla_hours": 24, "area": "hd"}
 ```
 
-**Fokusbereiche** (Einstellungen → Bereiche und Wochenziel) verteilen deine Woche. Standard ist Berufsbildung mit 30 %.
+**Fokusbereiche** (Einstellungen → Fokus) verteilen deine Woche. Standard ist Berufsbildung mit 30 %.
 - Die Seitenleiste zeigt je Bereich Ist, Ziel und «Soll bis jetzt», dazu den Rückstand in Stunden.
 - Feste Blöcke (`Di 13:30-17:00, Do 08:00-10:00`) erscheinen zur Blockzeit als Band über dem Fokus.
 - Zeit ohne Vorhaben (z. B. «Betreuung Lernende») bucht auf das Buchungsziel des Bereichs, sonst auf seinen Namen.

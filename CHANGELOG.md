@@ -5,6 +5,21 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.35.1]
+
+Korrekturen nach deinem Test am 16.11.
+
+### Behoben
+- **Spielstand fehlte im Fokus:** Eine Config, die vor 0.35 gespeichert wurde, kennt den Schalter «score» nicht. Der Server las das als «aus», die Einstellungen zeigten «an». Jetzt gilt ein fehlender Schalter als Standard, der Spielstand ist wieder da.
+- **BCS-Token liess sich nicht speichern** (seit 0.29): Der Secret-Speicher kannte den Namen `bcs_token` nicht und hatte stattdessen noch das alte `mcp_token`.
+
+### Neu
+- **Zugänge auf einen Blick:** Ganz oben in den Einstellungen, zugeklappt, eine Zeile mit allen gespeicherten Tokens. Fehler und Fehler beim letzten Abgleich sind rot. Aufgeklappt siehst du je Token den Zustand, woher es kommt (Schlüsselbund, Datei, Umgebung) und «Ändern» oder «Eintragen».
+- **BCS-Middleware im eigenen Netz:** Mit dem Haken «Middleware im eigenen Netz» geht auch eine private Adresse, z. B. der Windows-Host deiner VM. Öffentliche Adressen bleiben gesperrt. Die Hilfe zeigt zwei Wege, bei denen 127.0.0.1 bleibt: WSL mit `networkingMode=mirrored` oder ein SSH-Tunnel.
+
+### Geändert
+- Der Schalter für den Spielstand steht jetzt unter Einstellungen → **Fokus** (bisher «Weiteres»). Der Abschnitt heisst «Fokus: Bereiche, Wochenziel, Spielstand».
+
 ## [0.35.0]
 
 Weniger Begriffe (E3, E4) aus dem Plan, dazu tote Klicks, Fehler und der Worktree-Wunsch aus deinem Nutzungsbericht und dem Verlauf vom 16.11.

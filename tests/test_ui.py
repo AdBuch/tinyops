@@ -383,6 +383,20 @@ class Offline(UiCase):
         self.wait_js("!document.getElementById('offline')")
 
 
+class Tokens(UiCase):
+    def test_overview_top_collapsed(self):
+        """0.35.1: Zugänge oben in den Einstellungen, zugeklappt; «Eintragen» springt zum Abschnitt."""
+        pg = self.pg
+        self.tab("Einstellungen")
+        pg.wait_for_selector("#tokBox")
+        self.assertFalse(pg.evaluate("document.getElementById('tokBox').open"))
+        self.assertLess(pg.locator("#tokBox").bounding_box()["y"], pg.locator(".setgrid").bounding_box()["y"])
+        self.assertNotIn("Unbekanntes Secret", pg.locator("#tokBox").text_content())      # bcs_token ist speicherbar
+        pg.locator("#tokBox > summary").click()
+        pg.locator('[data-tokgo="time"]').click()
+        self.wait_js("document.querySelector('.setnav [data-goto=\"time\"]').classList.contains('on')")
+
+
 class Terms(UiCase):
     def test_score_switch_and_areas(self):
         """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""
@@ -390,8 +404,11 @@ class Terms(UiCase):
         self.tab("Einstellungen")
         self.wait_js("!!document.getElementById('ft-score')")
         txt = pg.locator("#viewSettings").inner_text()
-        self.assertIn("Bereiche und Wochenziel", txt)
+        self.assertIn("Fokus: Bereiche, Wochenziel, Spielstand", txt)      # 0.35.1: Spielstand-Schalter steht hier, nicht unter Weiteres
         self.assertNotIn("Fokusbereiche", txt)
+        sec = pg.locator("#s-focusareas")
+        self.assertEqual(sec.locator("#ft-score").count(), 1)
+        self.assertEqual(pg.locator("#s-more #ft-score").count(), 0)
         self.tab("Fokus")
         self.assertNotIn("Fokus-Modus", pg.locator("#viewFocus").inner_text())
         self.assertEqual(pg.locator("#viewFocus .lvl").count(), 0)

@@ -60,7 +60,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.35.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.35.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -371,7 +371,8 @@ def make_ssl(cfg):
 
 
 def feature(cfg, name):
-    return bool((cfg.get("features") or {}).get(name, False))
+    """Fehlt ein Schalter in der Config (z. B. «score» in einer Config von vor 0.35), gilt der Standard, nicht «aus»."""
+    return bool((cfg.get("features") or {}).get(name, DEFAULTS["features"].get(name, False)))
 
 
 def warn_plain_http(url, label):
@@ -1362,7 +1363,7 @@ class App:
             self.bcs = bcs.Demo()
         elif self.bcsc["enabled"]:
             try:
-                self.bcs = bcs.Client(self.bcsc["url"], secrets.get("bcs_token", ""))
+                self.bcs = bcs.Client(self.bcsc["url"], secrets.get("bcs_token", ""), allow_lan=self.bcsc.get("allow_lan", False))
             except bcs.BcsError as e:
                 self.bcs_error = str(e)
         self._bcs_prev = {}                      # draftId der Middleware → was tinyops dafür geprüft hat

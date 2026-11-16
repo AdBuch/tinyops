@@ -1416,9 +1416,10 @@ def build_config(current, p):
             bb, bc = t["bcs"], bcs.cfg(cfg)
             bc["enabled"] = bool(bb.get("enabled", bc["enabled"]))
             bc["apprentices"] = bool(bb.get("apprentices", bc["apprentices"]))
+            bc["allow_lan"] = bool(bb.get("allow_lan", bc["allow_lan"]))      # 0.35.1: Middleware z. B. auf dem Windows-Host
             u = str(bb.get("url", bc["url"]) or "").strip()
             try:
-                bc["url"] = bcs.check_url(u) if u else ""
+                bc["url"] = bcs.check_url(u, bc["allow_lan"]) if u else ""
             except bcs.BcsError as e:
                 errors["time.bcs.url"] = str(e)
                 bc["url"] = u

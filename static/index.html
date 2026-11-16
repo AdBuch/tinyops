@@ -361,6 +361,16 @@
   .setnav button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 8px; color: var(--quiet); font-weight: 600; }
   .setnav button:hover { background: var(--surface); color: var(--ink); }
   .setnav button.on { background: var(--surface); color: var(--ink); box-shadow: inset 3px 0 0 var(--focus); }
+  .tokbox { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .tokbox > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; cursor: pointer; list-style: none; }
+  .tokbox > summary::-webkit-details-marker { display: none; }
+  .tokbox > summary::before { content: "▸"; color: var(--quiet); } .tokbox[open] > summary::before { content: "▾"; }
+  .tokbox .tk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; white-space: nowrap; }
+  .tokbox .tk i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .tokbox .tk.bad i { background: var(--bad); } .tokbox .tk.off { color: var(--quiet); } .tokbox .tk.off i { background: none; border: 1.5px solid var(--quiet); box-sizing: border-box; }
+  .tokbox table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 6px; }
+  .tokbox td { padding: 5px 14px; border-top: 1px solid var(--line); vertical-align: top; } .tokbox td:last-child { text-align: right; } .tokbox td .bad { color: var(--bad); } .tokbox button { padding: 2px 10px; font-size: 12.5px; }
+  .tokbox .tkfoot { padding: 6px 14px 10px; }
   .sset { padding-bottom: 30px; margin-bottom: 30px; border-bottom: 1px solid var(--line); scroll-margin-top: calc(70px + var(--bar, 0px)); }
   .sset:last-child { border-bottom: 0; }
   .sset > header { all: unset; display: block; margin-bottom: 14px; }
@@ -1303,6 +1313,25 @@ function listBody(items, empty) {
   return `<div class="empty">${esc(empty)}</div>`;
 }
 
+// 0.35.1: Zugänge auf einen Blick, oben in den Einstellungen, zugeklappt
+const TOKS = [['gitlab_token', 'GitLab', 'gitlab'], ['jira_token', 'Jira', 'jira'], ['jira_password', 'Jira (Passwort)', 'jira'], ['github_token', 'GitHub', 'github'],
+  ['sonar_token', 'Sonar', 'sonar'], ['helpdesk_token', 'Helpdesk', 'helpdesk'], ['helpdesk_password', 'Helpdesk (Passwort)', 'helpdesk'], ['llm_key', 'KI-Entwurf', 'llm'], ['bcs_token', 'BCS', 'time']];
+function tokBox(S) {
+  const rows = TOKS.filter(([k]) => S.secrets[k]).map(([k, label, sec]) => ({ k, label, sec, ...S.secrets[k] }));
+  const on = rows.filter(r => r.set || r.error), off = rows.filter(r => !r.set && !r.error);
+  const errs = ((state.sync && state.sync.steps) || []).filter(x => x.status === 'err');
+  const src = s => /^Datei/.test(s || '') ? 'Datei' : (s || '');
+  const chip = r => `<span class="tk ${r.error ? 'bad' : r.set ? '' : 'off'}" title="${esc(r.error || src(r.source))}"><i></i>${esc(r.label)}</span>`;
+  const sum = `<b>Zugänge</b> ${on.map(chip).join('')}${on.length ? '' : '<span class="quiet small">noch keine gespeichert</span>'}
+    ${errs.length ? `<span class="tk bad"><i></i>letzter Abgleich: ${errs.length} Fehler</span>` : ''}<span class="quiet small">${esc(S.storage.keyring ? 'im Schlüsselbund' : 'in einer Datei')}</span>`;
+  const tr = r => `<tr><td>${esc(r.label)}</td><td>${r.error ? `<span class="bad">${esc(r.error)}</span>` : r.set ? 'gespeichert' : '<span class="quiet">nicht gesetzt</span>'}</td>
+    <td class="quiet">${esc(src(r.source))}</td><td><button data-tokgo="${r.sec}">${r.set ? 'Ändern' : 'Eintragen'}</button></td></tr>`;
+  return `<details class="tokbox" id="tokBox" ${LS.get('tokOpen', false) ? 'open' : ''}><summary>${sum}</summary>
+    <table>${on.map(tr).join('')}${off.map(tr).join('')}</table>
+    ${errs.length ? `<div class="tkfoot small"><b>Letzter Abgleich:</b> ${errs.map(x => esc(x.title) + (x.detail ? ': ' + esc(x.detail) : '')).join(' · ')}</div>` : ''}
+    <div class="tkfoot small quiet">Tokens werden nie angezeigt, nur ob sie da sind und woher sie kommen. Microsoft 365 meldet sich ohne Token an (Abschnitt Microsoft 365).</div></details>`;
+}
+
 // Sync-Anzeige: was wird gerade abgeglichen, danach eine ruhige Zusammenfassung
 let syncOpen = LS.get('syncOpen', false);
 function renderSync() {
@@ -1473,7 +1502,10 @@ const HELP = {
     <li>«In BCS prüfen»: Die Middleware prüft alle bestätigten Buchungen des Tages gemeinsam und zeigt Warnungen.</li><li>«In BCS buchen»: genau ein Versuch. Nur «committed» gilt als gebucht.</li></ol>
     <p>Bricht die Verbindung beim Buchen ab, werden die Entwürfe «unklar». tinyops wiederholt nie von selbst; «Mit BCS abgleichen» liest den Tag und markiert, was dort schon steht.</p>
     <p>Die Zeit läuft auf dem angehefteten Vorhaben, solange du das Panel benutzt. Nach <b>Leerlauf-Minuten</b> ohne Aktivität endet der Abschnitt, und tinyops fragt später, wohin die Lücke gehört.</p>
-    <p>Eine <b>Fokus-Sitzung</b> zählt als Aktivität, auch wenn du im Editor arbeitest. Sie endet von selbst zehn Minuten nach der Zeitbox, wenn du nicht verlängerst. Gebucht wird nichts automatisch: Du bestätigst die Entwürfe.</p>`,
+    <p>Eine <b>Fokus-Sitzung</b> zählt als Aktivität, auch wenn du im Editor arbeitest. Sie endet von selbst zehn Minuten nach der Zeitbox, wenn du nicht verlängerst. Gebucht wird nichts automatisch: Du bestätigst die Entwürfe.</p><p><b>Middleware auf einem anderen Rechner</b> (z. B. tinyops in WSL oder einer VM, die Middleware auf dem Windows-Host). Drei Wege, der erste ist der einfachste:</p>
+<ul><li><b>WSL:</b> in <code>%UserProfile%\.wslconfig</code> unter <code>[wsl2]</code> die Zeile <code>networkingMode=mirrored</code> eintragen, <code>wsl --shutdown</code>. Dann gilt <code>http://127.0.0.1:3210</code> auch in WSL, ohne Haken.</li>
+<li><b>SSH-Tunnel:</b> <code>ssh -N -L 3210:127.0.0.1:3210 du@windows-host</code>. tinyops spricht mit 127.0.0.1, die Middleware sieht eine lokale Anfrage.</li>
+<li><b>Direkt im Netz:</b> Haken «Middleware im eigenen Netz», Adresse wie <code>http://10.x.x.x:3210</code>. Die Middleware muss Anfragen aus dem Netz annehmen; sonst meldet sie «nicht lokal» (403).</li></ul>`,
   focusareas: `<p>Je Bereich ein Wochenziel in Prozent (z. B. Berufsbildung 30) und optional feste Blöcke (Tag, von, bis). Ein Bereich ohne Ticket bucht auf seinen Namen. Die Tätigkeiten erscheinen als Schnellwahl in der Fokus-Sitzung.</p>`,
   workspaces: `<p>Trag die Ordner ein, in denen deine Projekte liegen (z. B. <code>~/work</code>). tinyops sucht darunter bis zur eingestellten Tiefe nach Git-Repos und zeigt, was nur auf deinem Rechner liegt.</p>
     <p>Der <b>Geheimnis-Scan</b> prüft ungepushte Commits und offene Änderungen auf Passwörter und Tokens. tinyops pusht nie selbst; «Abholen» macht nur <code>git fetch</code>.</p>`,
@@ -3089,11 +3121,12 @@ async function loadSettings() {
   box.innerHTML = `
   ${S.demo ? '<div class="banner warn">Demo-Modus: Tests funktionieren, Speichern ist ausgeschaltet.</div>' : ''}
   ${!S.configured && !S.demo ? `<div class="banner warn"><strong>Erst verbinden.</strong> Trage unten GitLab (und, wenn du magst, Jira) ein, drücke jeweils «Verbindung testen» und dann «Speichern».</div>` : ''}
+  ${tokBox(S)}
   <div class="setgrid">
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Bereiche</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -3225,14 +3258,16 @@ async function loadSettings() {
       ${field('tm-idle', 'Leerlauf ab Minuten', S.time.idle_minutes, { type: 'number', err: 'time.idle_minutes', help: 'So lange ohne Aktivität im Panel: Die Zeit endet beim letzten Lebenszeichen, die Pause wird als Lücke vorgeschlagen.' })}
     </div>
     <h3 style="margin:18px 0 6px">BCS-Middleware</h3>
-    <label class="check"><input type="checkbox" id="bc-on" ${(S.time.bcs || {}).enabled ? 'checked' : ''}><span><strong>In BCS buchen</strong> <span class="quiet small">über deine Middleware auf diesem Rechner (Workflow-API). </span></span></label>
+    <label class="check"><input type="checkbox" id="bc-on" ${(S.time.bcs || {}).enabled ? 'checked' : ''}><span><strong>In BCS buchen</strong> <span class="quiet small">über deine Middleware (Workflow-API), auf diesem Rechner oder im eigenen Netz.</span></span></label>
     <div class="grid2">
-      ${field('bc-url', 'Adresse der Middleware', (S.time.bcs || {}).url || 'http://127.0.0.1:3210', { ph: 'http://127.0.0.1:3210', err: 'time.bcs.url', help: 'Nur 127.0.0.1 oder localhost.' })}
+      ${field('bc-url', 'Adresse der Middleware', (S.time.bcs || {}).url || 'http://127.0.0.1:3210', { ph: 'http://127.0.0.1:3210', err: 'time.bcs.url', help: 'Dieser Rechner (127.0.0.1) oder, mit dem Haken unten, eine private Adresse im eigenen Netz.' })}
       ${field('bc-secret', 'BCS_API_TOKEN (nur falls gesetzt)', '', { type: 'password', err: 'bcs_token', ph: S.secrets.bcs_token && S.secrets.bcs_token.set ? '•••••••• gespeichert' : '', help: 'Das Token der Middleware, nicht dein BCS-Passwort.' })}
     </div>
+    <label class="check"><input type="checkbox" id="bc-lan" ${(S.time.bcs || {}).allow_lan ? 'checked' : ''}><span>Middleware im eigenen Netz <span class="quiet small">(z. B. auf dem Windows-Host deiner VM; nur private Adressen. Das Token geht unverschlüsselt durchs Netz, wenn die Adresse mit http:// beginnt.)</span></span></label>
     <label class="check"><input type="checkbox" id="bc-appr" ${(S.time.bcs || {}).apprentices !== false ? 'checked' : ''}><span>Lernende in der Zeit-Ansicht zeigen <span class="quiet small">(nur lesen, was BCS dir zeigt)</span></span></label>`)}
 
-  ${sect('focusareas', 'Bereiche und Wochenziel', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
+  ${sect('focusareas', 'Fokus: Bereiche, Wochenziel, Spielstand', 'Wie viel deiner Woche wohin gehen soll. Ein Bereich mit Ziel (z. B. Berufsbildung 30 %) zeigt im Fokus, ob du im Plan bist, und lässt sich als Block mit Zeitbox starten. Zeit zählt zu einem Bereich, wenn du sie dort startest, wenn das Vorhaben in einer seiner Kategorien liegt oder (Helpdesk) wenn es ein Helpdesk-Ticket ist. Alles andere ist Entwicklung.', `
+    <label class="check"><input type="checkbox" id="ft-score" ${S.features.score !== false ? 'checked' : ''}><span><strong>Spielstand im Fokus zeigen</strong> <span class="quiet small">(Karte oben rechts: Schritte heute, Tagesziel, Serie und XP für erledigte Schritte)</span></span></label>
     <div class="grid3">
       ${field('fo-hours', 'Arbeitsstunden pro Woche', S.focus.week_hours, { type: 'number', err: 'focus.week_hours' })}
       ${field('fo-start', 'Arbeitstag ab', S.focus.day_start, { ph: '08:00', err: 'focus.day_start' })}
@@ -3332,7 +3367,6 @@ async function loadSettings() {
 
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
-    <label class="check"><input type="checkbox" id="ft-score" ${S.features.score !== false ? 'checked' : ''}><span>Spielstand <span class="quiet small">(Punkte und Serie für erledigte Schritte, eine Karte im Fokus)</span></span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
     <label class="check"><input type="checkbox" id="ux-on" ${S.ux.enabled ? 'checked' : ''}><span>UI-Nutzung lokal erfassen <span class="quiet small">(Klicks, Mausweg, Tasten ausserhalb von Feldern, nie Eingaben oder Titel; Bericht unter «Prüfen», zum Kopieren für die Verbesserung der Oberfläche)</span></span></label>
     ${field('ux-days', 'UI-Nutzung aufbewahren (Tage)', S.ux.days, { type: 'number', err: 'ux.days' })}`)}
@@ -3377,6 +3411,8 @@ async function loadSettings() {
       { rootMargin: '-80px 0px -70% 0px' });
     box.querySelectorAll('.sset').forEach(sec => spy.observe(sec));
   }
+  box.querySelectorAll('[data-tokgo]').forEach(b => b.onclick = ev => { ev.preventDefault(); const n = box.querySelector(`.setnav [data-goto="${b.dataset.tokgo}"]`); if (n) n.click(); });
+  { const tb = $('tokBox'); if (tb) tb.addEventListener('toggle', () => LS.set('tokOpen', tb.open)); }
   box.querySelectorAll('[data-goto]').forEach(btn => btn.onclick = () => {
     box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', x === btn));
     $('s-' + btn.dataset.goto).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
@@ -3825,7 +3861,7 @@ function collect() {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), agent_guards: { max_files: val('ag-gf'), max_lines: val('ag-gl'), extra: val('ag-gx') }, ide_command: val('ide-cmd'),
     time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), 
-      bcs: { enabled: $('bc-on').checked, url: val('bc-url'), apprentices: $('bc-appr').checked } },
+      bcs: { enabled: $('bc-on').checked, url: val('bc-url'), apprentices: $('bc-appr').checked, allow_lan: $('bc-lan').checked } },
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
       agent_message_patterns: split(val('bf-pat')), max_branches: val('bf-max'), max_age_days: val('bf-age'), ignore_branches: split(val('bf-ignore')) },
@@ -4155,7 +4191,7 @@ function renderRail() {
       <div class="week" aria-label="Schritte der letzten 7 Tage">${s.week.map(w => `<i class="${w.n ? '' : 'zero'} ${w.day === today ? 'today' : ''}" style="--h:${(w.n / mx).toFixed(2)}" title="${esc(w.day)}: ${w.n} Schritt${w.n === 1 ? '' : 'e'}"></i>`).join('')}</div>
       <div class="wdays">${s.week.map(w => `<span>${wd(w.day)}</span>`).join('')}</div>
       ${s.recent.length ? `<ul class="recent">${s.recent.slice(0, LS.get('scoreOpen', false) ? 12 : 4).map(r => `<li><b class="xp">+${r.xp}</b><span title="${esc(eventText(r))}">${esc(eventText(r))}</span></li>`).join('')}</ul>` : ''}
-      <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Teilschritte, Abnahmen, Reviews und Fokus-Sitzungen ab 20 min. Abschalten: Einstellungen → Weiteres. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
+      <div class="small quiet">${LS.get('scoreOpen', false) ? 'XP gibt es für erledigte Schritte, Teilschritte, Abnahmen, Reviews und Fokus-Sitzungen ab 20 min. Abschalten: Einstellungen → Fokus. Klick: weniger zeigen.' : 'Klick: mehr vom Verlauf'}</div>
     </section>`;
   }
   h += m365Rail();

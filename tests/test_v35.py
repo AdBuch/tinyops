@@ -114,3 +114,38 @@ class Terms(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class V351(unittest.TestCase):
+    """0.35.1: Korrekturen nach deinem Test am 16.11."""
+
+    def test_bcs_token_can_be_stored(self):
+        import secretstore
+        self.assertIn("bcs_token", secretstore.NAMES)                 # seit 0.29 liess sich das Token der Middleware nicht speichern
+        self.assertNotIn("mcp_token", secretstore.NAMES)
+        for n in settings.SECRET_FIELDS:
+            self.assertIn(n, secretstore.NAMES, n)                   # jedes Feld der Einstellungen ist auch speicherbar
+
+    def test_bcs_lan_only_with_flag_and_private(self):
+        import bcs
+        with self.assertRaises(bcs.BcsError) as e:
+            bcs.check_url("http://10.0.0.5:3210")
+        self.assertIn("Middleware im eigenen Netz", str(e.exception))
+        self.assertEqual(bcs.check_url("http://10.0.0.5:3210/", allow_lan=True), "http://10.0.0.5:3210")
+        self.assertEqual(bcs.check_url("http://192.168.1.5:3210", allow_lan=True), "http://192.168.1.5:3210")
+        with self.assertRaises(bcs.BcsError):
+            bcs.check_url("http://8.8.8.8:3210", allow_lan=True)          # öffentlich bleibt verboten
+        self.assertEqual(bcs.check_url("http://127.0.0.1:3210"), "http://127.0.0.1:3210")
+
+    def test_settings_keep_lan_flag(self):
+        cfg, err = settings.build_config({}, {"time": {"bcs": {"enabled": True, "url": "http://10.0.0.5:3210", "allow_lan": True}}})
+        self.assertEqual(err, {})
+        self.assertTrue(cfg["time"]["bcs"]["allow_lan"])
+        cfg, err = settings.build_config({}, {"time": {"bcs": {"enabled": True, "url": "http://10.0.0.5:3210"}}})
+        self.assertIn("time.bcs.url", err)
+
+    def test_score_on_when_old_config_lacks_key(self):
+        import server
+        self.assertTrue(server.feature({"features": {"ideas": True, "ai": False}}, "score"))   # Config von vor 0.35
+        self.assertFalse(server.feature({"features": {"score": False}}, "score"))
+        self.assertFalse(server.feature({"features": {}}, "ai"))

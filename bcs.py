@@ -7,16 +7,19 @@ Ablauf, wie die Middleware ihn vorgibt
    Bricht die Verbindung beim Bestätigen ab, ist unklar, ob gebucht wurde: dann nie automatisch wiederholen, sondern erst den Tag lesen.
 
 tinyops spricht nur mit einer Adresse auf diesem Rechner (Loopback) und schickt keine BCS-Zugangsdaten mit, höchstens das Token der Middleware.
+0.35.1: Mit dem Haken «allow_lan» auch eine private Adresse im eigenen Netz (z. B. der Windows-Host einer VM), nie eine öffentliche.
 """
+import ipaddress
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
-DEFAULTS = {"enabled": False, "url": "http://127.0.0.1:3210", "apprentices": True}
+DEFAULTS = {"enabled": False, "url": "http://127.0.0.1:3210", "apprentices": True, "allow_lan": False}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
@@ -36,21 +39,42 @@ def cfg(c):
     return out
 
 
-def check_url(url):
-    """Nur http(s) auf Loopback. Die Middleware nimmt laut Spezifikation ohnehin nur lokale Anfragen an."""
+def _private(host):
+    """Nur private, Link-local- oder Loopback-Adressen. Ein Name zählt nur, wenn alle seine Adressen privat sind."""
+    try:
+        ips = [ipaddress.ip_address(host.strip("[]"))]
+    except ValueError:
+        try:
+            ips = [ipaddress.ip_address(a[4][0].split("%")[0]) for a in socket.getaddrinfo(host, None)]
+        except (OSError, ValueError):
+            return False
+    return bool(ips) and all(ip.is_private or ip.is_link_local or ip.is_loopback for ip in ips)
+
+
+def check_url(url, allow_lan=False):
+    """Nur http(s) auf Loopback; mit allow_lan auch eine private Adresse im eigenen Netz.
+    Die Middleware nimmt laut Spezifikation nur lokale Anfragen an; im Netz braucht es dort eine Freigabe oder einen Tunnel."""
     u = urllib.parse.urlparse((url or "").strip())
     if u.scheme not in ("http", "https") or not u.hostname:
         raise BcsError("Adresse wie http://127.0.0.1:3210 erwartet.")
     if u.hostname not in LOOPBACK and u.hostname != "::1":
-        raise BcsError("Die BCS-Middleware muss auf diesem Rechner laufen (127.0.0.1 oder localhost), nicht auf «%s»." % u.hostname)
+        if not allow_lan:
+            raise BcsError("«%s» ist nicht dieser Rechner. Läuft die Middleware auf einem anderen Rechner in deinem Netz (z. B. dem Windows-Host), "
+                           "setze den Haken «Middleware im eigenen Netz» darunter." % u.hostname)
+        if not _private(u.hostname):
+            raise BcsError("«%s» ist keine private Adresse. Erlaubt sind nur dieser Rechner und Adressen im eigenen Netz (10.…, 172.16–31.…, 192.168.…)." % u.hostname)
     if u.username or u.password or u.query or u.fragment:
         raise BcsError("Adresse ohne Benutzer, Parameter oder Anker angeben.")
     return "%s://%s%s" % (u.scheme, u.netloc, u.path.rstrip("/"))
 
 
+def is_loopback(url):
+    return (urllib.parse.urlparse(url or "").hostname or "") in LOOPBACK
+
+
 class Client:
-    def __init__(self, url, token="", timeout=20):
-        self.base = check_url(url)
+    def __init__(self, url, token="", timeout=20, allow_lan=False):
+        self.base = check_url(url, allow_lan)
         self.token, self.timeout = token or "", timeout
 
     def _call(self, method, path, params=None, body=None, timeout=None, write=False):
@@ -63,7 +87,7 @@ class Client:
         if self.token:
             headers["Authorization"] = "Bearer " + self.token
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))      # Loopback nie über einen Proxy
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))      # Loopback und eigenes Netz nie über einen Proxy
         try:
             with opener.open(req, timeout=timeout or self.timeout) as r:
                 raw = r.read(4 << 20).decode("utf-8")
@@ -74,7 +98,7 @@ class Client:
                 j = {}
             msg = str(j.get("error") or j.get("message") or "")[:300]
             hint = {400: "Ungültige Eingabe", 401: "Token fehlt oder ist ungültig (BCS_API_TOKEN der Middleware als bcs_token eintragen)",
-                    403: "Die Middleware nimmt die Anfrage nicht an (nicht lokal oder fremde Origin)", 404: "Unbekannte Route: passt die Version der Middleware?",
+                    403: "Die Middleware nimmt die Anfrage nicht an (nicht lokal oder fremde Origin). Läuft sie auf einem anderen Rechner: dort Anfragen aus dem Netz erlauben oder einen SSH-Tunnel nutzen (siehe Hilfe)", 404: "Unbekannte Route: passt die Version der Middleware?",
                     502: "BCS oder die Middleware ist gerade nicht verfügbar"}.get(e.code, "HTTP %s" % e.code)
             raise BcsError("%s%s" % (hint, ": " + msg if msg and msg not in hint else ""), e.code, uncertain=write and e.code == 502)
         except (urllib.error.URLError, OSError, TimeoutError) as e:
