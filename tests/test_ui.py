@@ -153,6 +153,13 @@ class Views(UiCase):
         self.assertGreater(pg.locator(".hero .hpics svg.pic").count(), 0)          # Repo und Branch als Piktogramm (0.32)
         self.assertGreater(pg.locator(".fm svg.pic").count() + pg.locator(".picn svg.pic").count(), 0)
 
+    def test_no_projectron_left(self):
+        for name in ("Zeit", "Einstellungen"):                                              # E1 (0.34): nur noch BCS
+            self.tab(name)
+            txt = self.pg.locator("#" + self.VIEWS[name][1]).inner_text()
+            self.assertNotIn("MCP", txt, name)
+            self.assertNotIn("Projectron", txt, name)
+
     def test_all_tabs_render(self):
         for name in self.VIEWS:
             self.tab(name)
@@ -251,6 +258,21 @@ class FocusSession(UiCase):
         self.wait_js("!document.getElementById('fmode').hidden")                            # Klick öffnet wieder
         pg.click('[data-fmend="abgebrochen"]')
         self.wait_js("document.getElementById('fmode').hidden")
+
+
+class MrTry(UiCase):
+    def test_try_dialog_prompts_git_env(self):
+        pg = self.pg
+        self.tab("Listen")
+        b = pg.locator("[data-mrtry]:visible").first
+        b.scroll_into_view_if_needed()
+        b.click()
+        pg.wait_for_selector("#wsDlg[open] #mtPrompt")
+        self.assertEqual(pg.locator("#mtPrompt option").all_inner_texts(), ["review-brief", "smoke-test", "repro-test"])
+        self.assertTrue(pg.locator("#mtGit").is_visible())
+        self.assertIn("keine eingetragen", pg.locator("#wsDlgBody").inner_text())          # ohne Review-Umgebung: Hinweis statt Knopf
+        pg.click("#mtClose")
+        self.wait_js("!document.getElementById('wsDlg').open")
 
 
 class Mobile(UiCase):

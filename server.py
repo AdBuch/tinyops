@@ -51,7 +51,7 @@ import github
 import links
 import llm
 import sonar
-import usage
+import aiquota
 import net
 import secretstore as store
 import settings
@@ -60,7 +60,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.33.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.34.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -112,7 +112,7 @@ DEFAULTS = {
     "ca_bundle": "",
     "my_emails": [],
     "branch_filter": {},
-    "features": {"ideas": True, "testenv": False, "ai": False},   # Testumgebung vorerst ausgeblendet (Einstellungen → Weitere Funktionen)
+    "features": {"ideas": True, "ai": False},
     "data_dir": "",               # leer = ./data (Ideenbox)
     "log_level": "info",          # debug zeigt jede Anfrage und jede Branch-Entscheidung
     "log_dir": "",                # leer = ~/.config/tinyops/logs
@@ -125,20 +125,6 @@ DEFAULTS = {
     "bind": "127.0.0.1",
     "port": 8765,
     "allowed_hosts": [],
-    "kube_context": "",
-    "namespace_prefix": "test",
-    "job_timeout": 900,
-    "deploy_command": [
-        "helm", "upgrade", "--install", "{release}", "{chart}",
-        "--namespace", "{namespace}", "--create-namespace",
-        "--kube-context", "{context}",
-        "--set", "image.tag={tag}", "--wait", "--timeout", "5m",
-    ],
-    "teardown_command": [
-        "kubectl", "--context", "{context}", "delete", "namespace",
-        "{namespace}", "--wait=false",
-    ],
-    "agent_command": [],
     "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
     "agents": [],
     "ux": {"enabled": True, "days": 30},   # UI-Nutzung lokal erfassen (0.22), für die Optimierung der Oberfläche
@@ -1315,71 +1301,6 @@ class DemoJira:
 
 
 # ---------------------------------------------------------------- Jobs
-class Jobs:
-    def __init__(self, timeout):
-        self.timeout = timeout
-        self.items = {}
-        self.lock = threading.Lock()
-        self.counter = 0
-
-    @staticmethod
-    def _env():
-        """Jobs erben keine Umgebungsvariablen mit Panel-Secrets."""
-        drop = set(store.SENSITIVE_ENV)
-        return {k: v for k, v in os.environ.items() if k not in drop and not k.startswith("TINYOPS_")}
-
-    def start(self, title, argv, cwd):
-        with self.lock:
-            self.counter += 1
-            jid = self.counter
-            head = "$ " + " ".join(argv[:6]) + (" ..." if len(argv) > 6 else "")
-            job = {"id": jid, "title": scrub(title), "status": "läuft", "started": time.time(),
-                   "log": [scrub(head)], "returncode": None}
-            self.items[jid] = job
-        joblog.info("Job #%d gestartet: %s (%s)", jid, job["title"], scrub(head))
-        threading.Thread(target=self._run, args=(job, argv, cwd), daemon=True).start()
-        return jid
-
-    def _run(self, job, argv, cwd):
-        try:
-            proc = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, errors="replace", env=self._env(), stdin=subprocess.DEVNULL)
-        except (OSError, ValueError) as e:
-            joblog.error("Job #%d: Start fehlgeschlagen: %s", job["id"], e)
-            job["log"].append(scrub("Start fehlgeschlagen: %s" % e))
-            job["status"], job["returncode"] = "fehler", -1
-            return
-        timer = threading.Timer(self.timeout, proc.kill)
-        timer.start()
-        try:
-            for line in proc.stdout:
-                job["log"].append(scrub(line.rstrip()))
-                joblog.debug("job#%d | %s", job["id"], line.rstrip())
-                if len(job["log"]) > 2000:
-                    del job["log"][:500]
-            proc.wait()
-        finally:
-            timer.cancel()
-        job["returncode"] = proc.returncode
-        job["status"] = "ok" if proc.returncode == 0 else "fehler"
-        secs = time.time() - job["started"]
-        if proc.returncode == 0:
-            joblog.info("Job #%d fertig in %.0f s: ok", job["id"], secs)
-        else:
-            tail_lines = " | ".join(job["log"][-5:])
-            joblog.error("Job #%d fehlgeschlagen nach %.0f s (Exit %s). Letzte Zeilen: %s", job["id"], secs,
-                         proc.returncode, tail_lines)
-
-    def summary(self):
-        with self.lock:
-            out = [{k: v for k, v in j.items() if k != "log"} for j in self.items.values()]
-        return sorted(out, key=lambda j: -j["id"])[:15]
-
-    def get(self, jid):
-        return self.items.get(jid)
-
-
-# ---------------------------------------------------------------- App
 class App:
     def __init__(self, cfg, demo, secrets, config_path=None, watchdog=True):
         self.demo = demo
@@ -1393,7 +1314,6 @@ class App:
         self.hd_lock = threading.Lock()
         self.ws_lock, self.ws_cache, self.ws_busy = threading.Lock(), None, False
         self.ideas = None
-        self.jobs = None
         self.apply(cfg, secrets)
         if watchdog and not os.environ.get("TINYOPS_NO_WATCHDOG"):
             threading.Thread(target=self._watchdog, name="agent-watchdog", daemon=True).start()
@@ -1436,10 +1356,9 @@ class App:
         self.fc = focusplan.cfg(cfg)
         self.wsc = workspaces.cfg(cfg)
         self.ws_cache = None
-        self.mcp_token = secrets.get("mcp_token", "")
         self.bcsc = bcs.cfg(cfg)                 # BCS-Middleware (0.29)
         self.bcs, self.bcs_error = None, ""
-        if self.demo and not time_cfg(cfg).get("mcp_url"):      # Demo: eigene Middleware, ausser eine Wrapper-API ist eingetragen
+        if self.demo:                                             # Demo: eigene Middleware
             self.bcs = bcs.Demo()
         elif self.bcsc["enabled"]:
             try:
@@ -1450,8 +1369,6 @@ class App:
         self._head_of = {}                       # Begleitticket → Task (0.30)
         self._bcs_lock = threading.Lock()
         self.ssl_ctx = ssl.create_default_context()
-        if not hasattr(self, "_send_lock"):
-            self._send_lock = threading.Lock()
         self.agents = agents.Service(cfg, self.store, store.home_dir() / "agent-runs", BASE)
         self.agents.audit = self.audit
         if self.demo and not self.store.flow_stats()["total_xp"]:
@@ -1477,8 +1394,6 @@ class App:
         self.over_limit = False
         self.inprogress_keys = set()
         self.proj_cfg = {p["id"]: p for p in cfg["projects"]}
-        if self.jobs is None:
-            self.jobs = Jobs(cfg["job_timeout"])
         if (self.demo or feature(cfg, "ideas")) and self.ideas is None:
             self.ideas = Ideas(data_dir(cfg) / "tinyops.db", cfg["idea_cap"], cfg["idea_expire_days"])
         if self.demo:
@@ -1488,7 +1403,7 @@ class App:
             self.hdj = DemoHelpdesk()
             self.hdc = dict(self.hdc, enabled=True, name="Servicedesk", queue_jql="demo")
             if not self.proj_cfg:
-                self.proj_cfg = {1: {"id": 1, "name": "dlp-core", "chart": "./helm/dlp-core"}}
+                self.proj_cfg = {1: {"id": 1, "name": "dlp-core"}}
             return
         try:
             ctx = make_ssl(cfg)
@@ -1633,7 +1548,7 @@ class App:
                 else:
                     items = []
                     for k in remote:
-                        r = usage.fetch(k, self.uc.get(k + "_file") or None)
+                        r = aiquota.fetch(k, self.uc.get(k + "_file") or None)
                         if not r["ok"]:
                             slog_u.warning("%s: %s", r["name"], r["error"])
                         items.append(r)
@@ -1642,11 +1557,11 @@ class App:
         if "mistral" in prov:
             if self.demo:
                 now = time.time()
-                out.append(usage.mistral_item({"pushed": now - 600, "budgets": {
+                out.append(aiquota.mistral_item({"pushed": now - 600, "budgets": {
                     "vibe": {"pct": 0.06, "budget": 300.0, "cur": "USD", "reset": now + 26 * 86400},
                     "api": {"pct": 0.159, "budget": 30.0, "cur": "USD", "reset": now + 26 * 86400}}}))
             else:
-                out.append(usage.mistral_item(usage.load_push(data_dir(self.cfg))))
+                out.append(aiquota.mistral_item(aiquota.load_push(data_dir(self.cfg))))
         return {"enabled": True, "items": out, "fetched": c["fetched"]}
 
     def usage_push(self, body):
@@ -1654,12 +1569,12 @@ class App:
         if not self.uc.get("mistral"):
             raise UserError("Mistral ist in den Einstellungen (KI-Kontingent) nicht eingeschaltet.")
         try:
-            clean = usage.clean_push(body)
-        except usage.UsageError as e:
+            clean = aiquota.clean_push(body)
+        except aiquota.UsageError as e:
             raise UserError(str(e))
-        usage.save_push(data_dir(self.cfg), clean)
+        aiquota.save_push(data_dir(self.cfg), clean)
         slog_u.info("Mistral-Stand empfangen: %s", ", ".join("%s %.2f %%" % (k, v["pct"]) for k, v in clean.items()))
-        return {"ok": True, "item": usage.mistral_item(usage.load_push(data_dir(self.cfg)))}
+        return {"ok": True, "item": aiquota.mistral_item(aiquota.load_push(data_dir(self.cfg)))}
 
     def has(self, name):
         return feature(self.cfg, name)
@@ -2839,7 +2754,36 @@ class App:
         else:
             r = self.proj_cfg.get(pid)
         path = (r or {}).get("repo_path") or ""
-        return str(Path(path).expanduser()) if path else ""
+        if path:
+            return str(Path(path).expanduser())
+        return self._ws_repo_for(host, pid)
+
+    def settings_hints(self):
+        """Vorschläge für die Einstellungen (0.34): Checkout aus Workspaces, Compose-Dateien und Dockerfile je Projekt,
+        Repos mit Dockerfile als Umsysteme. Nur aus dem letzten Workspace-Scan, kein neuer Scan."""
+        out = {"projects": {}, "repos": [], "infra": [{"id": k, "label": v["label"]} for k, v in reviewenv.INFRA.items()]}
+        for pid, p in self.proj_cfg.items():
+            own = os.path.expanduser(p.get("repo_path") or "")
+            ws = "" if own else self._ws_repo_for("gitlab", pid)
+            path = own or ws
+            out["projects"][str(pid)] = {"ws_path": ws, "compose": reviewenv.compose_files_in(path) if path else [],
+                                         "dockerfile": bool(path) and reviewenv.has_dockerfile(path)}
+        for r in (self.ws_cache or {}).get("repos") or []:
+            if r.get("ok") and Path(r["path"], ".git").is_dir() and reviewenv.has_dockerfile(r["path"]):
+                out["repos"].append({"name": r["name"], "path": r["path"]})
+        out["repos"] = sorted(out["repos"], key=lambda x: x["name"].lower())[:60]
+        return out
+
+    def _ws_repo_for(self, host, pid):
+        """Ohne eingetragenen Pfad: den Checkout aus Workspaces nehmen, dessen Remote zum Projekt passt (0.34, «automatisch verbunden»).
+        Nur ein echtes Repo, kein Worktree; bei mehreren das zuletzt geholte."""
+        c = self.ws_cache or {}
+        cand = [r for r in c.get("repos") or [] if r.get("ok") and (r.get("project") or {}).get("pid") == pid and (r.get("project") or {}).get("host") == host
+                and Path(r["path"], ".git").is_dir()]
+        if not cand:
+            return ""
+        cand.sort(key=lambda r: (r.get("fetched_days") is None, r.get("fetched_days") or 0))
+        return cand[0]["path"]
 
     def _git(self, repo, *args, timeout=60, env=None):
         try:
@@ -2851,7 +2795,7 @@ class App:
             raise UserError("git %s dauert zu lange (über %d s)." % (args[0], timeout))
         return r.returncode, r.stdout.strip(), scrub(r.stderr.strip())
 
-    def ide_open(self, b):
+    def ide_open(self, b, launch=True):
         """Detached Worktree genau auf dem Head-Commit des MR und `idea <pfad>`. Nur lesend gegenüber GitLab (fetch, kein push)."""
         host = "github" if b.get("host") == "github" else "gitlab"
         try:
@@ -2868,7 +2812,7 @@ class App:
             ref_key = it.get("ref") or links.ref_of(pid, it.get("branch", ""))
             self.store.ide_set(ref_key, host, pid, iid, sha, path, "/home/demo/work/%s" % it.get("project", "repo"))
             self.audit("ide.open", ref_key, sha=sha[:12], path=path, launched=False, demo=True)
-            return {"path": path, "sha": sha, "launched": False, "hint": "Demo: Worktree und IntelliJ nur angedeutet. Pfad kopiert."}
+            return {"path": path, "sha": sha, "launched": False, "hint": "Demo: Worktree und IntelliJ nur angedeutet. Pfad kopiert.", "ref": ref_key}
         if not repo:
             raise UserError("Für %s fehlt der lokale Checkout (Einstellungen → IntelliJ → Pfad zum Repository)." % it.get("project", pid))
         rc, _, err = self._git(repo, "rev-parse", "--git-dir")
@@ -2893,9 +2837,9 @@ class App:
                 raise UserError("Worktree nicht angelegt: %s" % err[:300])
         ref_key = it.get("ref") or links.ref_of(pid, it.get("branch", ""))
         self.store.ide_set(ref_key, host, pid, iid, sha, path, repo)
-        launched, hint = self._launch_ide(path)
+        launched, hint = self._launch_ide(path) if launch else (False, "")
         self.audit("ide.open", ref_key, sha=sha[:12], path=path, launched=launched)
-        return {"path": path, "sha": sha, "launched": launched, "hint": hint}
+        return {"path": path, "sha": sha, "launched": launched, "hint": hint, "ref": ref_key}
 
     # -- Ergebnis eines Agenten ausprobieren (0.32): auschecken, IntelliJ, Review-Umgebung
     def _run_src(self, r):
@@ -2924,17 +2868,15 @@ class App:
         clone = self._repo_of("gitlab", r["project_id"]) if r.get("project_id") is not None else ""
         w = self.store.ide_get("run:%d" % rid)
         pe = (self.proj_cfg.get(r["project_id"]) or {}).get("review_env") if r.get("project_id") is not None else None
-        try:
-            st = json.loads(r.get("renv") or "{}")
-        except ValueError:
-            st = {}
-        if st.get("state") == "startet" and rid not in self._renv_live:
-            st["state"] = "unklar"                          # tinyops wurde neu gestartet, während der Befehl lief
+        st = self._renv_state("run:%d" % rid, r.get("renv"))
         vals = reviewenv.values(r, (w or {}).get("path") or "", (w or {}).get("sha") or "")
+        if pe:
+            vals, _ = self._renv_vals(pe, "run:%d" % rid, vals, vals["path"])
         return {"branch": branch, "src": src, "commands": reviewenv.checkout_commands(src, branch, local), "clone": clone,
                 "worktree": (w or {}).get("path") or "", "sha": ((w or {}).get("sha") or "")[:10],
                 "env": {"kind": pe["kind"], "label": reviewenv.KINDS[pe["kind"]]["label"], "name": vals["name"], "port": vals["port"],
-                        "url": reviewenv.fill(pe.get("url"), vals, quote=False)} if pe else None,
+                        "url": reviewenv.fill(pe.get("url"), vals, quote=False),
+                        "up": reviewenv.fill(pe.get("up"), vals), "down": reviewenv.fill(pe.get("down"), vals)} if pe else None,
                 "env_state": st, "push": "git push -u origin %s" % shlex.quote(branch) if branch else ""}
 
     def run_checkout(self, rid, launch=True):
@@ -2991,28 +2933,97 @@ class App:
         pe = (self.proj_cfg.get(r["project_id"]) or {}).get("review_env") if r.get("project_id") is not None else None
         if not pe:
             raise UserError("Für dieses Projekt ist keine Review-Umgebung eingetragen (Einstellungen → IntelliJ und Review-Umgebung).")
-        if rid in self._renv_live:
-            raise UserError("Für diesen Lauf läuft schon ein Befehl. Kurz warten.")
-        tmpl = pe.get("up" if action == "up" else "down") or ""
-        if not tmpl:
-            raise UserError("Für «Stoppen» ist kein Befehl eingetragen.")
         w = self.store.ide_get("run:%d" % rid)
         if action == "up" and (not w or not (self.demo or Path(w["path"]).exists())):
             self.run_checkout(rid, launch=False)
             w = self.store.ide_get("run:%d" % rid)
         if not w:
             raise UserError("Kein Worktree für diesen Lauf.")
-        vals = reviewenv.values(r, w["path"], w["sha"])
+        return self._renv_start("run:%d" % rid, r["ticket"], pe, w["path"], reviewenv.values(r, w["path"], w["sha"]), action, run=rid)
+
+    def mr_env(self, b):
+        """Review-Umgebung für einen MR (0.34, E2): Worktree auf dem MR-Commit, dann die Befehle aus den Einstellungen. Nur auf Klick."""
+        host = "github" if b.get("host") == "github" else "gitlab"
+        try:
+            pid, iid = int(b.get("project_id")), int(b.get("iid"))
+        except (TypeError, ValueError):
+            raise UserError("project_id und iid müssen Zahlen sein.")
+        it = self._find_mr(host, pid, iid)
+        if not it:
+            raise UserError("Diesen MR kenne ich nicht (mehr). Einmal «Neu laden».")
+        key = "mr:%s:%d:%d" % (host, pid, iid)
+        pe = (self.proj_cfg.get(pid) or {}).get("review_env")
+        do = b.get("do") or "state"
+        if do == "state":
+            w = self.store.ide_get(it.get("ref") or links.ref_of(pid, it.get("branch", "")))
+            vals = reviewenv.mr_values(it.get("project") or str(pid), iid, it.get("branch"), (w or {}).get("path") or "", (w or {}).get("sha") or "")
+            if pe:
+                vals, _ = self._renv_vals(pe, key, vals, vals["path"])
+            return {"env": {"kind": pe["kind"], "label": reviewenv.KINDS[pe["kind"]]["label"], "name": vals["name"], "port": vals["port"],
+                            "url": reviewenv.fill(pe.get("url"), vals, quote=False),
+                            "up": reviewenv.fill(pe.get("up"), vals), "down": reviewenv.fill(pe.get("down"), vals)} if pe else None,
+                    "state": self._renv_state(key), "worktree": (w or {}).get("path") or ""}
+        if do not in ("up", "down"):
+            raise UserError("Starten oder stoppen?")
+        if not pe:
+            raise UserError("Für dieses Projekt ist keine Review-Umgebung eingetragen (Einstellungen → IntelliJ und Review-Umgebung).")
+        w = self.store.ide_get(it.get("ref") or links.ref_of(pid, it.get("branch", "")))
+        if do == "up" and (not w or w["sha"] != it.get("sha") or not (self.demo or Path(w["path"]).exists())):
+            o = self.ide_open({"host": host, "project_id": pid, "iid": iid}, launch=False)
+            w = {"path": o["path"], "sha": o["sha"]}
+        if not w:
+            raise UserError("Kein Worktree für diesen MR. Erst starten.")
+        vals = reviewenv.mr_values(it.get("project") or str(pid), iid, it.get("branch"), w["path"], w["sha"])
+        return self._renv_start(key, "%s!%d" % (it.get("project") or pid, iid), pe, w["path"], vals, do)
+
+    def _renv_state(self, key, legacy=None):
+        st = self.store.renv_get(key)
+        if st is None and legacy:                       # Läufe aus 0.32/0.33: Zustand stand am Lauf
+            try:
+                st = json.loads(legacy)
+            except ValueError:
+                st = None
+        st = st or {}
+        if st.get("state") in ("startet", "stoppt") and key not in self._renv_live:
+            st["state"] = "unklar"                      # tinyops wurde neu gestartet, während der Befehl lief
+        return st
+
+    def _renv_vals(self, pe, key, vals, path):
+        """Docker Compose: Compose-Dateien des Repos plus erzeugte Datei für Umsysteme (liegt im Datenordner, nie im Repo).
+        Gibt (vals, fehler) zurück."""
+        vals = dict(vals, compose_files="")
+        if pe.get("kind") != "compose" or not path:
+            return vals, ""
+        if self.demo and not Path(path).exists():
+            return dict(vals, compose_files="-f docker-compose.yml"), ""
+        gen = Path(data_dir(self.cfg)) / "review-env" / (re.sub(r"[^A-Za-z0-9_.-]+", "_", key) + ".yml")
+        files, yaml, err = reviewenv.compose_plan(pe, path, str(gen))
+        if err:
+            return vals, err
+        if yaml:
+            gen.parent.mkdir(parents=True, exist_ok=True)
+            gen.write_text(yaml, encoding="utf-8")
+        return dict(vals, compose_files=reviewenv.compose_arg(files)), ""
+
+    def _renv_start(self, key, target, pe, path, vals, action, run=None):
+        if key in self._renv_live:
+            raise UserError("Dafür läuft schon ein Befehl. Kurz warten.")
+        vals, err = self._renv_vals(pe, key, vals, path)
+        if err and action == "up":
+            raise UserError(err)
+        tmpl = pe.get("up" if action == "up" else "down") or ""
+        if not tmpl:
+            raise UserError("Für «Stoppen» ist kein Befehl eingetragen.")
         cmd = reviewenv.fill(tmpl, vals)
         url = reviewenv.fill(pe.get("url"), vals, quote=False)
         st = {"state": "startet" if action == "up" else "stoppt", "action": action, "cmd": cmd, "url": url, "ts": time.time(), "log": ""}
-        self.store.agent_run_update(rid, renv=json.dumps(st))
-        self.audit("review.env." + action, r["ticket"], run=rid, kind=pe["kind"], name=vals["name"], cmd=cmd[:300])
-        self._renv_live.add(rid)
-        threading.Thread(target=self._env_worker, args=(rid, cmd, w["path"], vals, st), daemon=True, name="renv-%d" % rid).start()
+        self.store.renv_set(key, st)
+        self.audit("review.env." + action, target, run=run, key=key, kind=pe["kind"], name=vals["name"], cmd=cmd[:300])
+        self._renv_live.add(key)
+        threading.Thread(target=self._env_worker, args=(key, cmd, path, vals, st), daemon=True, name="renv-" + key).start()
         return st
 
-    def _env_worker(self, rid, cmd, path, vals, st):
+    def _env_worker(self, key, cmd, path, vals, st):
         try:
             if self.demo:
                 time.sleep(0.3)
@@ -3033,10 +3044,10 @@ class App:
             ok = rc == 0
             st.update(state=("läuft" if ok else "fehler") if st["action"] == "up" else ("gestoppt" if ok else "fehler"), rc=rc,
                       log=scrub("\n".join(out.splitlines()[-40:]))[-4000:], done=time.time())
-            self.store.agent_run_update(rid, renv=json.dumps(st))
-            self.audit("review.env." + st["action"], str(rid), ok=ok, rc=rc)
+            self.store.renv_set(key, st)
+            self.audit("review.env." + st["action"], key, ok=ok, rc=rc)
         finally:
-            self._renv_live.discard(rid)
+            self._renv_live.discard(key)
 
     def _launch_ide(self, path):
         cmd = self.cfg.get("ide_command") or "idea {path}"
@@ -3138,7 +3149,8 @@ class App:
             data["flow"] = None
         if data.get("flow") is not None:
             hd = data.get("helpdesk_jira")
-            ent, queue = helpdesk.entries(hd, self.store.hd_seen()) if hd else ([], [])
+            pin0 = self.store.pin_get() or ""
+            ent, queue = helpdesk.entries(hd, self.store.hd_seen(), pin0[3:] if pin0.startswith("hd:") else None) if hd else ([], [])
             data["flow"]["helpdesk"] = ent
             data["flow"]["hd_queue"] = queue
             data["flow"]["hd_watch"] = helpdesk.watched(hd, self.store.hd_seen_ts()) if hd else []
@@ -3168,8 +3180,8 @@ class App:
             data["time"] = {"enabled": False, "error": str(e)}
         data.update({
             "wip": len(data["mine"]), "wip_limit": self.cfg["wip_limit"],
-            "stale_days": stale, "demo": self.demo, "agent_enabled": bool(self.cfg["agent_command"]),
-            "prompts": self.prompt_names() if self.has("testenv") else [], "fetched": time.time(),
+            "stale_days": stale, "demo": self.demo,
+            "prompts": self.prompt_names(), "fetched": time.time(),
             "helpdesk": self.helpdesk(), "configured": True, "version": VERSION, "usage_providers": self.usage_providers(), "problems": list(self.problems),
             "update": self.update_note(),
             "ux": {"enabled": bool((self.cfg.get("ux") or {}).get("enabled", True))},
@@ -3249,15 +3261,15 @@ class App:
             if action == "pin":
                 cid = b.get("id") or None
                 if cid and str(cid).startswith("hd:"):
-                    if not any(x["key"] == cid[3:] for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or []):
-                        raise UserError("Dieses Helpdesk-Ticket ist nicht (mehr) dir zugewiesen.")
+                    if not helpdesk.find((self.cache or {}).get("helpdesk_jira"), cid[3:]):
+                        raise UserError("Dieses Helpdesk-Ticket kennt tinyops gerade nicht (weder zugewiesen noch in Queue oder Beobachtung).")
                 elif cid and cid not in self._cards and not str(cid).startswith("rv:"):
                     raise UserError("Dieses Vorhaben gibt es (gerade) nicht.")
                 self.store.pin_set(cid)
                 if self.tc["enabled"]:
                     if cid and str(cid).startswith("hd:"):
                         key = cid[3:]
-                        t = next((x for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or [] if x["key"] == key), {})
+                        t = helpdesk.find((self.cache or {}).get("helpdesk_jira"), key) or {}
                         self.timebook.start(key, t.get("title") or key, idle=self.tc["idle_minutes"], area=self.hdc.get("area") or "hd")
                     elif cid and not str(cid).startswith("rv:"):
                         self.timebook.start(cid, (self._cards.get(cid) or {}).get("title") or "", idle=self.tc["idle_minutes"], area=self._area_of(cid))
@@ -3662,13 +3674,12 @@ class App:
         tmap = tb.bcs_targets() if self.bcs is not None else {}
         for x in drafts:
             x["ticket_ok"] = not links.is_ref_key(x["ticket"])
-            x["payload"] = timesheet.payload(x) if x["state"] != "verworfen" else None
             if self.bcs is not None:
                 x["bcs_task"] = self._bcs_task(x["ticket"], tmap)
         return {"date": d, "segments": tb.segments(d, now, idle), "gaps": tb.gaps(d), "drafts": drafts,
                 "total_secs": sum(x["secs"] for x in tot.values()), "booked_minutes": sum(x["minutes"] for x in drafts if x["state"] == "gebucht"),
                 "draft_minutes": sum(x["minutes"] for x in drafts if x["state"] not in ("verworfen",)),
-                "mcp": bool(self.tc["mcp_url"]) and self.bcs is None, "send_on_confirm": bool(self.tc["send_on_confirm"]), "round": self.tc["round_minutes"],
+                "round": self.tc["round_minutes"],
                 "bcs": {"on": self.bcs is not None, "error": self.bcs_error, "demo": self.demo} if (self.bcs is not None or self.bcs_error) else None,
                 "llm": llm.ready(self.lc),
                 "earlier_open": sorted({x["date"] for x in tb.drafts(state="offen") if x["date"] < d})[-7:]}
@@ -3718,7 +3729,7 @@ class App:
         if dr["state"] == "unklar":
             raise UserError("Unklar, ob dieser Entwurf in BCS gebucht ist. Erst «Mit BCS abgleichen».")
         if dr["state"] in timesheet.LOCKED and action not in ("send",):
-            raise UserError("Schon gebucht (%s). Ändern nur noch in Projectron." % (dr["reference"] or "ohne Referenz"))
+            raise UserError("Schon gebucht (%s). Ändern nur noch in BCS." % (dr["reference"] or "ohne Referenz"))
         if action == "edit":
             if dr["state"] not in ("offen", "abgelehnt", "fehlgeschlagen", "bestätigt"):
                 raise UserError("Verworfene Entwürfe erst wiederherstellen.")
@@ -3762,11 +3773,7 @@ class App:
                 raise UserError("0 Minuten bucht man nicht. Verwerfen oder Zeit eintragen.")
             tb.update(dr["id"], state="bestätigt", message="")
             self.audit("time.confirm", dr["ticket"], draft=dr["id"], minutes=dr["minutes"], date=dr["date"])
-            if self.tc["mcp_url"] and self.tc["send_on_confirm"] and self.bcs is None:
-                return self.time_send(dr["id"])
             return {"state": "bestätigt"}
-        if action == "send":
-            return self.time_send(dr["id"])
         raise UserError("Unbekannte Aktion.")
 
     def _minutes(self, v):
@@ -3778,64 +3785,6 @@ class App:
             raise UserError("Minuten zwischen 0 und 1440.")
         return m
 
-    def _mcp_url(self):
-        url = (self.tc.get("mcp_url") or "").strip()
-        if not url:
-            raise UserError("Keine Wrapper-API eingetragen (Einstellungen → Zeiterfassung).")
-        try:
-            return llm.check_url({"url": url, "allow_remote": self.tc.get("allow_remote")})
-        except llm.LlmError as e:
-            raise UserError(str(e))
-
-    def time_send(self, did):
-        """Einen bestätigten Entwurf an die Wrapper-API des MCP schicken. Gebucht ist er nur, wenn der MCP «booked» sagt."""
-        with self._send_lock:
-            dr = self._draft(did)
-            if dr["state"] == "gebucht":
-                return {"state": "gebucht", "reference": dr["reference"], "already": True}
-            if dr["state"] not in timesheet.SENDABLE:
-                raise UserError("Senden geht nur für bestätigte Entwürfe (Status: %s)." % dr["state"])
-            url = self._mcp_url()
-            body = timesheet.payload(dr)
-            headers = {"Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": body["idempotency_key"], "User-Agent": "tinyops"}
-            if self.mcp_token:
-                headers["Authorization"] = "Bearer " + self.mcp_token
-            state, ref, msg, code = "fehlgeschlagen", "", "", 0
-            try:
-                req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
-                opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.ssl_ctx), NoRedirect)
-                with opener.open(req, timeout=20) as r:
-                    code = r.status
-                    res = json.loads(r.read(1 << 20).decode("utf-8") or "{}")
-                st = str(res.get("status") or "")
-                if st == "booked":
-                    state, ref, msg = "gebucht", str(res.get("reference") or "")[:200], str(res.get("message") or "")[:300]
-                elif st == "rejected":
-                    state, msg = "abgelehnt", str(res.get("message") or "abgelehnt, ohne Begründung")[:300]
-                else:
-                    msg = "Antwort ohne «status: booked/rejected» (HTTP %s). Nicht als gebucht gewertet." % code
-            except urllib.error.HTTPError as e:
-                code = e.code
-                try:
-                    res = json.loads(e.read(1 << 16).decode("utf-8") or "{}")
-                except ValueError:
-                    res = {}
-                if res.get("status") == "rejected":
-                    state, msg = "abgelehnt", str(res.get("message") or "abgelehnt")[:300]
-                else:
-                    msg = "HTTP %s%s" % (e.code, (": " + str(res.get("message"))[:200]) if res.get("message") else "")
-            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
-                msg = "nicht erreichbar (%s)" % scrub(getattr(e, "reason", e))
-            except ValueError:
-                msg = "Antwort ist kein JSON (HTTP %s). Nicht als gebucht gewertet." % code
-            tb = self.timebook
-            tb.update(dr["id"], state=state, reference=ref, message=scrub(msg), attempts=int(dr["attempts"] or 0) + 1, sent=time.time())
-            self.audit("time.send", dr["ticket"], ok=state == "gebucht", draft=dr["id"], minutes=dr["minutes"], date=dr["date"], state=state,
-                       reference=ref, message=scrub(msg)[:200], http=code, key=body["idempotency_key"])
-            log.info("Zeitentwurf %s → %s %s", dr["id"], state, ref or msg)
-            return {"state": state, "reference": ref, "message": scrub(msg)}
-
-    # -- BCS (0.29)
     def _bcs_client(self):
         if self.bcs is None:
             raise UserError(self.bcs_error or "BCS ist nicht eingerichtet (Einstellungen → Zeiterfassung → BCS).")
@@ -4018,33 +3967,6 @@ class App:
         self.audit("time.texts", d, drafts=len(rows), suggested=len(out))
         return {"texts": out}
 
-    def time_export(self, state="bestätigt", d=None):
-        """Für deinen MCP zum Abholen: Entwürfe im Vertragsformat."""
-        out = []
-        for x in self.timebook.drafts(d or None, state or None):
-            if x["state"] == "verworfen":
-                continue
-            p = timesheet.payload(x)
-            p["state"] = x["state"]
-            p["reference"] = x["reference"]
-            out.append(p)
-        return {"schema": timesheet.CONTRACT, "drafts": out}
-
-    def time_result(self, b):
-        """Rückmeldung deines MCP nach dem Abholen: {id, status: booked|rejected, reference, message}."""
-        dr = self._draft(b.get("id"))
-        st = b.get("status")
-        if st not in ("booked", "rejected"):
-            raise UserError("status muss booked oder rejected sein.")
-        if dr["state"] not in timesheet.SENDABLE + ("gebucht",):
-            raise UserError("Nur bestätigte Entwürfe lassen sich buchen (Status: %s)." % dr["state"])
-        if dr["state"] == "gebucht":
-            return {"state": "gebucht", "already": True}
-        new = "gebucht" if st == "booked" else "abgelehnt"
-        self.timebook.update(dr["id"], state=new, reference=str(b.get("reference") or "")[:200], message=str(b.get("message") or "")[:300])
-        self.audit("time.result", dr["ticket"], ok=new == "gebucht", actor="mcp", draft=dr["id"], state=new, reference=str(b.get("reference") or "")[:200])
-        return {"state": new}
-
     # -- UI-Nutzung (0.22): lokal erfassen, auswerten, als Bericht kopieren
     def _ux_cfg(self):
         c = dict(DEFAULTS["ux"])
@@ -4175,9 +4097,9 @@ class App:
             if cid:
                 if cid.startswith("hd:"):
                     key = cid[3:]
-                    t = next((x for x in ((self.cache or {}).get("helpdesk_jira") or {}).get("assigned") or [] if x["key"] == key), None)
+                    t = helpdesk.find((self.cache or {}).get("helpdesk_jira"), key)
                     if not t:
-                        raise UserError("Dieses Helpdesk-Ticket ist nicht (mehr) dir zugewiesen.")
+                        raise UserError("Dieses Helpdesk-Ticket kennt tinyops gerade nicht.")
                     title, aid = t["title"], self.hdc.get("area") or "hd"
                 else:
                     c = self._cards.get(cid)
@@ -4405,12 +4327,13 @@ class App:
         return dict(ctx, count=len(topics), topics=review.topics_block(mr, topics), ask_hint=" mit `tinyops-ask`", report_hint=", als Bericht mit `tinyops-report`"), mr
 
     # -- Prompts
+    MR_PROMPTS = ("review-brief", "smoke-test", "repro-test")      # zum Kopieren am MR, auch ohne eingerichteten Agenten (E2)
+
     def prompt_names(self):
-        d = BASE / "prompts"
-        return sorted(p.stem for p in d.glob("*.md") if p.stem != "idea-triage")
+        return [n for n in self.MR_PROMPTS if (BASE / "prompts" / (n + ".md")).exists()]
 
     def _prompt_text(self, name):
-        if not re.fullmatch(r"[a-z0-9-]+", name or ""):
+        if name not in self.MR_PROMPTS:
             raise UserError("Ungültiger Prompt-Name.")
         path = BASE / "prompts" / (name + ".md")
         if not path.exists():
@@ -4422,18 +4345,15 @@ class App:
         if not proj:
             raise UserError("Projekt ist nicht in der config.json eingetragen.")
         mr = self.client.mr(project_id, iid)
-        prefix = self.cfg["namespace_prefix"]
-        namespace = ("%s-%s-%s" % (prefix, slug(proj.get("name", project_id), 20), iid))[:50].strip("-")
-        sha8 = (mr["sha"] or "")[:8]
-        tag_tpl = proj.get("tag_template", "{sha8}")
-        tag = render(tag_tpl, {"sha8": sha8, "iid": iid, "branch_slug": slug(mr["branch"], 40)})
         keys = extract_keys("%s %s" % (mr["branch"], mr["title"]), self.jc.get("project_keys"))
+        pe = proj.get("review_env")
+        rv = reviewenv.mr_values(proj.get("name", str(project_id)), iid, mr["branch"], "", mr["sha"])
         return proj, {
             "project": proj.get("name", str(project_id)), "branch": mr["branch"],
             "mr_iid": iid, "iid": iid, "mr_url": mr["url"], "title": mr["title"],
-            "sha": mr["sha"], "sha8": sha8, "namespace": namespace, "release": namespace,
-            "tag": tag, "chart": proj.get("chart", ""), "context": self.cfg["kube_context"],
-            "ticket": keys[0] if keys else "",
+            "sha": mr["sha"], "sha8": (mr["sha"] or "")[:8], "ticket": keys[0] if keys else "",
+            "review_name": rv["name"] if pe else "(keine Review-Umgebung eingetragen)",
+            "review_url": reviewenv.fill(pe.get("url"), rv, quote=False) if pe and pe.get("url") else "(keine Adresse eingetragen)",
         }
 
     def render_prompt(self, name, project_id, iid):
@@ -4446,58 +4366,6 @@ class App:
             raise UserError("Keine offenen Ideen.")
         lines = "\n".join("- (#%d, %d Tage alt) %s" % (i["id"], i["age_days"], i["text"].replace("\n", " ")) for i in ideas)
         return render((BASE / "prompts" / "idea-triage.md").read_text(encoding="utf-8"), {"ideas": lines})
-
-    # -- Cluster
-    def _check_cluster(self):
-        if not self.cfg["kube_context"]:
-            raise UserError("kube_context fehlt in der config.json (Schutz vor dem falschen Cluster).")
-
-    def _guard_namespace(self, ns):
-        prefix = self.cfg["namespace_prefix"] + "-"
-        if not ns.startswith(prefix) or not re.fullmatch(r"[a-z0-9-]+", ns):
-            raise UserError("Namespace %s liegt außerhalb von %s*, wird nicht angefasst." % (ns, prefix))
-
-    def _argv(self, template, vals, extra=()):
-        try:
-            return [render(x, vals) for x in list(template) + list(extra)]
-        except Exception as e:  # defensive: Konfig-Fehler als lesbare Meldung
-            raise UserError("Befehl konnte nicht gebaut werden: %s" % e)
-
-    def deploy(self, project_id, iid):
-        self._check_cluster()
-        proj, vals = self._mr_vars(project_id, iid)
-        if not vals["chart"]:
-            raise UserError("Für das Projekt fehlt 'chart' in der config.json.")
-        self._guard_namespace(vals["namespace"])
-        argv = self._argv(proj.get("deploy_command", self.cfg["deploy_command"]), vals, proj.get("extra_args", []))
-        cwd = proj.get("repo_path") or BASE
-        title = "Deploy %s !%s → %s (Tag %s)" % (vals["project"], iid, vals["namespace"], vals["tag"])
-        self.audit("testenv.deploy", "%s!%s" % (project_id, iid), namespace=vals["namespace"], tag=vals["tag"])
-        return self.jobs.start(title, argv, cwd)
-
-    def teardown(self, project_id, iid):
-        self._check_cluster()
-        proj, vals = self._mr_vars(project_id, iid)
-        self._guard_namespace(vals["namespace"])
-        argv = self._argv(proj.get("teardown_command", self.cfg["teardown_command"]), vals)
-        self.audit("testenv.teardown", "%s!%s" % (project_id, iid), namespace=vals["namespace"])
-        return self.jobs.start("Abbauen %s" % vals["namespace"], argv, proj.get("repo_path") or BASE)
-
-    def run_agent(self, name, project_id, iid):
-        if not self.cfg["agent_command"]:
-            raise UserError("agent_command ist nicht konfiguriert.")
-        proj, vals = self._mr_vars(project_id, iid)
-        if self.jira and self.over_limit:
-            keys = set(extract_keys("%s %s" % (vals["branch"], vals["title"]), self.jc.get("project_keys")))
-            if not (keys & self.inprogress_keys):
-                raise UserError("Story-Limit überschritten: Agenten starten nur für Tickets, die schon in Arbeit sind.")
-        repo = proj.get("repo_path")
-        if not repo:
-            raise UserError("Für den Agentenlauf fehlt 'repo_path' beim Projekt.")
-        vals["prompt"] = render(self._prompt_text(name), vals)
-        argv = self._argv(self.cfg["agent_command"], vals)
-        return self.jobs.start("Agent '%s' für %s !%s" % (name, vals["project"], iid), argv, repo)
-
 
 # ---------------------------------------------------------------- HTTP
 def _eq(a, b):
@@ -4639,7 +4507,7 @@ def make_handler(app):
                 # -- vorerst ausgeblendete Funktionen
                 needs = ("ideas" if path.startswith("/api/ideas") else
                          "ai" if path.startswith("/api/ai/") else
-                         "testenv" if (path == "/api/agent" or path.startswith(("/api/jobs", "/api/deploy", "/api/teardown", "/api/prompt"))) else "")
+                         "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
                 if method == "POST" and path == "/api/links":
@@ -4700,13 +4568,6 @@ def make_handler(app):
                 if method == "GET" and path == "/api/time/day":
                     q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
                     return self._send(200, app.time_day(q.get("date") or None))
-                if method == "GET" and path == "/api/time/export":
-                    q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
-                    if not app.tc["enabled"]:
-                        return self._err(400, "Die Zeiterfassung ist ausgeschaltet.")
-                    return self._send(200, app.time_export(q.get("state", "bestätigt"), q.get("date") or None))
-                if method == "POST" and path == "/api/time/result":
-                    return self._send(200, app.time_result(self._body()))
                 if method == "POST" and path.startswith("/api/time/"):
                     return self._send(200, app.time_action(path.rsplit("/", 1)[1], self._body()))
                 if method == "POST" and path == "/api/review/topics":
@@ -4753,7 +4614,6 @@ def make_handler(app):
                     data = app.overview(wait=False)
                     data["ideas"] = app.ideas.list() if app.has("ideas") and app.ideas else []
                     data["idea_cap"] = cfg["idea_cap"]
-                    data["jobs"] = app.jobs.summary() if app.has("testenv") else []
                     return self._send(200, data)
                 if method == "GET" and path == "/api/log":
                     q = urllib.parse.parse_qs(parsed.query)
@@ -4761,14 +4621,6 @@ def make_handler(app):
                     lvl = (q.get("level") or ["debug"])[0]
                     return self._send(200, {"file": str(tlog.log_file(cfg)), "level": cfg["log_level"],
                                             "lines": tlog.tail(cfg, n, lvl)})
-                if method == "GET" and path == "/api/jobs":
-                    return self._send(200, app.jobs.summary())
-                m = re.fullmatch(r"/api/jobs/(\d+)", path)
-                if method == "GET" and m:
-                    job = app.jobs.get(int(m.group(1)))
-                    if not job:
-                        return self._err(404, "Job nicht gefunden.")
-                    return self._send(200, job)
                 if method == "POST" and path == "/api/ideas":
                     app.ideas.add(self._body().get("text"))
                     return self._send(200, {"ok": True})
@@ -4788,15 +4640,8 @@ def make_handler(app):
                 if method == "POST" and path == "/api/prompt":
                     b = self._body()
                     return self._send(200, {"prompt": app.render_prompt(b.get("name"), int(b["project_id"]), int(b["iid"]))})
-                if method == "POST" and path == "/api/deploy":
-                    b = self._body()
-                    return self._send(200, {"job": app.deploy(int(b["project_id"]), int(b["iid"]))})
-                if method == "POST" and path == "/api/teardown":
-                    b = self._body()
-                    return self._send(200, {"job": app.teardown(int(b["project_id"]), int(b["iid"]))})
-                if method == "POST" and path == "/api/agent":
-                    b = self._body()
-                    return self._send(200, {"job": app.run_agent(b.get("name"), int(b["project_id"]), int(b["iid"]))})
+                if method == "POST" and path == "/api/mr/env":            # 0.34: Review-Umgebung für einen MR
+                    return self._send(200, app.mr_env(self._body()))
                 return self._err(404, "Nicht gefunden.")
             except UserError as e:
                 hlog.warning("%s %s abgelehnt: %s", method, scrub(path), e)
@@ -4814,7 +4659,7 @@ def make_handler(app):
             stored = _stored(app)
             if method == "GET" and path == "/api/settings":
                 return self._send(200, dict(settings.view(app.cfg if not app.demo else load_config(None), app.config_path),
-                                            demo=app.demo, problems=list(app.problems), configured=app.configured))
+                                            demo=app.demo, problems=list(app.problems), configured=app.configured, hints=app.settings_hints()))
             if method != "POST":
                 return self._err(404, "Nicht gefunden.")
             body = self._body()
@@ -4844,8 +4689,6 @@ def make_handler(app):
                 res = settings.test_agent(body, stored)
                 hlog.info("Test Agent: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
                 return self._send(200, res)
-            if path == "/api/settings/test/mcp":
-                return self._send(200, settings.test_mcp(body, stored))
             if path == "/api/settings/test/llm":
                 res = settings.test_llm(body, stored)
                 hlog.info("Test KI: %s", "ok" if res["ok"] else "; ".join("%s: %s" % (x["title"], x["detail"]) for x in res["steps"] if x["status"] == "fail"))
@@ -4915,8 +4758,6 @@ def resolve_secrets(cfg, demo, show=False):
         names.append("sonar_token")
     if not demo and github_cfg(cfg).get("enabled"):
         names.append("github_token")
-    if time_cfg(cfg).get("mcp_url"):
-        names.append("mcp_token")
     if not demo and bcs.cfg(cfg).get("enabled"):
         names.append("bcs_token")
     if not demo and helpdesk.cfg(cfg).get("enabled"):
@@ -4935,7 +4776,7 @@ def resolve_secrets(cfg, demo, show=False):
             log.info("Secret %s ← %s", name, src)
             if show:
                 print("  %-14s ← %s" % (name, src))
-        elif show and name not in ("access_token", "llm_key", "mcp_token", "bcs_token"):
+        elif show and name not in ("access_token", "llm_key", "bcs_token"):
             print("  %-14s nicht gesetzt (Einstellungen im Browser)" % name)
     return out
 
@@ -5011,7 +4852,7 @@ def run_preflight(cfg, config_path, demo):
             print("\nKI-Kontingent")
             for k in ("claude", "codex"):
                 if uc.get(k):
-                    r = usage.fetch(k, uc.get(k + "_file") or None)
+                    r = aiquota.fetch(k, uc.get(k + "_file") or None)
                     line("ok" if r["ok"] else "warn", r["name"], ", ".join("%s: %s %% frei" % (w["label"], w["left_pct"]) for w in r["windows"]) if r["ok"] else r["error"])
         sc = sonar_cfg(cfg)
         if sc.get("enabled"):

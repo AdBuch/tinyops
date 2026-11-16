@@ -130,13 +130,28 @@ def watched(hd, seen_ts):
     return out
 
 
-def entries(hd, seen):
-    """Einträge für den Fokus: zugewiesene Tickets mit nächstem Schritt; Queue-Tickets, die du noch nicht gesehen hast."""
+def find(hd, key):
+    """Ein Helpdesk-Ticket, das tinyops kennt: zugewiesen, in der Queue oder beobachtet (0.34)."""
+    for k in ("assigned", "queue", "watched"):
+        for t in (hd or {}).get(k) or []:
+            if t["key"] == key:
+                return t
+    return None
+
+
+def entries(hd, seen, pinned=None):
+    """Einträge für den Fokus: zugewiesene Tickets mit nächstem Schritt; Queue-Tickets, die du noch nicht gesehen hast.
+    pinned: angeheftetes Ticket aus Queue oder Beobachtung, das wie ein zugewiesenes erscheint (du arbeitest daran)."""
     if not hd:
         return [], []
     sla = hd.get("sla_hours", 24)
     out = []
-    for t in hd.get("assigned") or []:
+    mine = list(hd.get("assigned") or [])
+    if pinned and not any(t["key"] == pinned for t in mine):
+        t = find(hd, pinned)
+        if t:
+            mine.append(dict(t, picked=True))
+    for t in mine:
         why = []
         if t["age_h"] is not None:
             why.append("offen seit %s" % _dur(t["age_h"]))

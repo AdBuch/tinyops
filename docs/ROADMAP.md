@@ -18,7 +18,7 @@
 | Version | Thema | Art | Entscheid nötig |
 |---|---|---|---|
 | **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
-| 0.34.0 | Doppelungen I: eine Review-Umgebung, ein Buchungsweg | Entscheid + Entfernen | E1, E2 ✓ entschieden |
+| **0.34.0** ✓ | Doppelungen I: eine Review-Umgebung, ein Buchungsweg; dazu Helpdesk-Fehler r23-04, Review-Umgebung vorbefüllt mit Umsystemen, Checkout aus Workspaces (geliefert 2026-11-16) | Entscheid + Entfernen | E1, E2 ✓ |
 | 0.35.0 | Weniger Begriffe: Fokus, Spielstand, ungenutzte Ansichten | Entscheid + Vereinfachen | E3, E4 |
 | 0.36.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
 | 0.37.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
@@ -58,7 +58,7 @@
 - **Fertig, wenn:** UI-Tests laufen in CI, und weniger als 60 Punkte bleiben von Hand offen.
 
 **0.34.0 – Doppelungen I**
-- E2: Review-Umgebung für Agenten-Läufe und MRs aus einem Modul (`reviewenv.py`). Die alte Testumgebung (Helm, Jobs, alte Agenten-Knöpfe), die Funktion «testenv» und `deploy/` entfallen. Prompts (Review-Brief, Smoke-Test, Repro-Test) und die Befehle der Review-Umgebung und zum Auschecken bleiben zum Kopieren am MR, für den Fall, dass kein Agent eingerichtet ist.
+- E2: Review-Umgebung für Agenten-Läufe und MRs aus einem Modul (`reviewenv.py`). Die alte Testumgebung (Helm, Jobs, alte Agenten-Knöpfe) und die Funktion «testenv» entfallen; `deploy/` bleibt (tinyops selbst in Kubernetes). Prompts (Review-Brief, Smoke-Test, Repro-Test) und die Befehle der Review-Umgebung und zum Auschecken bleiben zum Kopieren am MR, für den Fall, dass kein Agent eingerichtet ist.
 - E1: nur BCS. Projectron-Export, MCP-Einstellungen und `/api/time/export` entfallen; bestehende Entwürfe bleiben lesbar.
 - `usage.py` (KI-Kontingent) und `ux.py` (Nutzung der Oberfläche) bekommen eindeutige Namen.
 - **Fertig, wenn:** Jede Funktion gibt es einmal, und der Changelog listet alles Entfernte.

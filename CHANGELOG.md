@@ -5,6 +5,41 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.34.0]
+
+Doppelungen I aus dem Plan, dazu Korrekturen und Wünsche aus deinem Prüf- und Nutzungsbericht vom 16.11.
+
+### Behoben
+- **Helpdesk-Ticket anheften** (Prüfpunkt r23-04, «öffnen sich nur im neuen Tab»): Tickets aus der Queue und aus «Ich beobachte» liessen sich nicht anheften, im Panel gab es nur «Im Helpdesk öffnen». Jetzt gehen Anheften, Zeit und Fokus-Sitzung für jedes Helpdesk-Ticket, das tinyops kennt. Zuweisen bleibt im Helpdesk.
+
+### Neu
+- **«Ausprobieren …» am MR** (im Fokus-Detail, beim Testen neben «In IntelliJ öffnen», in den Listen):
+  - Prompts kopieren (Review-Brief, Smoke-Test, Repro-Test)
+  - git-Befehle kopieren
+  - In IntelliJ öffnen
+  - Review-Umgebung starten, stoppen und öffnen, oder ihre Befehle kopieren
+
+  So geht es auch ohne eingerichteten Agenten (Entscheid E2).
+- **Review-Umgebung vorbefüllt:** tinyops erkennt Compose-Dateien und Dockerfile in deinem Checkout und schlägt «Docker Compose mit …» vor. Die Befehle sind vorbefüllt und bleiben anpassbar.
+- **Umsysteme zusammenklicken:**
+  - Wählbar sind PostgreSQL, MariaDB, Redis, ActiveMQ Artemis, RabbitMQ, Mailpit und andere Repos aus Workspaces mit Dockerfile.
+  - tinyops schreibt daraus eine Compose-Datei in seinen Datenordner, nie ins Repo, und gibt sie mit `-f` dazu (neuer Platzhalter `{compose_files}`).
+  - Umsysteme bekommen keine Ports nach aussen und sind unter ihrem Namen erreichbar.
+- **Checkout automatisch aus Workspaces:** Ist bei einem Projekt kein Pfad eingetragen, nimmt «In IntelliJ öffnen» den Checkout aus Workspaces, dessen Remote passt. Worktrees zählen dabei nicht.
+
+### Geändert
+- Die Review-Umgebung von Agenten-Läufen und MRs läuft über denselben Weg. Ihr Zustand steht in einer eigenen Tabelle, Läufe aus 0.32/0.33 werden weiter gelesen.
+- `usage.py` heisst jetzt `aiquota.py` (Rest-Kontingent der KI-Abos), damit es nicht mit der UI-Nutzung (`ux.py`) verwechselt wird.
+- Der Smoke-Test-Prompt prüft die Review-Umgebung statt eines Kubernetes-Namespaces.
+
+### Entfernt
+- **Projectron-Export** (E1, gebucht wird nur über BCS): Wrapper-URL, Token, «Senden», «Beim Bestätigen sofort senden», `GET /api/time/export`, `POST /api/time/result` und der Verbindungstest. Der Verbindungstest war mit 8 s die langsamste Antwort im Nutzungsbericht. Bisherige Entwürfe bleiben lesbar, alte Einstellungen werden beim Speichern entfernt.
+- **Alte Testumgebung je MR** (E2):
+  - Weg sind Helm-Deploy und Abbau, die Test-Jobs, die alten Agenten-Knöpfe pro MR und der Schalter «Testumgebungen» unter Weiteres.
+  - Ebenso die Einstellungen `kube_context`, `namespace_prefix`, `deploy_command`, `teardown_command`, `job_timeout` und `agent_command`.
+  - Der Fehler «kube_context fehlt» aus dem Nutzungsbericht kann nicht mehr auftreten.
+  - `deploy/` bleibt: Damit betreibst du tinyops selbst in Kubernetes, das hat mit der Testumgebung nichts zu tun.
+
 ## [0.33.0]
 
 Das erste Release des Plans 0.33–0.45: absichern, bevor aufgeräumt wird. Keine neuen Funktionen.

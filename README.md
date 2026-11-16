@@ -6,7 +6,7 @@ Ein kleines lokales Panel. Nur Python (getestet mit 3.13, sollte ab 3.9 laufen),
 
 **Kann:** deine Branches und MRs mit Pipeline-Status zeigen, sie mit Jira-Tickets verknüpfen, die Stories in Arbeit
 gegen ein Limit zählen, die Review-Queue und dir zugeteilte MRs zeigen, offene Branches mit deinen oder Agent-Commits zeigen, eine Ideenbox
-führen, pro MR eine Testumgebung im Cluster starten und fertige Prompts füllen.
+führen, Agenten-Ergebnisse und MRs in einer Review-Umgebung starten (Docker Compose, Kubernetes, eigene Befehle) und fertige Prompts füllen.
 
 **Kann bewusst nicht:** approven, mergen, pushen. In Jira schreibt es nur mit ausdrücklichem Opt-in (`jira.allow_create`) und Bestätigung, SonarQube und GitLab liest es nur.
 
@@ -47,13 +47,13 @@ und prüft sich nochmal selbst. Gespeicherte Secrets werden nie zurück an den B
 «gespeichert (← Quelle)». Bei «basic» pausiert tinyops nach einem falschen Passwort 30 Sekunden, damit Jira dein Konto
 nicht sperrt.
 
-**Vorerst ausgeblendet** (Ideenbox, Testumgebungen mit Prompts und Agenten-Knöpfen, Helpdesk) bleibt alles, was nicht GitLab
+**Vorerst ausgeblendet** (KI-Konten, Helpdesk) bleibt alles, was nicht GitLab
 oder Jira ist. Einschalten: Einstellungen → «Weitere Funktionen». Ausgeschaltete Funktionen sind auch serverseitig gesperrt.
 
 Tokens besorgen und Hintergründe stehen darunter; von Hand geht es auch:
 Von Hand:
 
-1. `cp config.example.json config.json` und anpassen (URLs, Projekt-IDs, `jira.project_keys`, `kube_context`).
+1. `cp config.example.json config.json` und anpassen (URLs, Projekt-IDs, `jira.project_keys`).
 2. Zugangsdaten sicher speichern (Abschnitt 3). **Nie in die config.json schreiben**, das Panel verweigert dann den Start.
 3. Starten: `./run.sh`, oder mit Update vorher: `python3 start.py` (siehe 4y)
 
@@ -426,17 +426,7 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Zeitentwürfe (Tab «Zeit»):** je Tag und Ticket, auf 15 Minuten gerundet, mit Text und Belegen (Stationen, Teilschritte, Abnahmen). Bearbeiten, zusammenlegen, verwerfen, von Hand ergänzen. Gebucht wird erst nach **Bestätigen**.
 
-**Übergabe an deinen MCP (Projectron):**
-- **Schieben:** Ist unter Einstellungen → Zeiterfassung eine Wrapper-URL eingetragen, sendet «Bestätigen» ein `POST`. Der Body hat das Schema `tinyops.time-entry/1`, dazu kommen `Idempotency-Key` und optional `Authorization: Bearer <mcp_token>`.
-  - Gebucht ist der Entwurf nur bei `{"status": "booked", "reference": "..."}`.
-  - `rejected` gibt «abgelehnt». Alles andere gibt «fehlgeschlagen» mit «Erneut senden».
-- **Abholen:** `GET /api/time/export?state=bestätigt`, Rückmeldung mit `POST /api/time/result` `{"id", "status": "booked"|"rejected", "reference", "message"}` (Header `X-Requested-With: tinyops`).
-
-    {"schema": "tinyops.time-entry/1", "id": "td-2026-11-05-DLP-5351", "date": "2026-11-05", "ticket": "DLP-5351",
-     "project_hint": "dlp-mailhandler", "minutes": 135, "text": "Resilient Cache: Tests ergänzt",
-     "evidence": ["Station Prüfen 10:42", "Abnahme 1:feature/DLP-5351 @ a1b2c3d4"], "idempotency_key": "td-2026-11-05-DLP-5351-3f9a…"}
-
-Gleicher Inhalt ergibt denselben Schlüssel, so bucht doppeltes Senden einmal. Wird der Entwurf nach einem Fehlschlag geändert, gibt es einen neuen Schlüssel.
+**Buchen:** nur über BCS (Einstellungen → Zeiterfassung → BCS-Middleware): bestätigen, dann «In BCS prüfen» und «In BCS buchen». Der frühere Export an einen Projectron-MCP ist seit 0.34 entfernt (Entscheid E1).
 
 **Prüfen (Tab «Prüfen»):** Oben «Als Nächstes testen» mit fünf Punkten. Punkte mit `[auto: …]` prüft ein automatischer Test bei jedem Release (darunter `tests/test_ui.py` im echten Browser), sie zählen nicht als offen. Prüfliste aus `QA-CHECKLIST.md` zum Abhaken (ok, Fehler mit Notiz, übersprungen), «Ergebnis kopieren», Fehler als Aufgabe ins Board. **Selbsttest** (Knopf oder `python3 server.py --selftest`): Vorlagen, Hilfsskripte, Datenbank, Kette des Verlaufs und ein Durchlauf der Kernfunktionen mit Demo-Daten in einem leeren Ordner.
 
@@ -729,34 +719,33 @@ echten Agent-Commit, was dort steht, und passe `agent_message_patterns` an.
 | Auf der Office-VM | Vom Laptop: `ssh -L 8765:localhost:8765 user@vm`, dann `http://localhost:8765`. Nichts im Netz offen |
 | Im Büronetz direkt | `bind` auf die VM-IP, `allowed_hosts` auf den Hostnamen, `--set-secret access_token`. Ohne Token startet das Panel nicht. Einmal `http://vm:8765/?token=...` öffnen |
 
-## 8. Testumgebung pro MR
+## 8. Review-Umgebung pro MR oder Agenten-Lauf
 
-Der Button führt `deploy_command` aus der Config aus (Standard: `helm upgrade --install`). Das Image-Tag ist
-standardmäßig `{sha8}`: Deine CI muss das Image des MR also mit den ersten 8 Stellen des Commit-Hashes taggen
-und in Harbor ablegen. Passt das nicht, ändere `tag_template` pro Projekt (`{sha8}`, `{iid}`, `{branch_slug}`).
+Seit 0.34 ersetzt die Review-Umgebung die frühere Testumgebung per Helm (Entscheid E2). Einrichten unter Einstellungen → IntelliJ und Review-Umgebung, je Projekt:
 
-Schutzregeln im Code: `kube_context` muss gesetzt sein; Namespaces heißen `test-<projekt>-<mr>` und nur solche
-werden abgebaut; Befehle kommen nur aus der Config, ohne Shell und ohne Eingaben aus dem Browser; Zeitlimit pro Job.
+- **Docker Compose:** tinyops schlägt die Compose-Datei aus deinem Checkout vor. Ohne Compose-Datei, aber mit Dockerfile baut es die Anwendung selbst.
+  - **Umsysteme** (PostgreSQL, MariaDB, Redis, ActiveMQ Artemis, RabbitMQ, Mailpit) und andere Repos aus Workspaces mit Dockerfile wählst du per Haken. Daraus schreibt tinyops eine Compose-Datei in seinen Datenordner, nie ins Repo, und gibt sie mit `-f` dazu.
+- **Kubernetes** oder **eigene Befehle:** mit Platzhaltern `{name}`, `{port}`, `{path}`, `{branch}`, `{sha}`, `{ticket}`, `{compose_files}`.
+
+Am MR («Ausprobieren …» im Fokus-Detail und in den Listen) und im Agenten-Lauf: starten, stoppen, öffnen, oder alles als Befehle kopieren. tinyops führt nur aus, was in den Einstellungen steht, und nur auf deinen Klick, auf diesem Rechner.
 
 ## 9. Prompts, Agenten, Ideenbox
 
-`prompts/*.md` sind Vorlagen. Platzhalter: `{project} {branch} {mr_iid} {mr_url} {title} {sha8} {namespace}
-{context} {ticket}`. «Prompt kopieren» legt den gefüllten Text in die Zwischenablage, den fügst du in Claude Code,
-Mistral Vibe oder Goose ein (für DLP-Projekte der richtige Weg: Du entscheidest pro Aufruf, wer den Text sieht).
-Optional startet `agent_command` den Prompt direkt, Flags prüfst du in der Hilfe des Tools.
+Am MR gibt es unter «Ausprobieren …» drei Prompts zum Kopieren: Review-Brief, Smoke-Test und Repro-Test. Platzhalter: `{project} {branch} {mr_iid} {mr_url} {title} {sha8} {ticket} {review_name} {review_url}`.
+Den gefüllten Text gibst du in Claude Code, Mistral Vibe, Goose oder ein Chatfenster. Für DLP-Projekte ist das der richtige Weg: Du entscheidest pro Aufruf, wer den Text sieht. Agenten startest du über die Agenten-Läufe (Abschnitt Agenten).
 
 Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Sie startet nie etwas.
 
 ## 10. Dateien
 
-    server.py            Server, GitLab- und Jira-Client, Jobs, Ideen (SQLite in data/)
+    server.py            Server, GitLab- und Jira-Client, Ideen (SQLite in data/)
     settings.py          Einstellungsseite: Verbindungstests, Speichern
     net.py               Netzwerk: TLS, Fehlerarten, keine Weiterleitungen
     tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher
     audit.py             Verlauf: nur anhängend, Hash-Kette, Prüfen und Export
     review.py            Offene Review-Punkte: lesen, Prompt und JSON
-    timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe, Vertrag mit dem MCP
+    timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe (gebucht wird in BCS)
     qa.py                Prüfliste und Selbsttest
     QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt; [auto: …] prüft ein Test
     docs/DECISIONS.md    getroffene und offene Entscheide
@@ -764,6 +753,9 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     launcher/            Launcher zum Herunterladen (Skript, Zipapp, PyInstaller über .github/workflows)
     agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
     flow.py              Ablauf, nächster Schritt, Spielstand
+    aiquota.py           Rest-Kontingent der KI-Abos (früher usage.py)
+    reviewenv.py         Review-Umgebung: Befehle, Umsysteme, Compose-Datei
+    helpdesk.py          Helpdesk-Jira, nur lesend
     static/index.html    Oberfläche
     prompts/*.md         Prompt-Vorlagen
     tests/               Unit-Tests und Fake-GitLab/Jira: python3 -m unittest discover -s tests -v

@@ -9,7 +9,6 @@ erst «Bestätigen», dann geht der Entwurf an die Wrapper-API deines MCP (oder 
 
 Zustände eines Entwurfs: offen → bestätigt → gebucht | abgelehnt | fehlgeschlagen (= bestätigt, nicht gebucht); verworfen.
 """
-import hashlib
 import json
 import sqlite3
 import threading
@@ -19,16 +18,11 @@ from pathlib import Path
 
 STATES = ("offen", "bestätigt", "gebucht", "abgelehnt", "fehlgeschlagen", "verworfen", "unklar")    # unklar (0.29): Bestätigen in BCS brach ab, erst abgleichen
 LOCKED = ("gebucht",)                       # nie mehr ändern
-SENDABLE = ("bestätigt", "fehlgeschlagen")
-CONTRACT = "tinyops.time-entry/1"
 DEFAULTS = {
     "enabled": True,
     "round_minutes": 15,      # Entwürfe auf so viele Minuten runden
     "min_minutes": 5,         # darunter entsteht kein Entwurf
     "idle_minutes": 15,       # so lange ohne Panel-Aktivität: Abschnitt endet, die Pause wird als Lücke vorgeschlagen
-    "mcp_url": "",            # Wrapper-API deines MCP, z. B. http://127.0.0.1:3100/time-entries (POST)
-    "allow_remote": False,    # nur Adressen im eigenen Netz, ausser ausdrücklich erlaubt
-    "send_on_confirm": True,  # «Bestätigen» schickt sofort; sonst holt dein MCP über GET /api/time/export ab
 }
 
 
@@ -408,17 +402,3 @@ def compose(d, totals, meta, events, accs, unit=15, minimum=5):
         out.append({"ticket": key, "title": title, "project_hint": m.get("project_hint", ""), "minutes": round_minutes(t["secs"], unit, minimum),
                     "secs": t["secs"], "text": text[:300], "evidence": ev})
     return out
-
-
-def payload(dr):
-    """Vertrag mit der Wrapper-API des MCP (Vorschlag, Version 1)."""
-    body = {"schema": CONTRACT, "id": dr["id"], "date": dr["date"], "ticket": dr["ticket"], "project_hint": dr["project_hint"],
-            "minutes": int(dr["minutes"]), "text": dr["text"], "evidence": dr["evidence"]}
-    body["idempotency_key"] = idem_key(body)
-    return body
-
-
-def idem_key(body):
-    """Gleicher Inhalt → gleicher Schlüssel: doppelt senden bucht einmal. Geänderter Inhalt nach einem Fehlschlag → neuer Schlüssel."""
-    h = hashlib.sha256(json.dumps({k: body[k] for k in ("id", "date", "ticket", "minutes", "text")}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:10]
-    return "%s-%s" % (body["id"], h)

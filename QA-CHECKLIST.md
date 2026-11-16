@@ -74,11 +74,6 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r19-05` Entwurf ändern (Minuten, Text) → «bearbeitet», bleibt beim Neuladen so [auto: test_time.AppTime]
 - [ ] `r19-06` Zwei Entwürfe zusammenlegen → einer mit der Summe, der andere verworfen [auto: test_time.AppTime]
 - [ ] `r19-07` Zeile «Von Hand» mit Ticket und Minuten → neuer Entwurf [auto: test_time.AppTime]
-- [ ] `r19-08` Einstellungen → Zeiterfassung: Wrapper-URL deines MCP, «Verbindung testen» → erreichbar, nichts gebucht
-- [ ] `r19-09` Entwurf bestätigen → an deinen MCP gesendet, Status «gebucht» mit Referenz
-- [ ] `r19-10` MCP stoppen, dann bestätigen → «fehlgeschlagen» (bestätigt, nicht gebucht), «Erneut senden» klappt nach dem Start
-- [ ] `r19-11` Denselben Entwurf zweimal senden lassen (MCP-Log ansehen) → gleicher Idempotency-Key, eine Buchung [auto: test_time.AppTime]
-- [ ] `r19-12` Dein MCP holt `GET /api/time/export` ab und meldet `POST /api/time/result` → Entwurf «gebucht»
 - [ ] `r19-13` Tab «Prüfen»: Selbsttest ausführen, einen Punkt als Fehler mit Notiz markieren, «Ergebnis kopieren» → Selbsttest grün, das Markdown enthält den Fehler mit Notiz [auto: test_qa.AppQa]
 
 ## 0.20.0
@@ -111,6 +106,14 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
+
+## 0.34.0
+
+- [ ] `r34-01` Helpdesk: ein Ticket aus der Queue oder «Ich beobachte» öffnen → «Als Fokus anheften, Zeit starten» → Hero zeigt das Ticket, «Zeit läuft»; Tab «Zeit» zeigt einen Abschnitt darauf
+- [ ] `r34-02` Einstellungen → IntelliJ und Review-Umgebung: Pfad bei einem Projekt leer lassen, das in Workspaces liegt → Platzhalter «aus Workspaces: …»; «In IntelliJ öffnen» an einem MR nimmt diesen Checkout
+- [ ] `r34-03` Review-Umgebung eines Projekts mit Compose-Datei → «Vorschlag: Docker Compose mit …» → Umsysteme anhaken (z. B. PostgreSQL, ein zweites Repo), speichern
+- [ ] `r34-04` MR im Fokus → «Ausprobieren» → Prompt kopieren, git-Befehle kopieren; «Starten» → läuft, «Öffnen» geht auf den Port, `docker ps` zeigt die Umsysteme; «Stoppen» räumt auf
+- [ ] `r34-05` Tab «Zeit» und Einstellungen → Zeiterfassung → nirgends mehr MCP oder Projectron, Buchen nur über BCS [auto: test_ui.Views]
 
 ## 0.33.0
 

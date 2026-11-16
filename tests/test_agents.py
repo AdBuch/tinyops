@@ -574,9 +574,9 @@ class AppApi(unittest.TestCase):
             app.agent_action("assign", {"agent": "a1", "ticket": "DLP-2", "project_id": 1, "branch": "", "title": "t"})
         self.assertIn("restricted", str(cm.exception))
 
-    def test_agents_route_not_gated_by_testenv(self):
+    def test_agents_route_not_gated(self):
         src = (ROOT / "server.py").read_text()
-        self.assertIn('path == "/api/agent" or path.startswith(("/api/jobs"', src)
+        self.assertNotIn('"testenv"', src)                 # 0.34 (E2): die alte Testumgebung und ihr Schalter sind weg
 
 
 class Config(unittest.TestCase):

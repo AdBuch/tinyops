@@ -12,15 +12,15 @@ sys.path.insert(0, str(ROOT))
 
 import server  # noqa: E402
 import settings  # noqa: E402
-import usage  # noqa: E402
+import aiquota  # noqa: E402
 import ux  # noqa: E402
 
 
 class Pace(unittest.TestCase):
     def test_same_percent_means_different_things(self):
         now = 1_800_000_000
-        early = usage._win("5 h", 20, now + 4.75 * 3600, now)       # 20 % nach 15 min
-        late = usage._win("5 h", 20, now + 0.5 * 3600, now)         # 20 % in den letzten 30 min
+        early = aiquota._win("5 h", 20, now + 4.75 * 3600, now)       # 20 % nach 15 min
+        late = aiquota._win("5 h", 20, now + 0.5 * 3600, now)         # 20 % in den letzten 30 min
         self.assertEqual((early["time_left_pct"], late["time_left_pct"]), (95.0, 10.0))
         self.assertGreater(early["projected_pct"], 100)              # zu schnell
         self.assertLess(early["empty_in_secs"], early["secs_left"])
@@ -30,21 +30,21 @@ class Pace(unittest.TestCase):
 
     def test_edges(self):
         now = 1_800_000_000
-        w = usage._win("5 h", 5, now + 5 * 3600 - 60, now)           # gerade begonnen
+        w = aiquota._win("5 h", 5, now + 5 * 3600 - 60, now)           # gerade begonnen
         self.assertIsNone(w["projected_pct"])
-        self.assertNotIn("time_left_pct", usage._win("Sonstwas", 5, now + 60, now))      # unbekannte Fensterlänge: keine Marke
-        self.assertNotIn("time_left_pct", usage._win("5 h", 5, None, now))
-        c = usage.parse_codex({"rate_limit": {"primary_window": {"used_percent": 50, "limit_window_seconds": 18000, "reset_after_seconds": 9000}}}, now)
+        self.assertNotIn("time_left_pct", aiquota._win("Sonstwas", 5, now + 60, now))      # unbekannte Fensterlänge: keine Marke
+        self.assertNotIn("time_left_pct", aiquota._win("5 h", 5, None, now))
+        c = aiquota.parse_codex({"rate_limit": {"primary_window": {"used_percent": 50, "limit_window_seconds": 18000, "reset_after_seconds": 9000}}}, now)
         self.assertEqual(c[0]["time_left_pct"], 50.0)
 
     def test_month_window(self):
         from datetime import datetime, timezone
         r = datetime(2026, 12, 1, tzinfo=timezone.utc).timestamp()
-        self.assertEqual(r - usage.month_before(r), 30 * 86400)
+        self.assertEqual(r - aiquota.month_before(r), 30 * 86400)
         r = datetime(2026, 3, 31, tzinfo=timezone.utc).timestamp()
-        self.assertEqual(datetime.fromtimestamp(usage.month_before(r), timezone.utc).day, 28)
+        self.assertEqual(datetime.fromtimestamp(aiquota.month_before(r), timezone.utc).day, 28)
         now = time.time()
-        m = usage.mistral_item({"pushed": now, "budgets": {"vibe": {"pct": 10.0, "budget": 20.0, "cur": "EUR", "reset": now + 15 * 86400}}}, now)
+        m = aiquota.mistral_item({"pushed": now, "budgets": {"vibe": {"pct": 10.0, "budget": 20.0, "cur": "EUR", "reset": now + 15 * 86400}}}, now)
         self.assertIn("time_left_pct", m["windows"][0])
 
 

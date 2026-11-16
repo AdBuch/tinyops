@@ -319,6 +319,7 @@
   .bfiles .fp code { font-size: 12.5px; overflow-wrap: anywhere; } .bfiles .fn { margin-left: 8px; color: var(--quiet); font-size: 12px; white-space: nowrap; }
   .bfiles .fw { font-size: 13px; margin-top: 2px; } .bfiles .fw.none { color: var(--warn); font-size: 12.5px; }
   .renv { padding: 8px 0; border-top: 1px solid var(--line); }
+  .rsvc { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0; }
   .trybox { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
   .gwarn { margin: 8px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
   .aud { list-style: none; margin: 6px 0 0; padding: 0; }
@@ -959,10 +960,6 @@
     <details id="usageDet"><summary><span class="usum-h">KI-Kontingent</span><span id="usageSum"></span></summary>
       <div id="usageDetail" class="card"></div></details>
    </div>
-   <div id="jobsBox" hidden>
-    <h2>Test-Jobs</h2>
-    <div id="jobs"></div>
-   </div>
   </aside>
 </div>
 <div id="viewBoard" hidden>
@@ -1047,7 +1044,6 @@
 <script>
 const H = { 'X-Requested-With': 'tinyops', 'Content-Type': 'application/json' };
 let state = null;
-const openLogs = new Set();
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -1189,13 +1185,7 @@ function row(it) {
   if (it.kind === 'branch' && it.create_mr_url) acts.push(`<a class="btn" href="${esc(it.create_mr_url)}" target="_blank" rel="noopener" title="In GitLab einen Merge Request für diesen Branch anlegen">MR erstellen</a>`);
   acts.push(`<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener" title="${it.kind === 'branch' ? 'Branch in GitLab' : 'Merge Request in GitLab'}">${it.kind === 'branch' ? 'Branch öffnen' : 'MR öffnen'}</a>`);
   const parts = [];
-  if (F().testenv && it.iid && it.can_deploy) {
-    const opts = state.prompts.map(p => `<option>${esc(p)}</option>`).join('');
-    const lock = it.agent_locked ? ' disabled title="Story-Limit überschritten: Agenten nur für Tickets, die schon in Arbeit sind"' : '';
-    parts.push(`<button class="primary" data-act="deploy">Testumgebung starten</button><button data-act="teardown">Abbauen</button>
-      <select class="ps">${opts}</select><button data-act="copy">Prompt kopieren</button>
-      ${state.agent_enabled ? `<button data-act="agent"${lock}>Agent starten</button>` : ''}`);
-  }
+  if (it.iid) parts.push(`<button data-mrtry="${esc(JSON.stringify({ host: it.host || 'gitlab', project_id: it.project_id, iid: it.iid }))}" title="Prompts, git-Befehle und Review-Umgebung für diesen MR">Ausprobieren …</button>`);
   if (it.no_ticket && F().ideas) parts.push(`<button data-act="idea" data-text="${esc('Branch ' + it.branch + ': ' + it.title)}">In Ideenbox parken</button>`);
   return `<div class="item" draggable="true" data-dp="${it.project_id}" data-db="${esc(it.branch)}">
     <div class="rail ${railOf(it)}"></div>
@@ -1395,25 +1385,6 @@ function renderIdeas() {
     </div>`).join('') : '<div class="empty">Leer. Das ist ein gutes Zeichen.</div>';
 }
 
-function renderJobs() {
-  const jobs = state.jobs;
-  document.getElementById('jobs').innerHTML = jobs.length ? jobs.map(j => `
-    <div class="card" data-job="${j.id}">
-      <div class="row"><span class="badge ${j.status === 'ok' ? 'success' : j.status === 'fehler' ? 'failed' : 'running'}">${esc(j.status)}</span>
-        <span>${esc(j.title)}</span></div>
-      <div class="row" style="margin-top:6px"><button data-ja="log">${openLogs.has(j.id) ? 'Log zu' : 'Log'}</button></div>
-      <pre class="log" id="log${j.id}" style="display:${openLogs.has(j.id) ? 'block' : 'none'}"></pre>
-    </div>`).join('') : '<div class="empty">Noch nichts gestartet.</div>';
-  openLogs.forEach(loadLog);
-}
-
-async function loadLog(id) {
-  try {
-    const j = await api('GET', '/api/jobs/' + id);
-    const el = document.getElementById('log' + id);
-    if (el) { el.textContent = j.log.join('\n'); el.scrollTop = el.scrollHeight; }
-  } catch (e) { /* Job weg */ }
-}
 
 
 function renderHeader() {
@@ -1443,11 +1414,10 @@ function renderAside() {
   const f = F();
   $('ideasBox').hidden = !f.ideas;
   $('ideaBtn').hidden = !f.ideas;
-  $('jobsBox').hidden = !f.testenv;
   const hasUsage = !!(state.usage_providers || []).length;
   $('usageBox').hidden = !hasUsage;
   renderUsageBox();
-  const on = !!(f.ideas || f.testenv);
+  const on = !!f.ideas;
   $('aside').hidden = !on;
   document.querySelector('.bn[data-view=ideas]').hidden = !f.ideas;
   $('viewOverview').classList.toggle('withaside', on);
@@ -1528,7 +1498,6 @@ async function load() {
     renderHeader(); renderLeft(); renderAside(); renderBoard(); renderFocus(); loadUsage(false); wsBadge();
     if (view === 'time') loadTime();
     if (state.features.ideas) renderIdeas();
-    if (state.features.testenv) renderJobs();
     if (firstLoad) { firstLoad = false; if (!state.configured && !state.demo) setView('settings'); }
   } catch (e) { toast(e.message); }
   // Solange synchronisiert wird, schnell nachfragen: Teilergebnisse erscheinen, ohne dass man warten muss
@@ -1561,22 +1530,6 @@ document.getElementById('board').addEventListener('click', async ev => {
     try { await api('POST', '/api/ideas', { text: btn.dataset.text }); toast('In der Ideenbox'); await load(); } catch (e) { toast(e.message); }
     return;
   }
-  const row = btn.closest('[data-p]');
-  const body = { project_id: +row.dataset.p, iid: +row.dataset.i };
-  const name = row.querySelector('.ps')?.value;
-  try {
-    if (btn.dataset.act === 'deploy') { await api('POST', '/api/deploy', body); toast('Deploy gestartet'); }
-    if (btn.dataset.act === 'teardown') {
-      if (!confirm('Test-Namespace dieses MR abbauen?')) return;
-      await api('POST', '/api/teardown', body); toast('Abbau gestartet');
-    }
-    if (btn.dataset.act === 'copy') { const r = await api('POST', '/api/prompt', { ...body, name }); await copyText(r.prompt, 'Prompt: ' + name); return; }
-    if (btn.dataset.act === 'agent') {
-      if (!confirm(`Agent mit Prompt "${name}" lokal starten?`)) return;
-      await api('POST', '/api/agent', { ...body, name }); toast('Agent gestartet');
-    }
-    await load();
-  } catch (e) { toast(e.message); }
 });
 
 
@@ -2129,6 +2082,52 @@ function agGateHtml(r) {
     <div class="row"><button class="primary" id="agGateOk" ${left > 0 || r.status !== 'fertig' ? 'disabled' : ''} title="${r.status !== 'fertig' ? 'Nur ein fertiger Lauf lässt sich freigeben' : left > 0 ? 'Erst alle Prüfpunkte abhaken' : 'Phase freigeben'}">${ic('check')} Freigeben${left > 0 ? ` (noch ${left} Prüfpunkt${left === 1 ? '' : 'e'})` : ''}</button>
       <button id="agGateBack">Zurückgeben</button></div></div>`;
 }
+// «Ausprobieren …» für einen MR (0.34, E2): direkt ausführen über die Review-Umgebung, alles auch zum Kopieren,
+// falls kein Agent da ist oder du es lieber selbst machst.
+async function openMrTry(m) {
+  const box = $('wsDlgBody');
+  const draw = async () => {
+    let st;
+    try { st = await post('/api/mr/env', Object.assign({ do: 'state' }, m)); } catch (e) { box.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return; }
+    const ref = m.host === 'github' ? `pull/${m.iid}/head` : `merge-requests/${m.iid}/head`;
+    const git = `git fetch origin refs/${ref}\ngit switch --detach FETCH_HEAD\n`;
+    const e = st.env, s2 = st.state || {}, busy = s2.state === 'startet' || s2.state === 'stoppt';
+    const L = { startet: 'startet …', 'läuft': 'läuft', stoppt: 'stoppt …', gestoppt: 'gestoppt', fehler: 'Fehler', unklar: 'unklar (tinyops neu gestartet)' };
+    box.innerHTML = `<h3 style="margin:0 0 4px">Ausprobieren: ${m.host === 'github' ? 'PR' : 'MR'} !${m.iid}</h3>
+      <div class="small quiet" style="margin-bottom:10px">Direkt ausführen oder kopieren. Nichts davon pusht oder ändert den MR.</div>
+      <div class="trybox" style="border:0;padding:0;margin:0"><b>Prompt kopieren</b><div class="row small" style="margin:6px 0 10px"><select id="mtPrompt" aria-label="Prompt">${(state.prompts || []).map(p => `<option>${esc(p)}</option>`).join('')}</select><button id="mtCopyP">${ic('copy')} Kopieren</button>
+        <span class="quiet">für einen Agenten oder ein Chatfenster</span></div>
+      <b>Auschecken</b><div class="row small" style="margin:6px 0 10px"><button id="mtIde" data-ide="${esc(JSON.stringify(m))}">${ic('ide')} In IntelliJ öffnen</button><button id="mtGit">${ic('copy')} git-Befehle kopieren</button></div>
+      <b>Review-Umgebung</b>
+      ${e ? `<div class="small" style="margin:4px 0">${esc(e.label)} · Name <code>${esc(e.name)}</code> · Port <code>${esc(e.port)}</code>${s2.state ? ` · <b class="${s2.state === 'fehler' ? 'bad-t' : ''}">${esc(L[s2.state] || s2.state)}</b>` : ''}</div>
+        <div class="row small" style="margin:6px 0"><button class="primary" id="mtUp" ${busy ? 'disabled' : ''}>${ic('play')} Starten</button>
+          ${['läuft', 'fehler', 'unklar'].includes(s2.state) ? `<button id="mtDown" ${busy ? 'disabled' : ''}>Stoppen</button>` : ''}
+          ${s2.state === 'läuft' && e.url ? `<button id="mtOpen">${ic('ext')} Öffnen</button>` : ''}<button id="mtCmd">${ic('copy')} Befehle kopieren</button></div>
+        ${s2.log ? `<details><summary class="quiet small">Ausgabe</summary><pre class="log" style="max-height:24vh">${esc(s2.log)}</pre></details>` : ''}`
+      : `<div class="small quiet" style="margin:4px 0">Für dieses Projekt ist keine eingetragen. <button class="quiet-btn" id="mtSet">Einstellungen → IntelliJ und Review-Umgebung</button></div>`}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px"><button id="mtClose">Schliessen</button></div>`;
+    $('mtClose').onclick = () => $('wsDlg').close();
+    $('mtCopyP').onclick = async () => { try { const r = await post('/api/prompt', { project_id: m.project_id, iid: m.iid, name: $('mtPrompt').value }); copyText(r.prompt, 'Prompt'); } catch (x) { toast(x.message); } };
+    $('mtGit').onclick = () => copyText(git, 'git-Befehle');
+    if ($('mtSet')) $('mtSet').onclick = () => { $('wsDlg').close(); setView('settings'); setTimeout(() => { const el = document.getElementById('s-ide'); if (el) el.scrollIntoView(); }, 300); };
+    if ($('mtCmd')) $('mtCmd').onclick = () => copyText(`# im Worktree des MR ausführen (${st.worktree || 'erst «In IntelliJ öffnen» oder git-Befehle'})\n# starten\n${e.up}\n# stoppen\n${e.down || '(kein Stopp-Befehl eingetragen)'}\n`, 'Befehle');
+    if ($('mtOpen')) $('mtOpen').onclick = () => window.open(s2.url || e.url, '_blank', 'noopener');
+    const env = async d => { if (d === 'up' && !confirm(`Review-Umgebung starten?\n\nDas führt den Start-Befehl aus deinen Einstellungen auf diesem Rechner aus (${e.label}, Name ${e.name}).`)) return;
+      try { await post('/api/mr/env', Object.assign({ do: d }, m)); } catch (x) { toast(x.message); } draw(); setTimeout(draw, 1500); };
+    if ($('mtUp')) $('mtUp').onclick = () => env('up');
+    if ($('mtDown')) $('mtDown').onclick = () => env('down');
+    if (busy) setTimeout(() => { if ($('wsDlg').open) draw(); }, 3000);
+  };
+  box.innerHTML = '<div class="small quiet">Lade …</div>';
+  $('wsDlg').showModal();
+  draw();
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-mrtry]');
+  if (!b) return;
+  ev.stopPropagation();
+  try { openMrTry(JSON.parse(b.dataset.mrtry)); } catch (e) { toast(e.message); }
+}, true);
 function agQuestionHtml(r) {
   const q = r.question;
   return `<div class="agq"><b>${ic('chat')} ${esc(r.agent_name)} fragt${q.blocking === false ? ' (arbeitet weiter)' : ''}:</b><div style="margin-top:4px;white-space:pre-wrap">${esc(q.question)}</div>
@@ -2161,14 +2160,15 @@ async function agTryLoad(id) {
   box.innerHTML = `<b>Ausprobieren</b>
     ${!t.branch ? '<div class="small quiet">Dieser Lauf hat keinen eigenen Branch zum Auschecken.</div>' : `<div class="row small" style="flex-wrap:wrap;gap:8px;margin-top:6px">
       <button class="primary" id="tyIde" ${t.clone || state.demo ? '' : 'disabled'} title="${t.clone ? 'Branch in deinen Checkout holen (eigener Worktree daneben, dein Stand bleibt) und IntelliJ öffnen' : 'Pfad zu deinem lokalen Checkout fehlt: Einstellungen → IntelliJ und Review-Umgebung'}">${ic('ext')} In IntelliJ öffnen</button>
-      <button id="tyCmd" title="git-Befehle, um den Branch selbst zu holen">${ic('copy')} Befehle kopieren</button>
+      <button id="tyCmd" title="git-Befehle, um den Branch selbst zu holen, und die Befehle der Review-Umgebung">${ic('copy')} Befehle kopieren</button>
       ${t.env ? `<button id="tyUp" ${busy ? 'disabled' : ''} title="${esc(t.env.label)}: Start-Befehl aus den Einstellungen, im Worktree des Laufs. Name ${esc(t.env.name)}, Port ${esc(t.env.port)}">${ic('play')} Review-Umgebung starten</button>
         ${es.state === 'läuft' || es.state === 'fehler' || es.state === 'unklar' ? `<button id="tyDown" ${busy ? 'disabled' : ''}>Stoppen</button>` : ''}
         ${es.state === 'läuft' && es.url ? `<button id="tyOpen" title="${esc(es.url)}">${ic('ext')} Öffnen</button>` : ''}` : '<span class="quiet">Review-Umgebung (Docker Compose, Kubernetes): Einstellungen → IntelliJ und Review-Umgebung.</span>'}</div>
       ${t.worktree ? `<div class="small quiet" style="margin-top:4px">Worktree: <code>${esc(t.worktree)}</code> auf <code>${esc(t.sha)}</code></div>` : ''}
       ${es.state ? `<div class="small" style="margin-top:4px">Review-Umgebung: <b class="${es.state === 'fehler' ? 'bad-t' : ''}">${esc(ESL[es.state] || es.state)}</b>${es.url && es.state === 'läuft' ? ` · <a href="${esc(es.url)}" target="_blank" rel="noopener">${esc(es.url)}</a>` : ''}
         ${es.log ? `<details><summary class="quiet">Ausgabe</summary><pre class="log" style="max-height:24vh">${esc(es.log)}</pre></details>` : ''}</div>` : ''}`}`;
-  if ($('tyCmd')) $('tyCmd').onclick = () => copyText(t.commands + (t.push ? '\n# Für Reviewer im Team: pushen machst du\n' + t.push + '\n' : ''), 'git-Befehle');
+  if ($('tyCmd')) $('tyCmd').onclick = () => copyText(t.commands + (t.push ? '\n# Für Reviewer im Team: pushen machst du\n' + t.push + '\n' : '')
+    + (t.env ? `\n# Review-Umgebung (${t.env.label}), im Worktree ausführen\n${t.env.up}\n# stoppen\n${t.env.down || '(kein Stopp-Befehl eingetragen)'}\n` : ''), 'Befehle');
   if ($('tyIde')) $('tyIde').onclick = async () => { const b2 = $('tyIde'); b2.disabled = true; try { const x = await post('/api/agents/checkout', { run: id, ide: true }); toast(x.launched ? 'IntelliJ öffnet ' + x.path : (x.hint || 'Worktree bereit: ' + x.path)); if (!x.launched) copyText(x.path, 'Pfad'); } catch (e) { toast(e.message); } agTryLoad(id); };
   const env = async (d) => { if (d === 'up' && !confirm(`Review-Umgebung starten?\n\nDas führt den Start-Befehl aus deinen Einstellungen auf diesem Rechner aus (${t.env.label}, Name ${t.env.name}).`)) return;
     try { await post('/api/agents/env', { run: id, do: d }); } catch (e) { toast(e.message); } agTryLoad(id); setTimeout(() => agTryLoad(id), 1500); };
@@ -2410,11 +2410,10 @@ function renderTime() {
     const lock = x.state === 'gebucht' || x.state === 'verworfen';
     const acts = [];
     if (x.state === 'unklar') acts.push('<span class="chip warn">unklar, ob gebucht</span>');
-    if (x.state === 'offen') acts.push(`<button class="primary" data-tconf="${esc(x.id)}" ${x.ticket_ok && x.minutes > 0 ? '' : 'disabled'} title="${x.ticket_ok ? (d.mcp && d.send_on_confirm ? 'Bestätigen und an deinen MCP senden' : 'Bestätigen; dein MCP holt es ab') : 'Erst ein Ticket eintragen'}">${d.mcp && d.send_on_confirm ? 'Bestätigen & buchen' : 'Bestätigen'}</button>`);
+    if (x.state === 'offen') acts.push(`<button class="primary" data-tconf="${esc(x.id)}" ${x.ticket_ok && x.minutes > 0 ? '' : 'disabled'} title="${x.ticket_ok ? 'Bestätigen. Gebucht wird danach in BCS' : 'Erst ein Ticket eintragen'}">Bestätigen</button>`);
     if (d.bcs && d.bcs.on && !lock) acts.push(x.bcs_task ? `<button class="quiet-btn" data-bcsmap="${esc(x.id)}" title="${esc(x.bcs_task.path || x.bcs_task.name)}${x.bcs_task.pattern.endsWith('*') ? ' (für ' + esc(x.bcs_task.pattern) + ')' : ''}">BCS: ${esc(short(x.bcs_task.name, 28))}</button>`
       : `<button data-bcsmap="${esc(x.id)}" class="warn-btn" title="Ohne BCS-Aufgabe lässt sich dieser Entwurf nicht buchen">BCS-Aufgabe wählen</button>`);
     if (TEXTS[x.id] && !lock) acts.push(`<button class="quiet-btn" data-ttext="${esc(x.id)}" title="${esc(TEXTS[x.id])}">Vorschlag übernehmen</button>`);
-    if (['bestätigt', 'fehlgeschlagen'].includes(x.state) && d.mcp) acts.push(`<button class="primary" data-tsend="${esc(x.id)}">${x.state === 'fehlgeschlagen' ? 'Erneut senden' : 'Senden'}</button>`);
     if (x.state === 'offen' && sameDay(x.id).length) acts.push(`<select data-tmerge="${esc(x.id)}" title="In einen anderen Entwurf legen"><option value="">Zusammenlegen …</option>${sameDay(x.id).map(o => `<option value="${esc(o.id)}">mit ${esc(o.ticket)}</option>`).join('')}</select>`);
     if (!lock) acts.push(`<button class="quiet-btn" data-tdisc="${esc(x.id)}">Verwerfen</button>`);
     if (x.state === 'verworfen') acts.push(`<button class="quiet-btn" data-trest="${esc(x.id)}">Wiederherstellen</button>`);
@@ -2437,7 +2436,7 @@ function renderTime() {
     ${d.earlier_open.length ? `<div class="banner warn">Offene Entwürfe an früheren Tagen: ${d.earlier_open.map(x => `<button class="quiet-btn" data-tgo="${x}">${new Date(x + 'T12:00:00').toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}</button>`).join(' ')}</div>` : ''}
     ${d.bcs ? `<div class="pcard" id="bcsCard"><h3>BCS <span class="quiet small">${d.bcs.demo ? 'Demo-Middleware' : 'über deine Middleware'}</span></h3>${d.bcs.error ? `<div class="banner bad">${esc(d.bcs.error)}</div>` : '<div class="quiet small">lese den Tag …</div>'}</div>` : ''}
     ${d.gaps.length ? `<div class="pcard"><h3>Lücken <span class="quiet small">Pausen über der Leerlaufgrenze. Sie zählen erst, wenn du sie annimmst.</span></h3>${d.gaps.map(g => `<div class="tgap"><time>${g.from_}–${g.to}</time><b>${g.minutes} min</b><span class="sp">${esc(g.key)} ${esc(g.title)}</span><button data-tgap="${g.id}" data-c="1">Zählen</button><button class="quiet-btn" data-tgap="${g.id}" data-c="0">Verwerfen</button></div>`).join('')}</div>` : ''}
-    <div class="pcard"><h3>Entwürfe <span class="quiet small">je Ticket, auf ${d.round} min gerundet. Gebucht wird erst nach «Bestätigen»${d.bcs && d.bcs.on ? ' und dann oben «In BCS prüfen» und «In BCS buchen»' : d.mcp ? ', über deinen MCP' : '; dein MCP holt bestätigte Entwürfe über <code>GET /api/time/export</code> ab'}.</span></h3>
+    <div class="pcard"><h3>Entwürfe <span class="quiet small">je Ticket, auf ${d.round} min gerundet. Gebucht wird erst nach «Bestätigen»${d.bcs && d.bcs.on ? ' und dann oben «In BCS prüfen» und «In BCS buchen»' : ', danach in BCS (Einstellungen → Zeiterfassung → BCS-Middleware)'}.</span></h3>
       ${d.drafts.length ? d.drafts.map(draft).join('') : '<div class="quiet small">Noch nichts. Zeit entsteht, solange ein Vorhaben als Fokus angeheftet ist.</div>'}
       <div class="tdraft" style="border-top:1px dashed var(--line)"><input type="text" id="tNewT" placeholder="Ticket, z. B. DLP-123" aria-label="Ticket"><span><input id="tNewM" type="number" min="0" max="1440" step="${d.round}" value="${d.round}" style="width:72px" aria-label="Minuten"> min</span><input type="text" id="tNewX" placeholder="Text (z. B. Meeting, Review)" maxlength="300" aria-label="Text"><div class="acts"><button id="tNew">Von Hand hinzufügen</button></div></div>
     </div>
@@ -2450,10 +2449,8 @@ $('viewTime').addEventListener('click', async ev => {
   const dayB = t.closest('[data-tday]'); if (dayB) { const n = +dayB.dataset.tday; TDAY = n ? shiftDay(TDATA.date, n) : null; return loadTime(); }
   const go = t.closest('[data-tgo]'); if (go) { TDAY = go.dataset.tgo; return loadTime(); }
   const run = async (path, body, msg) => { try { const r = await post(path, body); if (msg) toast(typeof msg === 'function' ? msg(r) : msg); await loadTime(); } catch (e) { toast(e.message); await loadTime(); } };
-  const sendMsg = r => r.state === 'gebucht' ? `Gebucht${r.reference ? ': ' + r.reference : ''}` : r.state === 'bestätigt' ? 'Bestätigt. Dein MCP kann es abholen.' : `${r.state}: ${r.message || ''}`;
   const g = t.closest('[data-tgap]'); if (g) return run('/api/time/gap', { id: +g.dataset.tgap, count: g.dataset.c === '1' }, g.dataset.c === '1' ? 'Lücke zählt' : 'Lücke verworfen');
-  const c = t.closest('[data-tconf]'); if (c) return run('/api/time/confirm', { id: c.dataset.tconf }, sendMsg);
-  const sd = t.closest('[data-tsend]'); if (sd) return run('/api/time/send', { id: sd.dataset.tsend }, sendMsg);
+  const c = t.closest('[data-tconf]'); if (c) return run('/api/time/confirm', { id: c.dataset.tconf }, 'Bestätigt');
   const bm = t.closest('[data-bcsmap]'); if (bm) return bcsMap(bm.dataset.bcsmap);
   const tt = t.closest('[data-ttext]'); if (tt) { const id = tt.dataset.ttext, v = TEXTS[id]; delete TEXTS[id]; return run('/api/time/edit', { id, text: v }, 'Text übernommen'); }
   if (t.id === 'tTexts') { t.disabled = true; t.textContent = 'Modell denkt …'; try { TEXTS = (await post('/api/time/texts', { date: TDATA.date })).texts; toast(Object.keys(TEXTS).length + ' Vorschläge'); } catch (e) { toast(e.message); } return renderTime(); }
@@ -2462,7 +2459,7 @@ $('viewTime').addEventListener('click', async ev => {
   if (t.id === 'tNew') return run('/api/time/add', { date: TDATA.date, ticket: $('tNewT').value, minutes: $('tNewM').value, text: $('tNewX').value }, 'Hinzugefügt');
   if (t.id === 'tAll') {
     const open = TDATA.drafts.filter(x => x.state === 'offen' && x.ticket_ok && x.minutes > 0);
-    if (!confirm(`${open.length} Entwürfe (${hm(open.reduce((a, x) => a + x.minutes * 60, 0))}) bestätigen${TDATA.mcp && TDATA.send_on_confirm ? ' und an deinen MCP senden' : ''}?`)) return;
+    if (!confirm(`${open.length} Entwürfe (${hm(open.reduce((a, x) => a + x.minutes * 60, 0))}) bestätigen?`)) return;
     let ok = 0, bad = 0;
     for (const x of open) { try { const r = await post('/api/time/confirm', { id: x.id }); (r.state === 'gebucht' || r.state === 'bestätigt') ? ok++ : bad++; } catch (e) { bad++; } }
     toast(`${ok} bestätigt${bad ? ', ' + bad + ' mit Fehler' : ''}`); return loadTime();
@@ -2873,14 +2870,6 @@ document.getElementById('triage').addEventListener('click', async () => {
   try { const r = await api('GET', '/api/ideas/triage-prompt'); await copyText(r.prompt, 'Triage-Prompt'); } catch (e) { toast(e.message); }
 });
 
-// Jobs
-document.getElementById('jobs').addEventListener('click', ev => {
-  const btn = ev.target.closest('button[data-ja]');
-  if (!btn) return;
-  const id = +btn.closest('[data-job]').dataset.job;
-  openLogs.has(id) ? openLogs.delete(id) : openLogs.add(id);
-  renderJobs();
-});
 
 // Dialog
 let LOGVIEW = 'audit';
@@ -3183,21 +3172,15 @@ async function loadSettings() {
     <div id="renv-list"></div>
     <div class="ferr" data-err="projects"></div><div class="ferr" data-err="github.repos"></div>`)}
 
-  ${sect('time', 'Zeiterfassung', 'Zeit läuft, solange ein Vorhaben als Fokus angeheftet ist und du das Panel benutzt. Daraus entstehen Entwürfe je Ticket. Gebucht wird erst nach «Bestätigen», über die Wrapper-API deines MCP (Projectron).', `
+  ${sect('time', 'Zeiterfassung', 'Zeit läuft, solange ein Vorhaben als Fokus angeheftet ist und du das Panel benutzt. Daraus entstehen Entwürfe je Ticket. Gebucht wird erst nach «Bestätigen», in BCS über deine Middleware.', `
     <label class="check"><input type="checkbox" id="tm-on" ${S.time.enabled ? 'checked' : ''}><span><strong>Fokus-Zeit erfassen</strong></span></label>
     <div class="grid3">
       ${field('tm-round', 'Runden auf Minuten', S.time.round_minutes, { type: 'number', err: 'time.round_minutes' })}
       ${field('tm-min', 'Kein Entwurf unter Minuten', S.time.min_minutes, { type: 'number', err: 'time.min_minutes' })}
       ${field('tm-idle', 'Leerlauf ab Minuten', S.time.idle_minutes, { type: 'number', err: 'time.idle_minutes', help: 'So lange ohne Aktivität im Panel: Die Zeit endet beim letzten Lebenszeichen, die Pause wird als Lücke vorgeschlagen.' })}
     </div>
-    ${field('tm-url', 'Wrapper-API deines MCP (POST)', S.time.mcp_url, { ph: 'http://127.0.0.1:3100/time-entries', err: 'time.mcp_url', help: 'tinyops sendet je bestätigtem Entwurf ein JSON (Schema <code>tinyops.time-entry/1</code>) mit Header <code>Idempotency-Key</code> und erwartet <code>{"status": "booked"|"rejected", "reference", "message"}</code>. Leer lassen, wenn dein MCP selbst über <code>GET /api/time/export</code> abholt und über <code>POST /api/time/result</code> zurückmeldet.' })}
-    ${field('tm-secret', 'Token für die Wrapper-API (optional)', '', { type: 'password', err: 'mcp_token', ph: S.secrets.mcp_token && S.secrets.mcp_token.set ? '•••••••• gespeichert' : '', help: secretHelp('mcp_token', 'Token') + ' Geht als <code>Authorization: Bearer</code> mit.' })}
-    <label class="check"><input type="checkbox" id="tm-send" ${S.time.send_on_confirm ? 'checked' : ''}><span>Beim Bestätigen sofort senden</span></label>
-    <label class="check"><input type="checkbox" id="tm-remote" ${S.time.allow_remote ? 'checked' : ''}><span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(Tickets, Zeiten und Texte verlassen dann das Netz)</span></span></label>
-    <div class="row"><button class="primary" id="tm-test">Verbindung testen</button><span class="quiet small">Testet mit GET, bucht nichts.</span></div>
-    <div id="tm-result"></div>
     <h3 style="margin:18px 0 6px">BCS-Middleware</h3>
-    <label class="check"><input type="checkbox" id="bc-on" ${(S.time.bcs || {}).enabled ? 'checked' : ''}><span><strong>In BCS buchen</strong> <span class="quiet small">über deine Middleware auf diesem Rechner (Workflow-API). Ersetzt die Wrapper-API oben.</span></span></label>
+    <label class="check"><input type="checkbox" id="bc-on" ${(S.time.bcs || {}).enabled ? 'checked' : ''}><span><strong>In BCS buchen</strong> <span class="quiet small">über deine Middleware auf diesem Rechner (Workflow-API). </span></span></label>
     <div class="grid2">
       ${field('bc-url', 'Adresse der Middleware', (S.time.bcs || {}).url || 'http://127.0.0.1:3210', { ph: 'http://127.0.0.1:3210', err: 'time.bcs.url', help: 'Nur 127.0.0.1 oder localhost.' })}
       ${field('bc-secret', 'BCS_API_TOKEN (nur falls gesetzt)', '', { type: 'password', err: 'bcs_token', ph: S.secrets.bcs_token && S.secrets.bcs_token.set ? '•••••••• gespeichert' : '', help: 'Das Token der Middleware, nicht dein BCS-Passwort.' })}
@@ -3304,7 +3287,6 @@ async function loadSettings() {
 
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
-    <label class="check"><input type="checkbox" id="ft-testenv" ${S.features.testenv ? 'checked' : ''}><span>Testumgebungen, Prompts und Agenten-Knöpfe <span class="quiet small">(braucht Helm-Angaben je Projekt in der config.json)</span></span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
     <label class="check"><input type="checkbox" id="ux-on" ${S.ux.enabled ? 'checked' : ''}><span>UI-Nutzung lokal erfassen <span class="quiet small">(Klicks, Mausweg, Tasten ausserhalb von Feldern, nie Eingaben oder Titel; Bericht unter «Prüfen», zum Kopieren für die Verbesserung der Oberfläche)</span></span></label>
     ${field('ux-days', 'UI-Nutzung aufbewahren (Tage)', S.ux.days, { type: 'number', err: 'ux.days' })}`)}
@@ -3332,10 +3314,6 @@ async function loadSettings() {
     catch (e) { $('hd-result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
   });
   if ($('hd-del')) $('hd-del').onclick = () => delSecrets(['helpdesk_password', 'helpdesk_token'], 'Helpdesk-Zugangsdaten');
-  $('tm-test').onclick = () => busy($('tm-test'), 'Teste …', async () => {
-    try { $('tm-result').innerHTML = stepsHtml(await api('POST', '/api/settings/test/mcp', { url: val('tm-url'), allow_remote: $('tm-remote').checked, secret: $('tm-secret').value })); }
-    catch (e) { $('tm-result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
-  });
   $('lm-test').onclick = testLlm; $('lm-prov').onchange = () => {
     const p = S.llm.providers.find(x => x.id === $('lm-prov').value), cur = val('lm-url');
     if (p && (!cur || S.llm.providers.some(x => x.url === cur))) $('lm-url').value = p.url;
@@ -3536,21 +3514,49 @@ $('viewSettings').addEventListener('click', ev => {
 // Review-Umgebung je Projekt (0.32)
 function renderReviewEnvs() {
   const box = $('renv-list'); if (!box) return;
-  const K = S.review_kinds || [];
-  box.innerHTML = P.length ? P.map((p, i) => { const e = p.review_env || {}; return `<div class="renv">
+  const K = S.review_kinds || [], H = S.hints || { projects: {}, repos: [], infra: [] };
+  box.innerHTML = P.length ? P.map((p, i) => {
+    const e = p.review_env || {}, h = H.projects[String(p.id)] || { compose: [], dockerfile: false };
+    const sv = e.services || [];
+    const suggest = !e.kind && (h.compose.length || h.dockerfile)
+      ? `<button class="quiet-btn" data-resug="${i}" title="Erkannt im Checkout">Vorschlag: Docker Compose${h.compose.length ? ' mit ' + esc(h.compose[0]) : ' aus dem Dockerfile'}</button>` : '';
+    const compose = e.kind === 'compose' ? `<div class="grid3" style="margin-top:6px">
+        <label class="sm">Compose-Datei im Repo<select data-ref="${i}:compose_file"><option value="">${h.compose.length ? 'automatisch (' + esc(h.compose[0]) + ')' : h.dockerfile ? 'keine, aus dem Dockerfile bauen' : 'keine gefunden'}</option>${h.compose.map(f => `<option ${e.compose_file === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
+        <label class="sm">Port der Anwendung im Container<input type="number" data-ref="${i}:app_port" value="${esc(e.app_port || 8080)}" min="1" max="65535"></label></div>
+      <div class="small" style="margin-top:6px"><b>Umsysteme</b> <span class="quiet">laufen mit, ohne Ports nach aussen. Erreichbar unter ihrem Namen, z. B. <code>postgres:5432</code>.</span></div>
+      <div class="rsvc">${H.infra.map(x => `<label class="check"><input type="checkbox" data-resvc="${i}" value="${x.id}" ${sv.includes(x.id) ? 'checked' : ''}><span>${esc(x.label)}</span></label>`).join('')}</div>
+      ${H.repos.length ? `<div class="rsvc">${H.repos.filter(r => !(h.ws_path && r.path === h.ws_path) && r.path !== p.repo_path).map(r => `<label class="check"><input type="checkbox" data-resvc="${i}" value="repo:${esc(r.path)}" ${sv.includes('repo:' + r.path) ? 'checked' : ''}><span class="picn">${repoIcon(r.name, 14)}${esc(r.name)}</span></label>`).join('')}</div>
+        <div class="small quiet">Repos aus Workspaces mit Dockerfile, gebaut aus deinem lokalen Stand.</div>` : '<div class="small quiet">Weitere Repos als Umsysteme: erst unter Workspaces deine Ordner eintragen.</div>'}` : '';
+    return `<div class="renv">
     <div class="row" style="gap:8px"><span class="picn">${repoIcon(p.name || String(p.id), 18)}<b>${esc(p.name || '#' + p.id)}</b></span>
-      <select data-rek="${i}" aria-label="Art der Review-Umgebung für ${esc(p.name)}"><option value="">keine</option>${K.map(k => `<option value="${k.id}" ${e.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></div>
-    ${e.kind ? `<div class="grid3" style="margin-top:6px">${['up', 'down', 'url'].map(f => `<label class="sm">${{ up: 'Starten', down: 'Stoppen', url: 'Adresse zum Öffnen' }[f]}<input type="text" data-ref="${i}:${f}" value="${esc(e[f] || '')}" spellcheck="false" style="font-family:var(--mono);font-size:12.5px"></label>`).join('')}</div>` : ''}</div>`; }).join('')
+      <select data-rek="${i}" aria-label="Art der Review-Umgebung für ${esc(p.name)}"><option value="">keine</option>${K.map(k => `<option value="${k.id}" ${e.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select>${suggest}</div>
+    ${compose}
+    ${e.kind ? `<details class="small" ${e.kind === 'compose' ? '' : 'open'} style="margin-top:6px"><summary class="quiet">Befehle${e.kind === 'compose' ? ' (vorbefüllt, anpassbar)' : ''}</summary><div class="grid3" style="margin-top:6px">${['up', 'down', 'url'].map(f => `<label class="sm">${{ up: 'Starten', down: 'Stoppen', url: 'Adresse zum Öffnen' }[f]}<input type="text" data-ref="${i}:${f}" value="${esc(e[f] || '')}" spellcheck="false" style="font-family:var(--mono);font-size:12.5px"></label>`).join('')}</div></details>` : ''}</div>`;
+  }).join('')
     : '<div class="empty">Erst Projekte unter GitLab wählen.</div>';
 }
 $('viewSettings').addEventListener('change', ev => {
-  const k = ev.target.dataset.rek; if (k === undefined) return;
-  const p = P[+k], d = (S.review_kinds || []).find(x => x.id === ev.target.value);
-  p.review_env = d ? { kind: d.id, up: d.up, down: d.down, url: d.url } : null;
+  const t = ev.target;
+  if (t.dataset.rek !== undefined) {
+    const p = P[+t.dataset.rek], d = (S.review_kinds || []).find(x => x.id === t.value);
+    p.review_env = d ? { kind: d.id, up: d.up, down: d.down, url: d.url, services: [], app_port: 8080, compose_file: '' } : null;
+    renderReviewEnvs();
+  } else if (t.dataset.resvc !== undefined) {
+    const e = P[+t.dataset.resvc].review_env, set = new Set(e.services || []);
+    t.checked ? set.add(t.value) : set.delete(t.value);
+    e.services = [...set];
+  } else if (t.dataset.ref !== undefined && t.tagName === 'SELECT') {
+    const [i, f] = t.dataset.ref.split(':'); P[+i].review_env = Object.assign({}, P[+i].review_env, { [f]: t.value });
+  }
+});
+$('viewSettings').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-resug]'); if (!b) return;
+  const p = P[+b.dataset.resug], d = (S.review_kinds || []).find(x => x.id === 'compose');
+  p.review_env = { kind: 'compose', up: d.up, down: d.down, url: d.url, services: [], app_port: 8080, compose_file: '' };
   renderReviewEnvs();
 });
 $('viewSettings').addEventListener('input', ev => {
-  const k = ev.target.dataset.ref; if (k === undefined) return;
+  const k = ev.target.dataset.ref; if (k === undefined || ev.target.tagName === 'SELECT') return;
   const [i, f] = k.split(':'); P[+i].review_env = Object.assign({}, P[+i].review_env, { [f]: ev.target.value });
 });
 // Lokale Checkouts für IntelliJ (0.20)
@@ -3559,7 +3565,8 @@ function renderIdeRepos() {
   const rows = P.map((p, i) => ({ k: 'p', i, name: p.name || '#' + p.id, v: p.repo_path || '', src: 'GitLab' }))
     .concat((typeof GH !== 'undefined' ? GH : []).map((r, i) => ({ k: 'g', i, name: r.full, v: r.repo_path || '', src: 'GitHub' })));
   box.innerHTML = rows.length ? `<div class="ptab" role="table" aria-label="Lokale Checkouts"><div class="ph" role="row" style="grid-template-columns:200px 80px minmax(0,1fr)"><span>Projekt</span><span>Quelle</span><span>Pfad zum lokalen Checkout</span></div>` +
-    rows.map(r => `<div class="pr" role="row" style="grid-template-columns:200px 80px minmax(0,1fr)"><span>${esc(r.name)}</span><span class="quiet">${r.src}</span><input type="text" data-rp="${r.k}${r.i}" value="${esc(r.v)}" placeholder="~/work/${esc(String(r.name).split('/').pop())}" aria-label="Pfad zum Checkout von ${esc(r.name)}"></div>`).join('') + '</div>'
+    rows.map(r => { const ws = r.k === 'p' && ((S.hints || { projects: {} }).projects[String(P[r.i].id)] || {}).ws_path;
+      return `<div class="pr" role="row" style="grid-template-columns:200px 80px minmax(0,1fr)"><span>${esc(r.name)}</span><span class="quiet">${r.src}</span><span><input type="text" data-rp="${r.k}${r.i}" value="${esc(r.v)}" placeholder="${ws ? 'aus Workspaces: ' + esc(ws) : '~/work/' + esc(String(r.name).split('/').pop())}" aria-label="Pfad zum Checkout von ${esc(r.name)}">${ws && !r.v ? '<span class="small quiet">Leer lassen: tinyops nimmt den Checkout aus Workspaces.</span>' : ''}</span></div>`; }).join('') + '</div>'
     : '<div class="empty">Erst Projekte unter GitLab oder GitHub wählen.</div>';
 }
 $('viewSettings').addEventListener('input', ev => {
@@ -3766,14 +3773,12 @@ function collect() {
   if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
-  if ($('tm-secret') && $('tm-secret').value.trim()) secrets.mcp_token = $('tm-secret').value;
   if ($('bc-secret') && $('bc-secret').value.trim()) secrets.bcs_token = $('bc-secret').value;
   if ($('hd-secret') && $('hd-secret').value.trim()) secrets[val('hd-auth') === 'bearer' ? 'helpdesk_token' : 'helpdesk_password'] = $('hd-secret').value;
   return {
     gitlab: { url: val('gl-url'), ca_bundle: val('gl-ca') },
     projects: P, connections: CN, agents: AGC, agent_log_days: val('ag-days'), agent_guards: { max_files: val('ag-gf'), max_lines: val('ag-gl'), extra: val('ag-gx') }, ide_command: val('ide-cmd'),
-    time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), mcp_url: val('tm-url'),
-      send_on_confirm: $('tm-send').checked, allow_remote: $('tm-remote').checked,
+    time: { enabled: $('tm-on').checked, round_minutes: val('tm-round'), min_minutes: val('tm-min'), idle_minutes: val('tm-idle'), 
       bcs: { enabled: $('bc-on').checked, url: val('bc-url'), apprentices: $('bc-appr').checked } },
     github: { enabled: $('gh-on').checked, api_url: val('gh-api'), repos: GH },
     branch_filter: { emails: split(val('bf-emails')), names: split(val('bf-names')), agent_emails: split(val('bf-aemails')), agent_names: split(val('bf-anames')),
@@ -3784,7 +3789,7 @@ function collect() {
     usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
-    features: { ideas: $('ft-ideas').checked, testenv: $('ft-testenv').checked, ai: $('ft-ai').checked },
+    features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     workspaces: { enabled: $('ws-on').checked, roots: val('ws-roots'), depth: val('ws-depth'), stale_days: val('ws-stale'), scan_minutes: val('ws-scan') },
     m365: { enabled: $('m3-on').checked, tenant: val('m3-tenant'), client_id: val('m3-client'), mail: $('m3-mail').checked, calendar: $('m3-cal').checked,
@@ -3960,6 +3965,7 @@ function testBtns(e, cls) {   // Testen: Review-App und IntelliJ auf dem Head-Co
   const a = (e.d.next || {}).action || {};
   const out = [];
   if (a.ide) out.push(`<button class="${cls || ''}" data-ide="${esc(JSON.stringify(a.ide))}" title="Worktree genau auf dem Commit des MR anlegen und in IntelliJ öffnen">${ic('ide')}<span>In IntelliJ öffnen</span></button>`);
+  if (a.ide) out.push(`<button class="${cls || ''}" data-mrtry="${esc(JSON.stringify(a.ide))}" title="Prompts, git-Befehle und Review-Umgebung für diesen MR">${ic('flask')}<span>Ausprobieren</span></button>`);
   if (a.review_app) out.push(`<a class="btn ${cls || ''}" href="${esc(a.review_app)}" target="_blank" rel="noopener" title="Review-App aus GitLab">${ic('globe')}<span>Review-App</span></a>`);
   return out.join('');
 }
@@ -4144,7 +4150,8 @@ function renderFx() {
     if (d && !d.error) body += `<div><h3>Letzte Kommentare <small>${d.comments.length}${d.comments_total > d.comments.length ? ' von ' + d.comments_total : ''}</small></h3>${d.comments.length ? `<div class="hdcm">${d.comments.map(c => `<div><small>${esc(c.author || 'unbekannt')}${c.age_h != null ? ' · vor ' + hAge(c.age_h) : ''}</small><p>${esc(c.body)}</p></div>`).join('')}</div>` : '<div class="small quiet">Noch keine Kommentare.</div>'}</div>`;
     if (mine) body += `<div class="small quiet">Angeheftet läuft die Zeit auf ${esc(h.key)} (Bereich Helpdesk) und landet in den Zeitentwürfen.</div>
       <div class="fxfoot">${state.flow.pinned === e.id ? '<button data-fpin="">Fokus lösen</button>' : `<button class="primary" data-fpin="${esc(e.id)}">${ic('chevron2')} Als Fokus anheften, Zeit starten</button>`}${FOC() ? `<button data-fsess="${esc(e.id)}">${ic('clock')} Fokus-Sitzung</button>` : ''}<button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
-    else body += `<div class="fxfoot"><button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
+    else body += `<div class="small quiet">Nicht dir zugewiesen. Arbeitest du trotzdem daran, heftest du es an: Die Zeit läuft auf ${esc(h.key)} (Bereich Helpdesk), zuweisen bleibt im Helpdesk.</div>
+      <div class="fxfoot"><button class="primary" data-fpin="hd:${esc(h.key)}">${ic('chevron2')} Als Fokus anheften, Zeit starten</button>${FOC() ? `<button data-fsess="hd:${esc(h.key)}">${ic('clock')} Fokus-Sitzung</button>` : ''}<button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
   } else if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><button class="ibtn" data-topics="${esc(JSON.stringify({ host: e.r.host || 'gitlab', project_id: e.r.project_id, iid: e.r.iid }))}" title="Offene Review-Kommentare ansehen und exportieren">${ic('chat')} Offene Punkte</button><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
   } else {
@@ -4219,7 +4226,7 @@ function fxItem(c, x) {
     b.push(`<button class="ibtn" data-tk="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch)}" data-cu="">${ic('ticket')} Ticket anlegen</button>`);
   }
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
-  if (F().testenv && x.iid) b.push(`<button class="ibtn" data-fxdeploy="${x.project_id}:${x.iid}">${ic('flask')} Testumgebung</button>`);
+  if (x.iid) b.push(`<button class="ibtn" data-mrtry="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" title="Prompts, git-Befehle und Review-Umgebung">${ic('flask')} Ausprobieren</button>`);
   return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : branchIcon(x.branch, 20)}
     <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code>${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
@@ -4297,8 +4304,7 @@ document.addEventListener('click', async ev => {
   const ckd = t.closest('[data-fckdel]'); if (ckd) { await act(() => post('/api/flow/delete', { id: +ckd.dataset.fckdel })); return; }
   if (t.closest('[data-fckadd]') && e) { const v = $('fxCkNew').value.trim(); if (!v) return; $('fxCkNew').value = ''; await act(() => post('/api/flow/add', { key: e.c.id, text: v })); $('fxCkNew') && $('fxCkNew').focus(); return; }
   const tk = t.closest('#fx [data-tk]'); if (tk) { openTicket(tk); return; }
-  const dp = t.closest('[data-fxdeploy]');
-  if (dp) { const [p, i] = dp.dataset.fxdeploy.split(':'); await act(() => api('POST', '/api/deploy', { project_id: +p, iid: +i }), 'Deploy gestartet'); return; }
+
   const row = t.closest('#viewFocus .frow, #viewFocus .hero');
   if (!row && FXID && !t.closest('#fx, header, #fbar, dialog, #fmode, a, button, input, select, textarea, summary, label, [data-fopen], .rcard, .bcard[data-bid], .slot[data-skey]')) { closeFx(); return; }   // 0.30: Klick auf eine Board-Karte öffnet, statt sofort wieder zu schliessen
   if (row && !t.closest('a, button, select, input')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
@@ -4723,7 +4729,6 @@ $('fRailUsage').appendChild($('usageBox'));
 
 load();
 setInterval(() => { if (!(state && state.sync && state.sync.running)) load(); }, 300000);   // der Server gleicht ohnehin nur alle cache_seconds ab
-setInterval(() => { if (state && state.jobs && state.jobs.some(j => j.status === 'läuft')) load(); }, 4000);
 setInterval(() => {   // laufende Agenten: Stand nachfragen, aber keine offene Auswahl wegrendern
   const ae = document.activeElement;
   if (state && state.agents && state.agents.runs.some(r => r.active) && !$('agDlg').open && !(ae && ae.dataset && ae.dataset.aassign)) load();

@@ -26,13 +26,16 @@
       "id": 123,
       "name": "dlp-core",
       "sonar_key": "",
-      "chart": "./helm/dlp-core",
       "repo_path": "/home/du/work/dlp-core",
-      "tag_template": "{sha8}",
-      "extra_args": [
-        "--set",
-        "image.repository=harbor.example.com/dlp/dlp-core"
-      ]
+      "review_env": {
+        "kind": "compose",
+        "up": "docker compose {compose_files} -p {name} up -d --build",
+        "down": "docker compose {compose_files} -p {name} down -v",
+        "url": "http://localhost:{port}",
+        "compose_file": "",
+        "app_port": 8080,
+        "services": ["postgres", "redis"]
+      }
     }
   ],
   "jira": {
@@ -54,9 +57,6 @@
   },
   "wip_limit": 2,
   "stale_days": 7,
-  "kube_context": "test-cluster",
-  "namespace_prefix": "test",
-  "agent_command": [],
   "bind": "127.0.0.1",
   "port": 8765,
   "allowed_hosts": [],

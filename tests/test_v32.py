@@ -92,7 +92,7 @@ class Pure(unittest.TestCase):
         self.assertIn("einer Zeile", reviewenv.clean({"kind": "compose", "up": "a\nb"})[1])
         self.assertIn("http", reviewenv.clean({"kind": "compose", "up": "x", "url": "ftp://x"})[1])
         self.assertEqual(reviewenv.clean({"kind": "compose", "up": " docker compose up ", "down": "", "url": "http://h:{port}"})[0],
-                         {"kind": "compose", "up": "docker compose up", "down": "", "url": "http://h:{port}"})
+                         {"kind": "compose", "up": "docker compose up", "down": "", "url": "http://h:{port}", "compose_file": "", "app_port": 8080, "services": []})
         conn = {"host": "devops", "user": "ad", "port": 2222}
         self.assertEqual(reviewenv.source_url({}, conn, "~/play/dlp"), "ssh://ad@devops:2222/~/play/dlp")
         self.assertEqual(reviewenv.source_url({}, conn, "play/dlp"), "ssh://ad@devops:2222/~/play/dlp")
@@ -167,11 +167,11 @@ class TryIt(unittest.TestCase):
 
         st = a.agent_action("env", {"run": rid, "do": "up"})
         self.assertEqual(st["state"], "startet")
-        self.assertTrue(wait_for(lambda: json.loads(a.store.agent_run(rid)["renv"] or "{}").get("state") == "läuft"))
+        self.assertTrue(wait_for(lambda: (a.store.renv_get("run:%d" % rid) or {}).get("state") == "läuft"))
         self.assertEqual(self.marker.read_text().split()[:4], ["up", "review-dlp-101-%d" % rid, str(20000 + rid), "review-dlp-101-%d" % rid])
         self.assertEqual(a.agent_action("try", {"run": rid})["env_state"]["url"], "http://localhost:%d" % (20000 + rid))
         a.agent_action("env", {"run": rid, "do": "down"})
-        self.assertTrue(wait_for(lambda: json.loads(a.store.agent_run(rid)["renv"] or "{}").get("state") == "gestoppt"))
+        self.assertTrue(wait_for(lambda: (a.store.renv_get("run:%d" % rid) or {}).get("state") == "gestoppt"))
         self.assertIn("down review-dlp-101-%d" % rid, self.marker.read_text())
         acts = [r["action"] for r in a.audit_log.export()]
         for x in ("agent.checkout", "review.env.up", "review.env.down"):

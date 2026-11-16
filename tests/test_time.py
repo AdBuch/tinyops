@@ -1,23 +1,18 @@
-"""Fokus-Zeit, Zeitentwürfe und Übergabe an den MCP (0.19) mit simulierter Zeit und einem Fake-MCP."""
-import json
+"""Fokus-Zeit und Zeitentwürfe (0.19) mit simulierter Zeit. Gebucht wird seit 0.34 nur noch über BCS (test_v29)."""
 import os
-import subprocess
 import sys
 import tempfile
 import time
 import unittest
-import urllib.request
 from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "tests"))
 
 import server  # noqa: E402
 import settings  # noqa: E402
 import timesheet  # noqa: E402
-from test_github import free_port, wait  # noqa: E402
 
 T0 = datetime(2026, 11, 5, 9, 0).timestamp()      # Donnerstag 09:00 lokal
 D = "2026-11-05"
@@ -86,7 +81,7 @@ class Book(unittest.TestCase):
         tb.sync_auto(D, [dict(comp[0], minutes=90)])
         self.assertEqual(tb.draft(did)["calc_minutes"], 60)          # gebucht bleibt unverändert
 
-    def test_compose_and_payload(self):
+    def test_compose(self):
         ev = [{"key": "A-1", "text": "Station Prüfen", "ts": T0 + 100, "kind": "phase"}, {"key": "A-1", "text": "Test für 429", "ts": T0 + 200, "kind": "check"}]
         acc = [{"key": "A-1", "label": "1:feature/a", "sha": "abcdef123456", "ts": T0}]
         c = timesheet.compose(D, {"A-1": {"secs": 50 * 60, "title": "A"}}, {"A-1": {"title": "Retry", "project_hint": "dlp-core"}}, ev, acc)
@@ -94,34 +89,15 @@ class Book(unittest.TestCase):
         self.assertEqual(c[0]["text"], "Retry: Test für 429")
         self.assertIn("Station Prüfen 09:01", c[0]["evidence"])
         self.assertIn("Abnahme 1:feature/a @ abcdef12", c[0]["evidence"])
-        p = timesheet.payload({"id": "td-x", "date": D, "ticket": "A-1", "project_hint": "p", "minutes": 45, "text": "t", "evidence": []})
-        self.assertEqual(p["schema"], "tinyops.time-entry/1")
-        self.assertEqual(p["idempotency_key"], timesheet.payload(dict(p))["idempotency_key"])
-        self.assertNotEqual(p["idempotency_key"], timesheet.payload(dict(p, minutes=60))["idempotency_key"])
 
 
 class AppTime(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.port = free_port()
-        cls.proc = subprocess.Popen([sys.executable, str(ROOT / "tests" / "mock_mcp.py"), str(cls.port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        wait(cls.port)
-        cls.url = "http://127.0.0.1:%d/time-entries" % cls.port
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.proc.terminate()
-        cls.proc.wait(5)
-
-    def mlog(self):
-        return json.loads(urllib.request.urlopen("http://127.0.0.1:%d/_log" % self.port).read())
-
     def app(self, **time_cfg):
         os.environ["TINYOPS_HOME"] = tempfile.mkdtemp()
         cfg = server.load_config(None)
         cfg["data_dir"] = tempfile.mkdtemp()
         cfg["time"] = dict(time_cfg)
-        a = server.App(cfg, True, {"mcp_token": "mcptoken"} if time_cfg.get("mcp_url") else {}, Path("/nonexistent/c.json"))
+        a = server.App(cfg, True, {}, Path("/nonexistent/c.json"))
         a.overview()
         return a
 
@@ -148,69 +124,20 @@ class AppTime(unittest.TestCase):
         self.assertIsNone(a.time_state()["running"])
         self.assertIn("time", a.overview())
 
-    def test_confirm_without_mcp_then_pull_and_result(self):
+    def test_confirm_then_booked_is_fixed(self):
         a = self.app()
         dr = self.seed(a)
         self.assertEqual(dr["minutes"], 45)
         self.assertEqual(dr["state"], "offen")
-        self.assertEqual(a.time_export()["drafts"], [])                 # nichts ohne Bestätigung
         self.assertEqual(a.time_action("confirm", {"id": dr["id"]})["state"], "bestätigt")
-        ex = a.time_export()["drafts"]
-        self.assertEqual([(x["id"], x["minutes"], x["state"]) for x in ex], [(dr["id"], 45, "bestätigt")])
-        self.assertIn("idempotency_key", ex[0])
-        a.time_result({"id": dr["id"], "status": "booked", "reference": "PRJ-9"})
-        self.assertEqual(a.timebook.draft(dr["id"])["state"], "gebucht")
-        self.assertTrue(a.time_result({"id": dr["id"], "status": "booked"})["already"])
-        with self.assertRaises(server.UserError):
+        a.timebook.update(dr["id"], state="gebucht")                       # gebucht wird in BCS (test_v29)
+        with self.assertRaises(server.UserError) as cm:
             a.time_action("edit", {"id": dr["id"], "minutes": 60})            # gebucht ist fest
+        self.assertIn("BCS", str(cm.exception))
         acts = [r["action"] for r in a.audit_log.rows()]
         self.assertIn("time.confirm", acts)
-        self.assertIn("time.result", acts)
-
-    def test_send_booked_once_and_idempotent(self):
-        a = self.app(mcp_url=self.url)
-        dr = self.seed(a, "DLP-102")
-        before = len([x for x in self.mlog()["log"] if x["method"] == "POST"])
-        r = a.time_action("confirm", {"id": dr["id"]})
-        self.assertEqual(r["state"], "gebucht")
-        self.assertTrue(r["reference"].startswith("PRJ-"))
-        r2 = a.time_action("send", {"id": dr["id"]})
-        self.assertTrue(r2["already"])                                     # tinyops sendet nicht doppelt
-        posts = [x for x in self.mlog()["log"] if x["method"] == "POST"][before:]
-        self.assertEqual(len(posts), 1)
-        self.assertEqual(posts[0]["schema"], "tinyops.time-entry/1")
-        # zweite Instanz sendet denselben Inhalt nochmals: gleicher Schlüssel, der MCP bucht einmal
-        body = timesheet.payload(a.timebook.draft(dr["id"]))
-        req = urllib.request.Request(self.url, data=json.dumps(body).encode(), method="POST",
-                                     headers={"Authorization": "Bearer mcptoken", "Idempotency-Key": body["idempotency_key"], "Content-Type": "application/json"})
-        self.assertEqual(json.loads(urllib.request.urlopen(req).read())["reference"], r["reference"])
-
-    def test_failures_stay_visible(self):
-        a = self.app(mcp_url=self.url)
-        for ticket, state in (("REJ-1", "abgelehnt"), ("BAD-1", "fehlgeschlagen"), ("ERR-1", "fehlgeschlagen")):
-            did = a.time_action("add", {"date": timesheet.today(), "ticket": ticket, "minutes": 30, "text": "x"})["id"]
-            r = a.time_action("confirm", {"id": did})
-            self.assertEqual(r["state"], state, (ticket, r))
-            self.assertNotEqual(a.timebook.draft(did)["state"], "gebucht")
-            self.assertTrue(r["message"])
-        rows = [x for x in a.audit_log.rows(action="time.send")]
-        self.assertTrue(all(not x["ok"] for x in rows))
-
-    def test_unreachable_then_resend(self):
-        port = free_port()
-        a = self.app(mcp_url="http://127.0.0.1:%d/time-entries" % port)
-        dr = self.seed(a, "DLP-103")
-        r = a.time_action("confirm", {"id": dr["id"]})
-        self.assertEqual(r["state"], "fehlgeschlagen")
-        self.assertIn("nicht erreichbar", r["message"])
-        p = subprocess.Popen([sys.executable, str(ROOT / "tests" / "mock_mcp.py"), str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            wait(port)
-            self.assertEqual(a.time_action("send", {"id": dr["id"]})["state"], "gebucht")
-            self.assertEqual(a.timebook.draft(dr["id"])["attempts"], 2)
-        finally:
-            p.terminate()
-            p.wait(5)
+        with self.assertRaises(server.UserError):
+            a.time_action("send", {"id": dr["id"]})                          # 0.34: kein Senden an einen MCP mehr
 
     def test_edit_merge_discard_and_rules(self):
         a = self.app()
@@ -231,29 +158,17 @@ class AppTime(unittest.TestCase):
             a.time_action("confirm", {"id": ref})
         self.assertIn("Ticket", str(cm.exception))
 
-    def test_remote_mcp_needs_permission(self):
-        a = self.app(mcp_url="http://8.8.8.8/time")
-        did = a.time_action("add", {"date": timesheet.today(), "ticket": "DLP-1", "minutes": 15, "text": ""})["id"]
-        a.timebook.update(did, state="bestätigt")
-        with self.assertRaises(server.UserError) as cm:
-            a.time_action("send", {"id": did})
-        self.assertIn("eigenen Netz", str(cm.exception))
-
-    def test_settings_and_test_is_get_only(self):
-        cfg, err = settings.build_config({}, {"gitlab": {"url": "https://g.example"}, "time": {"mcp_url": self.url, "round_minutes": "10", "idle_minutes": "20"}})
+    def test_settings_drop_projectron_keys(self):
+        old = {"gitlab": {"url": "https://g.example"}, "time": {"mcp_url": "http://127.0.0.1:3100/x", "send_on_confirm": True, "allow_remote": False}}
+        cfg, err = settings.build_config(old, {"time": {"round_minutes": "10", "idle_minutes": "20"}})
         self.assertEqual(err, {})
-        self.assertEqual((cfg["time"]["round_minutes"], cfg["time"]["idle_minutes"], cfg["time"]["mcp_url"]), (10, 20, self.url))
-        _, err = settings.build_config({}, {"gitlab": {"url": "https://g.example"}, "time": {"mcp_url": "http://8.8.8.8/x", "round_minutes": "0"}})
-        self.assertIn("time.mcp_url", err)
+        self.assertEqual((cfg["time"]["round_minutes"], cfg["time"]["idle_minutes"]), (10, 20))
+        for k in ("mcp_url", "send_on_confirm", "allow_remote"):
+            self.assertNotIn(k, cfg["time"])                                # E1: nur noch BCS
+        _, err = settings.build_config({}, {"gitlab": {"url": "https://g.example"}, "time": {"round_minutes": "0"}})
         self.assertIn("time.round_minutes", err)
-        n = len(self.mlog()["log"])
-        r = settings.test_mcp({"url": self.url, "secret": "mcptoken"}, lambda name: ("", ""))
-        self.assertTrue(r["ok"], r)
-        r = settings.test_mcp({"url": self.url}, lambda name: ("", ""))
-        self.assertFalse(r["ok"])
-        self.assertTrue(all(x["method"] == "GET" for x in self.mlog()["log"][n:]))
-        self.assertIn("mcp_token", settings.SECRET_FIELDS)
-
+        self.assertNotIn("mcp_token", settings.SECRET_FIELDS)
+        self.assertFalse(hasattr(settings, "test_mcp"))
 
 if __name__ == "__main__":
     unittest.main()

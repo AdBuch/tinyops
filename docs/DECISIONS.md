@@ -14,7 +14,7 @@ Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis
 | 2026-11-05 | Confluence hat keine Priorität | nicht im Plan |
 | 2026-11-15 | Bis 0.45 vor allem aufräumen; neu nur Projekte tracken, KI-Projekte, zweiter Bereich und App | Plan 0.33–0.45 in der Roadmap |
 | 2026-11-15 | **E1:** Gebucht wird nur über BCS | Projectron-Export (0.19), MCP-Einstellungen und `/api/time/export` entfallen in 0.34; bisherige Entwürfe bleiben lesbar |
-| 2026-11-15 | **E2:** Direkt ausführen reicht. Prompts und Shell-Befehle zum Kopieren bleiben, für den Fall, dass kein Agent eingerichtet ist | Helm-Deploy je MR, Jobs, alte Agenten-Knöpfe pro MR und `deploy/` entfallen in 0.34. Die Review-Umgebung (0.32) führt direkt aus, auch für MRs. Review-Brief, Smoke-Test und Repro-Test bleiben als «Prompt kopieren» am MR, dazu die Befehle der Review-Umgebung und zum Auschecken zum Kopieren |
+| 2026-11-15 | **E2:** Direkt ausführen reicht. Prompts und Shell-Befehle zum Kopieren bleiben, für den Fall, dass kein Agent eingerichtet ist | Helm-Deploy je MR, Jobs und alte Agenten-Knöpfe pro MR entfallen in 0.34 (`deploy/` bleibt: damit läuft tinyops selbst in Kubernetes). Die Review-Umgebung (0.32) führt direkt aus, auch für MRs. Review-Brief, Smoke-Test und Repro-Test bleiben als «Prompt kopieren» am MR, dazu die Befehle der Review-Umgebung und zum Auschecken zum Kopieren |
 
 ## Offen
 

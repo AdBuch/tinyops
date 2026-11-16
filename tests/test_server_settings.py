@@ -76,7 +76,7 @@ class Flow(unittest.TestCase):
                 self.assertEqual(code, 200)
                 self.assertFalse(ov["configured"])
                 self.assertTrue(ov["problems"])
-                self.assertEqual(ov["features"], {"ideas": True, "testenv": False, "ai": False})
+                self.assertEqual(ov["features"], {"ideas": True, "ai": False})
 
                 code, st = self.call("GET", "/api/settings")
                 self.assertEqual(code, 200)
@@ -138,19 +138,19 @@ class Flow(unittest.TestCase):
                 self.assertTrue(t101["in_sprint"])
                 self.assertEqual(t101["sprint"], "Sprint 12")
                 self.assertEqual(ov["ideas"], [])
-                self.assertEqual(ov["jobs"], [])
+                self.assertNotIn("jobs", ov)                        # 0.34: keine Test-Jobs mehr
+                self.assertEqual(ov["prompts"], ["review-brief", "smoke-test", "repro-test"])
 
                 code, st = self.call("GET", "/api/settings")
                 self.assertTrue(st["secrets"]["gitlab_token"]["set"])
                 self.assertNotIn("secret", json.dumps(st["gitlab"]))
                 self.assertNotIn('"jtoken"', json.dumps(st))
 
-                # ausgeblendete Funktionen sind auch serverseitig zu
-                for m, path in (("POST", "/api/deploy"),
-                                ("POST", "/api/prompt"), ("GET", "/api/jobs")):
+                # 0.34 (E2): Deploy, Jobs und alte Agenten-Knöpfe gibt es nicht mehr
+                for m, path in (("POST", "/api/deploy"), ("POST", "/api/teardown"), ("POST", "/api/agent"), ("GET", "/api/jobs")):
                     code, r = self.call(m, path, {} if m == "POST" else None)
                     self.assertEqual(code, 404, path)
-                    self.assertIn("ausgeschaltet", r["error"])
+                    self.assertIn("Nicht gefunden", r["error"])
                 # release/* wieder zeigen und alle Sprints zulassen
                 code, _ = self.call("POST", "/api/settings/save", {
                     "gitlab": {"url": glurl}, "projects": [{"id": 1, "name": "dlp-core"}],
