@@ -60,6 +60,10 @@
   "bind": "127.0.0.1",
   "port": 8765,
   "allowed_hosts": [],
+  "app": {
+    "url": "http://localhost:8000",
+    "origins": []
+  },
   "llm": {
     "enabled": false,
     "provider": "ollama",

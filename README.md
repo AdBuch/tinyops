@@ -449,6 +449,23 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5f. App koppeln (neu in 0.35.2)
+
+Die Handy-App «home» liest Fokus und Tickets aus tinyops. Verbunden wird sie über einen QR-Code.
+
+1. In der `config.json` steht unter `app.url`, wo die App läuft (Standard `http://localhost:8000`). Diese Adresse steht im QR-Code und darf als einzige die App-Schnittstelle aus dem Browser aufrufen; weitere kommen in `app.origins`.
+2. Einstellungen → **App koppeln** → «QR-Code erzeugen». Der Code gilt 5 Minuten und für ein Gerät.
+3. Mit der Kamera des Handys scannen. Die App öffnet sich, tauscht den Code gegen ein eigenes Token und zeigt den Fokus. Ohne Kamera: in der App Adresse und Code eintippen.
+4. «Entfernen» in der Geräteliste sperrt ein Gerät sofort.
+
+Sicherheit:
+- Im QR-Code steht nur der Einmal-Code, nie ein Token. tinyops speichert vom Token nur den Hash.
+- Die App bekommt nie das Zugriffstoken des Panels und kann nichts ändern.
+- Verschlüsselt wird über HTTPS (E10). Ohne HTTPS nur am selben Rechner oder per USB testen: `adb reverse tcp:8765 tcp:8765` und `adb reverse tcp:8000 tcp:8000`, dann stimmen `localhost`-Adressen auch auf dem Handy.
+- Lauscht tinyops nicht nur lokal, muss der Name der Instanz wie bisher in `allowed_hosts` stehen.
+
+Schnittstelle: `POST /api/pair` (`{"code", "name"}` → `{"token", "device", "instance"}`), danach mit `Authorization: Bearer <token>`: `GET /api/app/hello`, `GET /api/app/focus`.
+
 ## 5e. Weniger Begriffe, Worktrees, Verbindung (neu in 0.35.0)
 
 **Zwei Begriffe statt fünf** (Entscheid E4):

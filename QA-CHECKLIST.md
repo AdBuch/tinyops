@@ -117,6 +117,9 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r35-06` tinyops neu starten, während das Panel offen ist → oben «Keine Verbindung … Neuer Versuch in …», danach verschwindet der Hinweis von selbst [auto: test_ui.Offline]
 - [ ] `r351-01` Config von vor 0.35 (ohne «score») → Fokus zeigt die Spielstand-Karte oben rechts [auto: test_v35.V351]
 - [ ] `r351-02` Einstellungen → BCS-Token eintragen, speichern → oben unter «Zugänge» steht BCS grün [auto: test_v35.V351]
+- [ ] `r352-01` Einstellungen → «App koppeln» → «QR-Code erzeugen» → QR-Code, Code und Countdown erscheinen; nach dem Koppeln verschwindet der QR-Code von selbst und das Gerät steht in der Liste [auto: test_ui.AppPair]
+- [ ] `r352-02` «Entfernen» bei einem gekoppelten Gerät → die App meldet «nicht mehr gekoppelt» [auto: test_devices.Http]
+- [ ] `r352-03` Denselben QR-Code ein zweites Mal scannen → die App meldet «Kein gültiger Code» [auto: test_devices.Pairing]
 - [ ] `r351-03` Einstellungen öffnen → «Zugänge» zugeklappt ganz oben, aufklappen → «Eintragen» springt zum Abschnitt [auto: test_ui.Tokens]
 
 ## 0.34.0

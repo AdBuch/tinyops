@@ -397,6 +397,31 @@ class Tokens(UiCase):
         self.wait_js("document.querySelector('.setnav [data-goto=\"time\"]').classList.contains('on')")
 
 
+class AppPair(UiCase):
+    def test_qr_code_then_device_listed(self):
+        """0.35.2: «App koppeln» zeigt QR-Code, Code und Countdown; nach dem Koppeln steht das Gerät da und lässt sich entfernen."""
+        pg = self.pg
+        self.tab("Einstellungen")
+        pg.wait_for_selector("#appBox")
+        self.assertFalse(pg.evaluate("document.getElementById('appBox').open"))
+        pg.locator("#appBox > summary").click()
+        pg.locator("#pairStart").click()
+        pg.wait_for_selector("#appBox .qr svg")
+        code = pg.locator("#pairCode").inner_text()
+        self.assertRegex(code, r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
+        self.assertRegex(pg.locator("#pairLeft").inner_text(), r"^[45]:\d\d$")
+        self.assertIn("#pair=" + code + "@", pg.locator("#appBox .lnk").inner_text())
+        self.assertEqual(pg.locator("#appBox .bad").count(), 0)                  # 127.0.0.1: keine http-Warnung
+        req = urllib.request.Request(_url + "api/pair", data=json.dumps({"code": code, "name": "Test-Handy"}).encode(),
+                                     headers={"Content-Type": "application/json", "Origin": "http://localhost:8000"})
+        token = json.load(urllib.request.urlopen(req, timeout=10))["token"]
+        self.wait_js("!document.querySelector('#appBox .qr') && /Test-Handy/.test(document.getElementById('appBody').textContent)", 10000)
+        self.assertIn("1 Gerät gekoppelt", pg.locator("#appSum").inner_text())
+        self.assertNotIn(token, pg.content())
+        pg.locator("[data-devrm]").click()
+        self.wait_js("!document.querySelector('[data-devrm]')")
+
+
 class Terms(UiCase):
     def test_score_switch_and_areas(self):
         """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""

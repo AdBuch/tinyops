@@ -371,6 +371,10 @@
   .tokbox table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 6px; }
   .tokbox td { padding: 5px 14px; border-top: 1px solid var(--line); vertical-align: top; } .tokbox td:last-child { text-align: right; } .tokbox td .bad { color: var(--bad); } .tokbox button { padding: 2px 10px; font-size: 12.5px; }
   .tokbox .tkfoot { padding: 6px 14px 10px; }
+  .pairbox { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-start; padding: 4px 14px 12px; }
+  .pairbox .qr svg { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 8px; }
+  .pairbox .code { font: 600 26px/1.2 ui-monospace, monospace; letter-spacing: 2px; margin: 4px 0 8px; }
+  .pairbox .lnk { word-break: break-all; }
   .sset { padding-bottom: 30px; margin-bottom: 30px; border-bottom: 1px solid var(--line); scroll-margin-top: calc(70px + var(--bar, 0px)); }
   .sset:last-child { border-bottom: 0; }
   .sset > header { all: unset; display: block; margin-bottom: 14px; }
@@ -1331,6 +1335,46 @@ function tokBox(S) {
     ${errs.length ? `<div class="tkfoot small"><b>Letzter Abgleich:</b> ${errs.map(x => esc(x.title) + (x.detail ? ': ' + esc(x.detail) : '')).join(' · ')}</div>` : ''}
     <div class="tkfoot small quiet">Tokens werden nie angezeigt, nur ob sie da sind und woher sie kommen. Microsoft 365 meldet sich ohne Token an (Abschnitt Microsoft 365).</div></details>`;
 }
+
+// 0.35.2: Apps koppeln. QR-Code mit Einmal-Code, gekoppelte Geräte mit «Entfernen»
+let PAIR = null, pairTimer = null;
+function appBox() {
+  return `<details class="tokbox" id="appBox" ${LS.get('appOpen', false) ? 'open' : ''}><summary><b>App koppeln</b> <span class="quiet small" id="appSum">Handy-App «home» mit dieser Instanz verbinden</span></summary><div id="appBody"><div class="tkfoot small quiet">lädt …</div></div></details>`;
+}
+function appRender(st) {
+  const body = $('appBody'), sum = $('appSum');
+  if (!body) return;
+  const n = st.devices.length;
+  sum.textContent = n ? (n === 1 ? '1 Gerät gekoppelt' : n + ' Geräte gekoppelt') : 'Handy-App «home» mit dieser Instanz verbinden';
+  const when = t => t ? new Date(t * 1000).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch nie';
+  const rows = st.devices.map(d => `<tr><td>${esc(d.name)}</td><td class="quiet">gekoppelt ${when(d.created)}</td><td class="quiet">zuletzt gesehen ${when(d.last_seen)}</td>
+    <td><button data-devrm="${d.id}">Entfernen</button></td></tr>`).join('');
+  const left = PAIR ? Math.max(0, Math.round(PAIR.expires - Date.now() / 1000)) : 0;
+  if (PAIR && !left) PAIR = null;
+  const pair = PAIR ? `<div class="pairbox"><div class="qr">${PAIR.qr}</div><div style="flex:1;min-width:220px">
+      <div class="small quiet">Mit der Kamera des Handys scannen. Oder in der App Adresse und Code eintippen:</div>
+      <div class="code" id="pairCode">${esc(PAIR.code)}</div>
+      <div class="small">Gilt noch <b id="pairLeft">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</b> und nur für ein Gerät.</div>
+      ${PAIR.insecure ? '<div class="small bad" style="color:var(--bad);margin-top:6px">Diese Adresse läuft über http://. Code und Token gehen dann unverschlüsselt durchs Netz. Besser erst HTTPS einrichten.</div>' : ''}
+      <div class="small quiet lnk" style="margin-top:6px">${esc(PAIR.link)}</div>
+      <div style="margin-top:8px"><button id="pairCancel">Abbrechen</button></div></div></div>`
+    : `<div class="tkfoot"><button class="primary" id="pairStart">QR-Code erzeugen</button></div>`;
+  body.innerHTML = `${n ? `<table>${rows}</table>` : ''}${pair}
+    <div class="tkfoot small quiet">Die App liest nur Fokus und Tickets. Sie bekommt ein eigenes Token, nie das Zugriffstoken des Panels. Adresse der App: ${esc(st.app_url)} («app» in der config.json).</div>`;
+  const b = $('pairStart');
+  if (b) b.onclick = async () => { try { PAIR = await api('POST', '/api/devices/pair', { base: location.origin }); appLoad(); } catch (e) { toast(e.message); } };
+  const c = $('pairCancel');
+  if (c) c.onclick = async () => { PAIR = null; try { appRender(await api('POST', '/api/devices/cancel', {})); } catch (e) { toast(e.message); } };
+  body.querySelectorAll('[data-devrm]').forEach(x => x.onclick = async () => {
+    try { appRender(await api('POST', '/api/devices/revoke', { id: +x.dataset.devrm })); toast('Gerät entfernt. Sein Token gilt nicht mehr.'); } catch (e) { toast(e.message); }
+  });
+  clearInterval(pairTimer);
+  if (PAIR) pairTimer = setInterval(async () => {       // Countdown; ist der Code verbraucht, verschwindet der QR-Code von selbst
+    if (!$('appBody')) return clearInterval(pairTimer);
+    try { const s2 = await api('GET', '/api/devices'); if (!s2.pending) PAIR = null; appRender(s2); } catch (e) { /* nächster Takt */ }
+  }, 3000);
+}
+async function appLoad() { try { appRender(await api('GET', '/api/devices')); } catch (e) { const b = $('appBody'); if (b) b.innerHTML = `<div class="tkfoot small">${esc(e.message)}</div>`; } }
 
 // Sync-Anzeige: was wird gerade abgeglichen, danach eine ruhige Zusammenfassung
 let syncOpen = LS.get('syncOpen', false);
@@ -3122,6 +3166,7 @@ async function loadSettings() {
   ${S.demo ? '<div class="banner warn">Demo-Modus: Tests funktionieren, Speichern ist ausgeschaltet.</div>' : ''}
   ${!S.configured && !S.demo ? `<div class="banner warn"><strong>Erst verbinden.</strong> Trage unten GitLab (und, wenn du magst, Jira) ein, drücke jeweils «Verbindung testen» und dann «Speichern».</div>` : ''}
   ${tokBox(S)}
+  ${appBox()}
   <div class="setgrid">
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
@@ -3413,6 +3458,7 @@ async function loadSettings() {
   }
   box.querySelectorAll('[data-tokgo]').forEach(b => b.onclick = ev => { ev.preventDefault(); const n = box.querySelector(`.setnav [data-goto="${b.dataset.tokgo}"]`); if (n) n.click(); });
   { const tb = $('tokBox'); if (tb) tb.addEventListener('toggle', () => LS.set('tokOpen', tb.open)); }
+  { const ab = $('appBox'); if (ab) { ab.addEventListener('toggle', () => { LS.set('appOpen', ab.open); if (ab.open) appLoad(); }); if (ab.open) appLoad(); } }
   box.querySelectorAll('[data-goto]').forEach(btn => btn.onclick = () => {
     box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', x === btn));
     $('s-' + btn.dataset.goto).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });

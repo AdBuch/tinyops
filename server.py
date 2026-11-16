@@ -47,6 +47,8 @@ import timesheet
 import ux
 import fnmatch
 import flow
+import devices
+import qr
 import github
 import links
 import llm
@@ -60,7 +62,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.35.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.35.2"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -125,6 +127,7 @@ DEFAULTS = {
     "bind": "127.0.0.1",
     "port": 8765,
     "allowed_hosts": [],
+    "app": {"url": "http://localhost:8000", "origins": []},   # 0.35.2: Adresse der App «home» (für den QR-Code) und weitere erlaubte Herkünfte
     "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
     "agents": [],
     "ux": {"enabled": True, "days": 30},   # UI-Nutzung lokal erfassen (0.22), für die Optimierung der Oberfläche
@@ -1347,6 +1350,8 @@ class App:
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
         self.audit_log = audit.AuditLog(data_dir(cfg) / "tinyops.db")
+        if not hasattr(self, "devices"):          # offene Einmal-Codes überleben ein Speichern der Einstellungen
+            self.devices = devices.Devices(data_dir(cfg) / "tinyops.db")
         if not hasattr(self, "_audit_ctx"):
             self._audit_ctx = threading.local()
         self._rv_cache = {}
@@ -3211,6 +3216,50 @@ class App:
         return data
 
     # -- Audit
+    # -- Apps koppeln (0.35.2)
+    def app_cfg(self):
+        c = dict(DEFAULTS["app"])
+        c.update(self.cfg.get("app") or {})
+        url = devices.clean_origin(c.get("url")) or DEFAULTS["app"]["url"]
+        origins = {url} | {devices.clean_origin(o) for o in (c.get("origins") or [])}
+        return {"url": url, "origins": sorted(o for o in origins if o)}
+
+    def app_instance(self):
+        return {"id": self.audit_log.instance(), "name": "tinyops Demo" if self.demo else "tinyops", "version": VERSION}
+
+    def app_state(self):
+        return {"devices": self.devices.list(), "app_url": self.app_cfg()["url"], "pending": self.devices.pending()}
+
+    def app_pair_start(self, body, allowed_hosts):
+        base = devices.clean_origin((body or {}).get("base"))
+        host = urllib.parse.urlsplit(base).hostname if base else ""
+        if not base or host not in allowed_hosts:
+            raise UserError("Die Adresse dieser Instanz ist nicht erlaubt (allowed_hosts).")
+        p = self.devices.pair_start()
+        link = devices.pair_link(self.app_cfg()["url"], base, p["code"])
+        self.audit("app.pair_start", base)
+        return {"code": p["code"], "ttl": p["ttl"], "expires": p["expires"], "link": link, "qr": qr.svg(link),
+                "insecure": base.startswith("http://") and host not in LOOPBACK and host != "[::1]"}
+
+    def app_pair_finish(self, body, peer):
+        try:
+            token, dev = self.devices.pair_finish((body or {}).get("code"), (body or {}).get("name"))
+        except devices.PairError as e:
+            self.audit("app.pair", "", ok=False, actor="app", von=peer, grund=str(e)[:80])
+            raise UserError(str(e))
+        self.audit("app.pair", dev["name"], actor="app", von=peer, geraet=dev["id"])
+        return {"token": token, "device": dev, "instance": self.app_instance()}
+
+    def app_device_revoke(self, body):
+        name = self.devices.revoke(int((body or {}).get("id") or 0))
+        if name is None:
+            raise UserError("Dieses Gerät gibt es nicht (mehr).")
+        self.audit("app.revoke", name)
+        return self.app_state()
+
+    def app_focus(self):
+        return devices.focus_payload(self.overview(wait=False), self.app_instance())
+
     def audit(self, action, target="", ok=True, actor="du", **detail):
         """Eintrag im Audit-Trail. Ein Fehler beim Schreiben bricht die Aktion nicht ab (sie ist schon passiert), steht aber im Log."""
         try:
@@ -4453,13 +4502,59 @@ def make_handler(app):
             self._send(code, {"error": scrub(msg)})
 
         # -- Schutz: Host-Header (DNS-Rebinding), Zugriffstoken, Custom-Header
-        def _gate(self, parsed):
+        def _hosts(self):
+            return {"localhost", "127.0.0.1", "[::1]"} | {h.lower() for h in cfg["allowed_hosts"]}
+
+        def _host_ok(self):
             host = (self.headers.get("Host") or "").lower()
             host = host.rsplit(":", 1)[0] if not host.endswith("]") else host
-            allowed = {"localhost", "127.0.0.1", "[::1]"} | {h.lower() for h in cfg["allowed_hosts"]}
-            if host not in allowed:
+            if host not in self._hosts():
                 alog.warning("Abgelehnt: Host %r von %s nicht in allowed_hosts", host, self.client_address[0])
                 self._err(403, "Host nicht erlaubt (allowed_hosts in der config.json).")
+                return False
+            return True
+
+        # -- 0.35.2: Schnittstelle für gekoppelte Apps. Eigener Schutz: Host-Prüfung, erlaubte Herkunft (CORS) und Geräte-Token
+        # statt Panel-Cookie. Die App kommt von einer anderen Herkunft und hat nie das Zugriffstoken des Panels.
+        def _app_route(self, method, parsed):
+            if not self._host_ok():
+                return
+            origin = self.headers.get("Origin") or ""
+            cors = {}
+            if origin:
+                if origin.lower() not in app.app_cfg()["origins"]:
+                    alog.warning("Abgelehnt: App-Herkunft %r von %s nicht erlaubt", scrub(origin)[:120], self.client_address[0])
+                    return self._err(403, "Diese App-Adresse ist nicht erlaubt («app» in der config.json).")
+                cors = {"Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                        "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Max-Age": "600"}
+            path = parsed.path
+            try:
+                if method == "OPTIONS":
+                    return self._send(204, b"", extra=cors)
+                if method == "POST" and path == "/api/pair":
+                    return self._send(200, app.app_pair_finish(self._body(), self.client_address[0]), extra=cors)
+                auth = self.headers.get("Authorization") or ""
+                dev = app.devices.check(auth[7:].strip()) if auth.startswith("Bearer ") else None
+                if dev is None:
+                    alog.warning("Abgelehnt: App ohne gültiges Geräte-Token von %s", self.client_address[0])
+                    return self._send(401, {"error": "Dieses Gerät ist nicht (mehr) gekoppelt."}, extra=cors)
+                if method == "GET" and path == "/api/app/hello":
+                    return self._send(200, {"device": dev, "instance": app.app_instance()}, extra=cors)
+                if method == "GET" and path == "/api/app/focus":
+                    return self._send(200, app.app_focus(), extra=cors)
+                return self._send(404, {"error": "Nicht gefunden."}, extra=cors)
+            except UserError as e:
+                hlog.warning("%s %s abgelehnt: %s", method, scrub(path), e)
+                return self._send(400, {"error": scrub(str(e))}, extra=cors)
+            except (KeyError, TypeError, ValueError) as e:
+                hlog.warning("%s %s: ungültige Anfrage (%s)", method, scrub(path), repr(e))
+                return self._send(400, {"error": "Ungültige Anfrage."}, extra=cors)
+            except Exception:  # nie den Server abstürzen lassen
+                hlog.exception("Unbehandelter Fehler bei %s %s", method, scrub(path))
+                return self._send(500, {"error": "Interner Fehler, siehe Konsole."}, extra=cors)
+
+        def _gate(self, parsed):
+            if not self._host_ok():
                 return None
             if token:
                 given = (urllib.parse.parse_qs(parsed.query).get("token") or [""])[0]
@@ -4502,6 +4597,10 @@ def make_handler(app):
             parsed = urllib.parse.urlparse(self.path)
             if method == "GET" and parsed.path == "/healthz":   # für Kubernetes: ohne Token und Host-Prüfung, verrät nur die Version
                 return self._send(200, {"ok": True, "version": VERSION})
+            if parsed.path == "/api/pair" or parsed.path.startswith("/api/app/"):
+                return self._app_route(method, parsed)
+            if method == "OPTIONS":
+                return self._err(405, "Nicht erlaubt.")
             extra = self._gate(parsed)
             if extra is None:
                 return
@@ -4526,6 +4625,15 @@ def make_handler(app):
                          "")
                 if needs and not app.has(needs):
                     return self._err(404, "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).")
+                if method == "GET" and path == "/api/devices":                 # 0.35.2: Apps koppeln (Panel-Seite)
+                    return self._send(200, app.app_state())
+                if method == "POST" and path == "/api/devices/pair":
+                    return self._send(200, app.app_pair_start(self._body(), self._hosts()))
+                if method == "POST" and path == "/api/devices/cancel":
+                    app.devices.pair_cancel()
+                    return self._send(200, app.app_state())
+                if method == "POST" and path == "/api/devices/revoke":
+                    return self._send(200, app.app_device_revoke(self._body()))
                 if method == "POST" and path == "/api/links":
                     return self._send(200, app.link_ticket(self._body()))
                 if method == "POST" and path == "/api/links/delete":
@@ -4751,6 +4859,9 @@ def make_handler(app):
 
         def do_DELETE(self):
             self._route("DELETE")
+
+        def do_OPTIONS(self):
+            self._route("OPTIONS")
 
     return Handler
 

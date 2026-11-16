@@ -5,6 +5,25 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.35.2]
+
+Ausser Plan, auf deinen Wunsch vom 16.11.: die App «home» mit tinyops koppeln. Nach der Zählregel wäre das eine minor-Version; 0.36.0 ist aber für das Zerlegen des Servers vorgesehen, darum 0.35.2.
+
+### Neu
+- **App koppeln** (Einstellungen, ganz oben unter «Zugänge»): «QR-Code erzeugen» zeigt einen QR-Code mit der Adresse dieser Instanz und einem Einmal-Code.
+  - Der Code gilt 5 Minuten und für genau ein Gerät. Nach 5 falschen Versuchen ist er ungültig.
+  - Die App tauscht den Code gegen ein eigenes Geräte-Token. Das Token steht nie im QR-Code, tinyops speichert nur seinen Hash.
+  - Gekoppelte Geräte stehen in einer Liste mit «zuletzt gesehen» und «Entfernen». Entfernen sperrt das Token sofort.
+  - Koppeln, Fehlversuche und Entfernen stehen im Verlauf.
+- **Schnittstelle für die App**, nur lesend: `GET /api/app/focus` liefert Fokus und Tickets in Kurzform (Titel, Station, nächster Schritt, angeheftet, laufende Sitzung, Helpdesk). Keine Pfade, keine Befehle, keine Tokens.
+- **`app` in der config.json:** `url` ist die Adresse der App (steht im QR-Code), `origins` sind weitere erlaubte Herkünfte. Nur diese Herkünfte dürfen die App-Schnittstelle aus dem Browser aufrufen.
+- QR-Codes erzeugt tinyops selbst (`qr.py`), ohne neue Abhängigkeit.
+
+### Grenzen
+- Die Kopplung verschlüsselt nichts selbst. Über `http://` gehen Code und Token offen durchs Netz; das Panel warnt dann. Für den Betrieb im LAN braucht es HTTPS nach E10. Bis dahin: am selben Rechner oder per USB (`adb reverse`).
+- Die App kann nichts ändern. Anheften, Abhaken und Sitzungen bleiben im Panel.
+- `app` lässt sich noch nicht in den Einstellungen ändern, nur in der config.json.
+
 ## [0.35.1]
 
 Korrekturen nach deinem Test am 16.11.
