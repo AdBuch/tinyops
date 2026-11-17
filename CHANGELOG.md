@@ -5,6 +5,12 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.36.1]
+
+### Behoben
+- **Handy: Fokus liess sich seitlich verschieben** (im CI 409 statt 390 px, seit 0.35.1). Die Aufgabe oben und die Liste machen die Spalte nicht mehr breiter als den Bildschirm.
+- Der UI-Test für den Verbindungshinweis war wackelig, wenn andere Anfragen dazwischen gelangen.
+
 ## [0.36.0]
 
 Noch eine Version vor dem Umbau, auf deinen Wunsch: deine Wünsche und der Nutzungsbericht vom 17.11., dazu tinyops als App mit Handy-Kopplung. Der Plan ab «Server zerlegen» rückt um eine Version nach hinten.

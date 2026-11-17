@@ -653,7 +653,7 @@
   @media (prefers-color-scheme: dark) { :root { --k-wait: #9aa0bd; --xp: #f2bd57; --xp-bg: #3a2c10; --tiny: #c2c8d3; --tiny-bg: #262c36; } }
   .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; }
   #viewFocus { max-width: 1680px; margin: 0 auto; padding: 18px 28px 60px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
-  #fMain { min-width: 0; display: grid; gap: 18px; }
+  #fMain { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }      /* 0.36: kein Kind darf die Spalte breiter machen (CI: 409 px auf dem Handy) */
   #fList { display: grid; gap: 22px; }
   #fAlerts:empty, #fHero:empty { display: none; }
   #fAlerts { display: grid; gap: 6px; }
@@ -688,7 +688,7 @@
   @keyframes fpulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--kc) 0%, transparent); } }
 
   /* Jetzt dran */
-  .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px 22px; display: grid; gap: 18px;
+  .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px 22px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px;
           background-image: linear-gradient(115deg, color-mix(in srgb, var(--kc) 9%, transparent), transparent 55%); }
   .hero .hhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .hero .htitle { font-size: 21px; font-weight: 680; color: var(--ink); line-height: 1.25; }

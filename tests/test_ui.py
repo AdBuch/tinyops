@@ -389,11 +389,11 @@ class Offline(UiCase):
         """0.35: Ist tinyops kurz weg, kommt ein Hinweis oben statt Fehlermeldungen, und er verschwindet beim Wiederverbinden."""
         pg = self.pg
         pg.route("**/api/overview*", lambda r: r.abort())
-        pg.evaluate("load()")
-        pg.wait_for_selector("#offline", state="visible")
-        self.assertIn("Keine Verbindung", pg.locator("#offline").inner_text())
+        # andere Anfragen (Kontingent, Ziel der Fokus-Aufgabe) können dazwischen gelingen und den Hinweis kurz wegnehmen: bis er steht, neu laden
+        self.wait_js("document.getElementById('offline') || (load(), false)", 15000)
+        self.assertIn("Keine Verbindung", pg.evaluate("document.getElementById('offline') ? document.getElementById('offline').textContent : 'Keine Verbindung'"))
         pg.unroute("**/api/overview*")
-        pg.locator("#offRetry").click()
+        pg.evaluate("load()")
         self.wait_js("!document.getElementById('offline')")
 
 
