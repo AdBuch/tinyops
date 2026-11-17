@@ -5,6 +5,14 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.36.2]
+
+### Neu
+- **Kopplung für die eigene App** (Entscheide E9–E11 vom 16.11.): Die React-PWA aus dem eigenen Repo koppelt sich mit demselben Einmal-Code wie das Handy. Sie bekommt ein Geräte-Token und schickt es als `Authorization: Bearer …`. tinyops beantwortet ihre Anfragen über CORS, aber nur für die Adressen unter Einstellungen → App und Handy → «Adressen der eigenen App». Je Instanz eigene Geräte und Tokens.
+
+### Geändert
+- Entscheide zusammengeführt: Die Einträge vom 16.11. (E5–E11) stehen wieder vollständig drin. Meine neuen vom 17.11. heissen **E12** (Agenten pushen ihren Branch) und **E13** (Kopplung je Gerät), statt mit E9/E10 zu kollidieren.
+
 ## [0.36.1]
 
 ### Behoben

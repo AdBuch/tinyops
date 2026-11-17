@@ -122,10 +122,14 @@ class Devices:
         dev = self.store.device_add(clean_name(name, ua), _hash(tok), now)
         return "%d.%s" % (dev["id"], tok), dev
 
-    def check(self, cookie_header):
-        """Gültiges Gerät aus dem Cookie oder None. Merkt sich «zuletzt gesehen» höchstens alle 5 Minuten."""
+    def check(self, cookie_header, auth_header=""):
+        """Gültiges Gerät aus dem Cookie (tinyops-Seite) oder aus «Authorization: Bearer …» (eigene App, E9/E11) oder None.
+        Merkt sich «zuletzt gesehen» höchstens alle 5 Minuten."""
         val = ""
-        for part in (cookie_header or "").split(";"):
+        a = (auth_header or "").strip()
+        if a[:7].lower() == "bearer ":
+            val = a[7:].strip()
+        for part in (cookie_header or "").split(";") if not val else ():
             k, _, v = part.strip().partition("=")
             if k == COOKIE:
                 val = v
@@ -138,6 +142,33 @@ class Devices:
         if self.now() - (dev["last_seen"] or 0) > SEEN_EVERY:
             self.store.device_seen(dev["id"], self.now())
         return dev
+
+
+def app_origins(raw):
+    """Adressen der eigenen App (React-PWA, E9), die tinyops über CORS aufrufen darf. Gibt (liste, fehler) zurück."""
+    items = raw if isinstance(raw, list) else [x for x in str(raw or "").replace(";", ",").replace("\n", ",").split(",")]
+    out = []
+    for x in items:
+        x = str(x).strip().rstrip("/")
+        if not x:
+            continue
+        u = urllib.parse.urlparse(x)
+        if u.scheme not in ("https", "http") or not u.hostname or u.path or u.query or u.fragment or u.username:
+            return [], "App-Adresse wie https://app.example.ch (ohne Pfad): «%s»" % x[:60]
+        if u.scheme == "http" and u.hostname not in LOCAL_NAMES:
+            return [], "Die App braucht https (ausser auf localhost zum Entwickeln): «%s»" % x[:60]
+        o = "%s://%s" % (u.scheme, u.netloc.lower())
+        if o not in out:
+            out.append(o)
+    return out[:5], ""
+
+
+def cors_headers(origin, allowed):
+    """CORS nur für eingetragene App-Adressen, ohne Cookies (die App meldet sich mit dem Geräte-Token an)."""
+    if not origin or origin.rstrip("/").lower() not in allowed:
+        return {}
+    return {"Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Requested-With",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE", "Access-Control-Max-Age": "600"}
 
 
 def cookie(value, secure, clear=False):

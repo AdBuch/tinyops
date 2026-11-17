@@ -117,6 +117,7 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 - [ ] `r36-07` Jeder Dialog hat oben rechts ein ×, Klick daneben schliesst ihn (ausser mit Eingetipptem) [auto: test_ui.MrTry]
 - [ ] `r36-08` BCS nicht erreichbar → Meldung kommt sofort mit «nächster Versuch in …», statt eine Minute zu warten [auto: test_v36.BcsPause]
 - [ ] `r36-09` Handy ohne Kopplung → «Noch nicht gekoppelt»; gekoppelt darf es keine Einstellungen ändern [auto: test_v36.ServerFlow]
+- [ ] `r36-10` Eigene App (React-PWA): Kopplung mit Code liefert ein Token, Anfragen mit `Authorization: Bearer` gehen, CORS nur für eingetragene App-Adressen [auto: test_v36.ServerFlow]
 
 ## 0.35.0
 

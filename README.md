@@ -469,6 +469,8 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 3. Die Adresse (z. B. `https://mein-rechner.tailnet.ts.net`) eintragen und speichern; tinyops lässt diesen Namen dann zu.
 4. «Code erzeugen», auf dem Handy `<Adresse>/pair` öffnen und den Code eintippen (gilt 5 Minuten, einmal).
 
+**Eigene App** (React-PWA aus dem eigenen Repo, Entscheide E9–E11): Ihre Adresse unter «Adressen der eigenen App» eintragen. Sie koppelt sich mit demselben Code über `POST /api/pair/claim` mit `{"code": "…", "name": "…", "mode": "token"}`, bekommt `token` zurück und schickt es danach als `Authorization: Bearer <token>` (dazu `X-Requested-With: tinyops`). CORS gilt nur für die eingetragenen Adressen.
+
 Von aussen sieht tinyops nur gekoppelte Geräte. Ein gekoppeltes Gerät ändert keine Einstellungen und koppelt keine weiteren; unter «App und Handy» entfernst du es jederzeit. Gespeichert wird nur ein Hash seines Tokens. Auf dem Handy wird nur die leere Seite für den Start zwischengespeichert, nie Daten.
 
 ## 5e. Weniger Begriffe, Worktrees, Verbindung (neu in 0.35.0)

@@ -190,6 +190,10 @@ class Pairing(unittest.TestCase):
         self.assertIn("app.phone_url", err)
         cfg, err = settings.build_config({}, {"app": {"phone_url": "https://laptop.tail.ts.net"}})
         self.assertEqual(cfg["app"]["phone_url"], "https://laptop.tail.ts.net")
+        self.assertEqual(devices.app_origins("https://App.example.ch/, http://localhost:5173"), (["https://app.example.ch", "http://localhost:5173"], ""))
+        self.assertTrue(devices.app_origins("http://app.example.ch")[1])                 # ohne https nur auf localhost
+        cfg, err = settings.build_config({}, {"app": {"phone_url": "", "origins": "https://app.example.ch"}})
+        self.assertEqual(cfg["app"]["origins"], ["https://app.example.ch"])
 
 
 def _port():
@@ -205,7 +209,7 @@ class ServerFlow(unittest.TestCase):
     def setUpClass(cls):
         cls.d = Path(tempfile.mkdtemp())
         cls.port = _port()
-        (cls.d / "config.json").write_text(json.dumps({"data_dir": str(cls.d / "data"), "port": cls.port, "app": {"phone_url": "https://laptop.tail.ts.net"}}))
+        (cls.d / "config.json").write_text(json.dumps({"data_dir": str(cls.d / "data"), "port": cls.port, "app": {"phone_url": "https://laptop.tail.ts.net", "origins": ["https://app.example.ch"]}}))
         env = dict(os.environ, TINYOPS_NO_WATCHDOG="1", TINYOPS_HOME=str(cls.d / "home"))
         cls.srv = subprocess.Popen([sys.executable, str(ROOT / "server.py"), "--demo", "--config", str(cls.d / "config.json")], cwd=ROOT, env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -266,10 +270,35 @@ class ServerFlow(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/overview", headers=dev)[0], 200)
         self.assertEqual(self.call("POST", "/api/pair/start", {}, headers=dev)[0], 403)
         self.assertEqual(self.call("POST", "/api/settings/save", {}, headers=dev)[0], 403)
-        devs = json.loads(self.call("GET", "/api/pair/devices")[1])["devices"]
-        self.assertEqual([x["name"] for x in devs], ["Handy"])
+        devs = [x for x in json.loads(self.call("GET", "/api/pair/devices")[1])["devices"] if x["name"] == "Handy"]
+        self.assertEqual(len(devs), 1)
         self.call("POST", "/api/pair/revoke", {"id": devs[0]["id"]})
         self.assertEqual(self.call("GET", "/api/overview", headers=dev)[0], 401)
+
+    def test_own_app_token_and_cors(self):
+        """0.36.2: Die eigene App (React-PWA, E9/E11) koppelt mit demselben Code, bekommt ein Token und ruft tinyops über CORS auf."""
+        app = {"Host": "laptop.tail.ts.net", "Origin": "https://app.example.ch"}
+        req = urllib.request.Request("http://127.0.0.1:%d/api/overview" % self.port, method="OPTIONS",
+                                     headers=dict(app, **{"Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "authorization"}))
+        with urllib.request.urlopen(req, timeout=10) as r:
+            self.assertEqual(r.status, 204)
+            self.assertEqual(r.headers["Access-Control-Allow-Origin"], "https://app.example.ch")
+            self.assertIn("Authorization", r.headers["Access-Control-Allow-Headers"])
+        bad = urllib.request.Request("http://127.0.0.1:%d/api/overview" % self.port, method="OPTIONS", headers={"Origin": "https://evil.example"})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(bad, timeout=10)
+        self.assertEqual(e.exception.code, 403)
+        c = json.loads(self.call("POST", "/api/pair/start", {})[1])
+        code, body, h = self.call("POST", "/api/pair/claim", {"code": c["code"], "name": "React-App", "mode": "token"}, headers=app)
+        self.assertEqual(code, 200, body)
+        self.assertNotIn("Set-Cookie", h)
+        tok = json.loads(body)["token"]
+        code, body, h = self.call("GET", "/api/overview", headers=dict(app, Authorization="Bearer " + tok))
+        self.assertEqual(code, 200)
+        self.assertEqual(h.get("Access-Control-Allow-Origin"), "https://app.example.ch")
+        code, body, h = self.call("GET", "/api/overview", headers=dict(app, Origin="https://evil.example", Authorization="Bearer " + tok))
+        self.assertNotIn("Access-Control-Allow-Origin", h)                 # fremde Seiten lesen die Antwort nicht
+        self.assertEqual(self.call("GET", "/api/overview", headers=dict(app, Authorization="Bearer 1.falsch-falsch-falsch-falsch"))[0], 401)
 
     def test_helpdesk_draft_and_focus_brief(self):
         ov = json.loads(self.call("GET", "/api/overview")[1])

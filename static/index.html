@@ -3536,6 +3536,7 @@ async function loadSettings() {
     <div class="row" style="align-items:center;gap:12px;margin-bottom:14px"><button id="app-install" ${PWA.prompt ? '' : 'disabled'}>${ic('plus')} Als App installieren</button>
       <span class="quiet small" id="app-inst-msg">${PWA.installed ? 'Läuft schon als App.' : PWA.prompt ? 'Öffnet tinyops in einem eigenen Fenster, mit Symbol im Dock oder Startmenü.' : 'Chrome oder Edge: Menü → «App installieren». Safari: Teilen → «Zum Home-Bildschirm».'}</span></div>
     ${field('app-phone', 'Adresse fürs Handy', S.app.phone_url, { ph: 'https://mein-rechner.tailnet.ts.net', err: 'app.phone_url', help: 'Unter dieser Adresse erreicht das Handy tinyops, z. B. über Tailscale (<code>tailscale serve --bg ' + esc(S.server.port) + '</code>) oder dein VPN. Mit https lässt sich tinyops auf dem Handy als App installieren. tinyops nimmt den Namen in die erlaubten Hosts auf.' })}
+    ${field('app-origins', 'Adressen der eigenen App (optional)', (S.app.origins || []).join(', '), { ph: 'https://app.mein-name.ch', err: 'app.origins', help: 'Nur für eine eigene App (z. B. die React-PWA), die tinyops von einer anderen Adresse aus aufruft. Sie koppelt sich mit demselben Code und meldet sich mit dem Geräte-Token an. Leer lassen, wenn du die tinyops-Seite selbst als App nutzt.' })}
     <h3 style="margin:16px 0 6px">Handy koppeln</h3>
     <div class="small quiet">Nur gekoppelte Geräte sehen tinyops von aussen. Ein Gerät darf keine Einstellungen ändern und keine weiteren koppeln; entfernen geht jederzeit hier.</div>
     <div class="row" style="margin-top:8px"><button id="app-code" ${S.demo ? 'disabled title="Im Demo-Modus aus"' : ''}>Code erzeugen</button></div>
@@ -4056,7 +4057,7 @@ function collect() {
     features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked, score: $('ft-score').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     workspaces: { enabled: $('ws-on').checked, roots: val('ws-roots'), depth: val('ws-depth'), stale_days: val('ws-stale'), scan_minutes: val('ws-scan') },
-    app: { phone_url: val('app-phone') },
+    app: { phone_url: val('app-phone'), origins: val('app-origins') },
     m365: { enabled: $('m3-on').checked, tenant: val('m3-tenant'), client_id: val('m3-client'), mail: $('m3-mail').checked, calendar: $('m3-cal').checked,
       teams: $('m3-teams').checked, calendar_write: $('m3-write').checked, reply_days: val('m3-days'), refresh_minutes: val('m3-every') },
     helpdesk: { enabled: $('hd-on').checked, url: val('hd-url'), name: val('hd-name'), auth: val('hd-auth'), username: val('hd-user'), assigned_jql: val('hd-jql'),

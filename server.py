@@ -61,7 +61,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.36.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.36.2"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -4548,10 +4548,13 @@ def make_handler(app):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'")
-            for k, v in (extra or {}).items():
+            for k, v in dict(self._cors(), **(extra or {})).items():
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
+
+        def _cors(self):
+            return devices.cors_headers(self.headers.get("Origin", ""), devices.app_origins((cfg.get("app") or {}).get("origins") or [])[0])
 
         def _err(self, code, msg):
             self._send(code, {"error": scrub(msg)})
@@ -4575,7 +4578,7 @@ def make_handler(app):
                     self._err(403, "Header X-Requested-With fehlt.")
                     return None
                 return {}
-            self._dev = app.devices.check(self.headers.get("Cookie", ""))
+            self._dev = app.devices.check(self.headers.get("Cookie", ""), self.headers.get("Authorization", ""))
             if self._dev is None and self._remote and not token:
                 # 0.36: von woanders (Handy, Proxy, anderer Host-Name) nur mit gekoppeltem Gerät
                 alog.warning("Abgelehnt: %s %s von %s ohne gekoppeltes Gerät", self.command, parsed.path, self.client_address[0])
@@ -4629,7 +4632,9 @@ def make_handler(app):
                 except devices.DeviceError as e:
                     app.audit("device.pair", "", ok=False, error=str(e), ip=self.client_address[0])
                     return self._err(400, str(e))
-                app.audit("device.pair", dev["name"], device=dev["id"], ip=self.client_address[0])
+                app.audit("device.pair", dev["name"], device=dev["id"], ip=self.client_address[0], mode="token" if b.get("mode") == "token" else "cookie")
+                if b.get("mode") == "token":            # eigene App (E9/E11): Token im Körper, die App schickt es als «Authorization: Bearer …»
+                    return self._send(200, {"ok": True, "device": dev["name"], "token": val, "version": VERSION})
                 secure = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https" or (cfg.get("app") or {}).get("phone_url", "").startswith("https://")
                 return self._send(200, {"ok": True, "device": dev["name"]}, extra={"Set-Cookie": devices.cookie(val, secure)})
             if self._dev is not None:
@@ -4927,6 +4932,16 @@ def make_handler(app):
 
         def do_DELETE(self):
             self._route("DELETE")
+
+        def do_OPTIONS(self):
+            """CORS-Vorabfrage der eigenen App (0.36.2). Nur für eingetragene Adressen und nur für /api/."""
+            h = self._cors()
+            path = urllib.parse.urlparse(self.path).path
+            self.send_response(204 if h and path.startswith("/api/") else 403)
+            for k, v in (h if path.startswith("/api/") else {}).items():
+                self.send_header(k, v)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
     return Handler
 

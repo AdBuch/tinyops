@@ -22,7 +22,7 @@
 | **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
 | **0.34.0** ✓ | Doppelungen I: eine Review-Umgebung, ein Buchungsweg; dazu Helpdesk-Fehler r23-04, Review-Umgebung vorbefüllt mit Umsystemen, Checkout aus Workspaces (geliefert 2026-11-16) | Entscheid + Entfernen | E1, E2 ✓ |
 | **0.35.0** ✓ | Weniger Begriffe: Fokus und Bereiche, Spielstand abschaltbar; dazu tote Klicks, Verbindungshinweis, Worktrees in Workspaces (geliefert 2026-11-16) | Entscheid + Vereinfachen | E3, E4 ✓ |
-| **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E9, E10 ✓ |
+| **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E12, E13 ✓ |
 | 0.37.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
 | 0.38.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
 | 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
@@ -42,12 +42,13 @@
 | E2 | Alte Testumgebung je MR (Kubernetes, standardmässig ausgeblendet) und neue Review-Umgebung (0.32)? | **Entschieden 2026-11-15:** direkt ausführen über die Review-Umgebung, auch für MRs; Prompts und Shell-Befehle bleiben zum Kopieren, falls kein Agent da ist | 0.34 |
 | E3 | Spielstand: Punkte, Serie, Review-Punkte behalten? | **Entschieden 2026-11-16:** behalten, eine Karte im Fokus, abschaltbar | 0.35 |
 | E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | **Entschieden 2026-11-16:** **Fokus** (mit Sitzung) und **Bereiche** (Wochenziel); «Fokus-Modus» heisst «Vollbild» | 0.35 |
-| E5 | Standard-Zyklus der Agenten? | Umsetzen → Review als Standard; Planen und Test je Ticket zuschaltbar | 0.40 |
-| E6 | Oberfläche weiter ohne Build-Schritt (kein npm)? | Ja: ES-Module direkt aus `static/`, damit der Launcher einfach bleibt | 0.39 |
-| E7 | Privat und Geschäft: eine Datenbank mit zwei Bereichen oder zwei getrennte Instanzen? | Zwei getrennte Instanzen (eigene Daten, Secrets, Audit, Port) mit Umschalter. Keine Vermischung möglich | 0.46 |
+| E5 | Standard-Zyklus der Agenten? | **Entschieden 2026-11-16:** Umsetzen → Review, Planen und Test je Ticket zuschaltbar | 0.40 |
+| E6 | Oberfläche mit oder ohne Build-Schritt? | **Entschieden 2026-11-16:** Build (React) nur für die eigene Privat-App; die tinyops-Seite bleibt ohne Build | 0.39 |
+| E7 | Privat und Geschäft? | **Entschieden 2026-11-16:** zwei lokale Instanzen; die Privat-App in eigenem Repo mit eigenem Release-Zyklus (E7a) | 0.46 |
 | E8 | KI-Projekte: woher kommen die Daten? | Nur was du gibst: Link mit Notiz (Lesezeichen «In tinyops merken») und Import des Daten-Exports. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.45 |
-| E9 | Dürfen Agenten pushen? | **Entschieden 2026-11-17:** je Agent einschaltbar; er pusht nur seinen eigenen Lauf-Branch, nie main/master/develop/release. tinyops selbst pusht weiter nie | 0.36 |
-| E10 | Handy: wie kommt es an tinyops, ohne das Panel zu öffnen? | **Entschieden 2026-11-17:** über eine eigene Adresse (Tailscale oder VPN) und Kopplung je Gerät mit Einmal-Code; von aussen nur gekoppelte Geräte, die keine Einstellungen ändern | 0.36 |
+| E9–E11 | App: React-PWA, HTTPS mit echtem Namen, Heim- und Arbeitsadresse je Instanz | **Entschieden 2026-11-16** (siehe Entscheide) | 0.46 |
+| E12 | Dürfen Agenten pushen? | **Entschieden 2026-11-17:** je Agent einschaltbar; nur der eigene Lauf-Branch. tinyops selbst pusht nie | 0.36 |
+| E13 | Wie koppelt sich ein Gerät? | **Entschieden 2026-11-17:** Einmal-Code je Gerät; die tinyops-Seite per Cookie, die eigene React-App per Token und CORS | 0.36 |
 
 ### Die Releases im Einzelnen
 
@@ -77,7 +78,7 @@
 **0.36.0 – Vor dem Umbau** ✓
 - Aus deinen Wünschen vom 17.11.: Lauf direkt weiterführen, Entscheidungsfelder, an denen der Agent wartet; Rollen je Phase (`/planner`, `/developer`, `/reviewer`, `/tester`), Push des eigenen Branches, Kontingent in der Auswahl, Agent auf Aufgabe ziehen; Fokus-Aufgabe als Arbeitsfläche; Helpdesk → Jira; zurückgeschickte Reviews ausblenden; × in jedem Dialog.
 - Aus dem Bericht: BCS-Pause statt 73 s Wartezeit, Fetch liest unbekannte Repos selbst neu ein, das Agentenfenster baut sich nicht mehr alle 4 s neu auf (20 Wutklicks).
-- Vorgezogen aus dem letzten Release: tinyops als App (PWA) mit Handy-Kopplung.
+- Vorgezogen aus dem letzten Release: tinyops als App (PWA) mit Handy-Kopplung. 0.36.2 ergänzt die Kopplung für die eigene React-App (E9, E11): Token statt Cookie, CORS für ihre Adresse.
 - **Fertig, wenn:** Prüfabschnitt 0.36 durch, vor allem `r36-01` und `r36-05` mit echten Systemen.
 
 **0.37.0 – Server zerlegen I**
@@ -150,7 +151,7 @@
 - Ehrlich: Die drei Anbieter haben keine offizielle Schnittstelle, die deine Chatliste herausgibt. Mehr als Lesezeichen und Export geht nicht, ohne Regeln zu umgehen.
 - **Fertig, wenn:** Ein Claude-Projekt, ein ChatGPT-Chat und ein Mistral-Chat stehen als Vorhaben mit nächstem Schritt in tinyops.
 
-**0.46.0 – Zweiter Bereich**
+**0.46.0 – Zweiter Bereich** (nach E7, E7a, E9–E11)
 - E7: Privat und Geschäft als zwei Instanzen mit eigenem Datenordner, eigenen Secrets und eigenem Audit. Jede hat eigene Agenten, also einen eigenen Worker.
 - Ein Umschalter oben wechselt zwischen den beiden. Der Launcher startet beide.
 - **App:** seit 0.36 da (PWA, Handy über Kopplung). Hier kommt nur der Umschalter dazu: Jede Instanz koppelt ihre Geräte selbst.
