@@ -152,6 +152,8 @@ class Views(UiCase):
         self.assertTrue(pg.locator(".hero .htitle").first.is_visible())
         self.assertGreater(pg.locator(".hero .hpics svg.pic").count(), 0)          # Repo und Branch als Piktogramm (0.32)
         self.assertGreater(pg.locator(".fm svg.pic").count() + pg.locator(".picn svg.pic").count(), 0)
+        pg.wait_for_selector(".hero .hwork h4")                                    # 0.36: Arbeitsfläche statt nur Titel
+        self.assertIn("Worum es geht", pg.locator(".hero .hwork").inner_text())
 
     def test_no_projectron_left(self):
         for name in ("Zeit", "Einstellungen"):                                              # E1 (0.34): nur noch BCS
@@ -271,7 +273,11 @@ class MrTry(UiCase):
         self.assertEqual(pg.locator("#mtPrompt option").all_inner_texts(), ["review-brief", "smoke-test", "repro-test"])
         self.assertTrue(pg.locator("#mtGit").is_visible())
         self.assertIn("keine eingetragen", pg.locator("#wsDlgBody").inner_text())          # ohne Review-Umgebung: Hinweis statt Knopf
-        pg.click("#mtClose")
+        pg.click("#wsDlg > .dlgx")                                                         # 0.36: × oben rechts in jedem Dialog
+        self.wait_js("!document.getElementById('wsDlg').open")
+        b.click()
+        pg.wait_for_selector("#wsDlg[open] #mtPrompt")
+        pg.mouse.click(3, 450)                                                             # Klick daneben schliesst
         self.wait_js("!document.getElementById('wsDlg').open")
 
 
@@ -334,6 +340,14 @@ class AgentCycle(UiCase):
         self.assertIn("Review", pg.locator(".gatebox.ok").inner_text())
         pg.wait_for_selector("#agTry b")
         self.assertIn("Ausprobieren", pg.locator("#agTry").inner_text())
+        # 0.36: direkt weiterführen, ohne Umweg über den Startdialog
+        pg.fill("#agCont", "Bitte noch einen Test für den Timeout.")
+        before = pg.evaluate("AG().runs.length")
+        pg.click("#agContGo")
+        self.wait_js("AG().runs.length > %d" % before, 15000)
+        self.assertEqual(self.wait_run(), "fertig")
+        self.assertIn("Auftrag des Menschen", pg.evaluate("AG().runs[0].prompt_text"))
+        pg.wait_for_selector("#agDlg[open] #agCont")
 
 
 class QaSession(UiCase):
@@ -395,6 +409,20 @@ class Tokens(UiCase):
         pg.locator("#tokBox > summary").click()
         pg.locator('[data-tokgo="time"]').click()
         self.wait_js("document.querySelector('.setnav [data-goto=\"time\"]').classList.contains('on')")
+
+
+class AppAndPhone(UiCase):
+    def test_settings_section_and_manifest(self):
+        """0.36: App-Hülle verlinkt, Abschnitt «App und Handy» mit Koppeln; Agenten zum Ziehen in der Seitenleiste."""
+        pg = self.pg
+        self.assertEqual(pg.evaluate("document.querySelector('link[rel=manifest]').getAttribute('href')"), "/manifest.webmanifest")
+        self.assertGreater(pg.locator("[data-agdrag]").count(), 0)
+        self.tab("Einstellungen")
+        pg.wait_for_selector("#s-app")
+        txt = pg.locator("#s-app").inner_text()
+        self.assertIn("Handy koppeln", txt)
+        self.assertTrue(pg.locator("#app-code").is_disabled())                 # Demo: Koppeln aus
+        self.wait_js("!!document.querySelector('#app-devs') && /Gerät/.test(document.querySelector('#app-devs').textContent)")
 
 
 class Terms(UiCase):

@@ -196,14 +196,21 @@ def counts(rows):
     return {"total": len(rows), "ok": sum(1 for r in rows if r["state"] == "ok"), "open": sum(1 for r in rows if r["state"] != "ok")}
 
 
-def followup(run, note=""):
+def followup(run, note="", answers=None):
     """Abschnitt für einen Nachbesserungs-Lauf: was offen blieb, plus deine Anmerkung."""
     rows = run.get("criteria") or []
     todo = [r for r in rows if r["state"] != "ok"] or rows
-    parts = ["Das ist eine Nachbesserung zu Lauf %s (%s). Der Stand jenes Laufs liegt auf deinem Ausgangs-Branch." % (run.get("id"), run.get("agent_name") or "Agent")]
-    note = " ".join(str(note or "").split())[:1000]
+    parts = ["Das ist eine Fortsetzung von Lauf %s (%s). Der Stand jenes Laufs liegt auf deinem Ausgangs-Branch." % (run.get("id"), run.get("agent_name") or "Agent")]
+    note = "\n".join(" ".join(ln.split()) for ln in str(note or "").splitlines()).strip()[:4000]      # 0.36: direkt eingegebener Auftrag, Zeilen bleiben
     if note:
-        parts += ["", "Anmerkung des Menschen: " + note]
+        parts += ["", "## Auftrag des Menschen für diese Fortsetzung", "", note]
+    ans = [(d, str((answers or {}).get(str(d["n"])) or "").strip()) for d in open_decisions(report_sections(run.get("summary") or "").get("decide"))]
+    ans = [(d, a[:600]) for d, a in ans if a]
+    if ans:
+        parts += ["", "## Entscheidungen des Menschen zu deinen offenen Fragen", ""] + ["%d. %s → %s" % (d["n"], d["q"], a) for d, a in ans]
+    old_dec = decisions(run)
+    if old_dec:
+        parts += ["", "Bereits entschieden (gilt weiter):"] + ["- %s → %s" % (d["q"], d["a"]) for d in old_dec]
     if todo:
         parts += ["", "Noch nicht erfüllt. Melde jedes mit `tinyops-ak`:"]
         for i, r in enumerate(todo, 1):
@@ -266,7 +273,7 @@ def test_brief(run):
     return "\n".join(parts).strip() + "\n"
 
 
-SECTION_KEYS = {"kurz": "short", "zusammenfassung": "short", "ziel": "short", "was und warum": "why", "änderungen": "why", "was geändert": "why",
+SECTION_KEYS = {"offene entscheidung": "decide", "entscheidung": "decided", "kurz": "short", "zusammenfassung": "short", "ziel": "short", "was und warum": "why", "änderungen": "why", "was geändert": "why",
                 "zuerst ansehen": "first", "für das review": "first", "getestet": "tested", "tests": "tested",
                 "bewusst nicht gemacht": "notdone", "offen": "notdone", "risiken": "notdone"}
 
@@ -282,6 +289,28 @@ def report_sections(text):
             continue
         out.setdefault(cur, []).append(ln)
     return {k: "\n".join(v).strip() for k, v in out.items() if "\n".join(v).strip()}
+
+
+def open_decisions(text):
+    """0.36: Abschnitt «Offene Entscheidungen» des Berichts als Liste: je Punkt Frage und Optionen («Optionen: A | B» oder «A / B»)."""
+    out = []
+    for ln in (text or "").splitlines():
+        m = re.match(r"^\s*(?:\d+[.)]|[-*])\s+(.+)$", ln)
+        if not m:
+            if out and ln.strip() and not ln.strip().startswith("#"):          # Fortsetzungszeile
+                out[-1]["q"] = (out[-1]["q"] + " " + ln.strip())[:600]
+            continue
+        q, opts = m.group(1).strip(), []
+        o = re.search(r"\s*(?:Optionen|Options|Varianten)\s*:\s*(.+)$", q, re.I)
+        if o:
+            q, opts = q[:o.start()].strip(), [x.strip(" .`") for x in re.split(r"\s*\|\s*|\s+/\s+|\s*;\s*", o.group(1)) if x.strip(" .`")]
+        out.append({"n": len(out) + 1, "q": q[:600], "options": opts[:6]})
+    return out[:10]
+
+
+def decisions(run):
+    """Getroffene Entscheidungen eines Laufs: mit tinyops-ask -d gefragt und von dir beantwortet."""
+    return [{"q": x.get("q", ""), "a": x.get("a", "")} for x in run.get("qa") or [] if x.get("decision")]
 
 
 def _file_reasons(why):
@@ -309,7 +338,8 @@ def review_brief(run):
             "manual": [m for m in run.get("manual") or [] if m.get("kind") == "test"],
             "checks": len(run.get("checks") or []), "checks_ok": sum(1 for c in run.get("checks") or [] if str(c.get("exit")) == "0"),
             "ak_ok": sum(1 for r in rows if r["state"] == "ok"), "ak": len(rows), "stat": res.get("stat") or "",
-            "branch": run.get("taken") or run.get("out_branch") or ""}
+            "branch": run.get("taken") or run.get("out_branch") or "",
+            "decisions": decisions(run), "decided_text": (sec.get("decided") or "")[:1500], "open_decisions": open_decisions(sec.get("decide"))}
 
 
 def mr_description(run, title=""):
@@ -332,6 +362,8 @@ def mr_description(run, title=""):
     rows = run.get("criteria") or []
     if rows:
         out += ["## Akzeptanzkriterien", ""] + ["- [%s] %s" % ("x" if r["state"] == "ok" else " ", r["text"]) for r in rows] + [""]
+    if b["decisions"] or b["decided_text"]:
+        out += ["## Entscheidungen", ""] + ["- %s → **%s**" % (d["q"], d["a"]) for d in b["decisions"]] + ([b["decided_text"]] if b["decided_text"] else []) + [""]
     if b["notdone"]:
         out += ["## Bewusst nicht gemacht", "", b["notdone"], ""]
     return "\n".join(out).strip() + "\n"

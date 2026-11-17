@@ -466,6 +466,44 @@ class _IdeMixin:
             c.execute("insert into review_env(key, state, ts) values(?,?,?) on conflict(key) do update set state=excluded.state, ts=excluded.ts",
                       (key, json.dumps(st, ensure_ascii=False), time.time()))
 
+    def device_add(self, name, h, now):
+        with self._conn(True) as c:
+            cur = c.execute("insert into devices(name, hash, created, last_seen) values(?,?,?,?)", (name, h, now, now))
+            return {"id": cur.lastrowid, "name": name, "created": now}
+
+    def device_get(self, did):
+        with self._conn() as c:
+            if c is None:
+                return None
+            r = c.execute("select id, name, hash, created, last_seen, revoked from devices where id=?", (did,)).fetchone()
+            return dict(zip(("id", "name", "hash", "created", "last_seen", "revoked"), r)) if r else None
+
+    def device_seen(self, did, now):
+        with self._conn(True) as c:
+            c.execute("update devices set last_seen=? where id=?", (now, did))
+
+    def device_list(self):
+        with self._conn() as c:
+            if c is None:
+                return []
+            return [dict(zip(("id", "name", "created", "last_seen"), r)) for r in
+                    c.execute("select id, name, created, last_seen from devices where revoked=0 order by created desc")]
+
+    def device_revoke(self, did):
+        with self._conn(True) as c:
+            return c.execute("update devices set revoked=1 where id=? and revoked=0", (did,)).rowcount > 0
+
+    def hd_jira_set(self, hd_key, jira_key):
+        with self._conn(True) as c:
+            c.execute("insert into hd_jira(hd_key, jira_key, ts) values(?,?,?) on conflict(hd_key) do update set jira_key=excluded.jira_key, ts=excluded.ts",
+                      (hd_key, jira_key, time.time()))
+
+    def hd_jira_map(self):
+        with self._conn() as c:
+            if c is None:
+                return {}
+            return {r[0]: r[1] for r in c.execute("select hd_key, jira_key from hd_jira")}
+
     def renv_get(self, key):
         with self._conn() as c:
             if c is None:
@@ -567,6 +605,9 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 conn.execute("create table if not exists ide_wt(ref text primary key, host text not null, project_id integer not null, iid integer not null,"
                              " sha text not null, path text not null, repo text not null, ts real not null)")
                 conn.execute("create table if not exists review_env(key text primary key, state text not null, ts real not null)")   # 0.34: Lauf und MR
+                conn.execute("create table if not exists hd_jira(hd_key text primary key, jira_key text not null, ts real not null)")   # 0.36: Helpdesk → Jira
+                conn.execute("create table if not exists devices(id integer primary key autoincrement, name text not null, hash text not null, "
+                             "created real not null, last_seen real, revoked integer not null default 0)")   # 0.36: gekoppelte Geräte (nur der Hash des Tokens)
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
                              " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
                 conn.execute("create table if not exists ticket_group(key text primary key, head text not null, ts real not null)")   # 0.30

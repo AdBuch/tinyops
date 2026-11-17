@@ -84,8 +84,6 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r20-04` «Entwurf mit KI» im selben Dialog → Text vom Modell, die Idee ist die Quelle
 - [ ] `r20-05` «Als tiny-Ticket» mit Kategorie → LOC-Aufgabe in «Geplant», Akzeptanzkriterien als Teilschritte, Idee erledigt [auto: test_v20.Ideas]
 - [ ] `r20-06` Mit `allow_create`: «In Jira anlegen» aus einer Idee → Jira-Ticket, Teilschritte am Ticket, Verlauf «Ticket aus Idee» [auto: test_v20.JiraFromIdea]
-- [ ] `r20-07` Einstellungen → IntelliJ: Pfad zum lokalen Checkout eintragen, Befehl prüfen → gespeichert
-- [ ] `r20-08` MR bei «Testen» → «In IntelliJ öffnen» → IntelliJ startet mit `../.tinyops-wt/<repo>-mr<nr>-<sha>` auf genau dem Commit des MR (`git log -1`)
 - [ ] `r20-09` Danach «Getestet» → Abnahme zeigt den SHA des Worktrees [auto: test_v20.Ide]
 - [ ] `r20-10` Neuen Commit auf den MR pushen, neu laden → Chip «IntelliJ … (veraltet)», nächster Schritt sagt «neu öffnen» [auto: test_v20.Ide]
 - [ ] `r20-11` Im Worktree eine Datei ändern, × am Chip → Rückfrage wegen geänderter Dateien [auto: test_v20.Ide]
@@ -94,7 +92,6 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 ## 0.21.0
 
-- [ ] `r21-01` Remote auf das Repo umstellen (`git remote set-url origin …`), `git checkout --detach v0.20.0`, dann `python3 start.py` → «Aktualisiert: v0.20.0 → v0.21.0», Selbsttest läuft, tinyops startet
 - [ ] `r21-02` Im Panel → Hinweis «Aktualisiert auf v0.21.0» mit neuen Prüfpunkten, «Was ist neu?» zeigt den CHANGELOG, × blendet ihn aus [auto: test_start.PanelNote]
 - [ ] `r21-03` Nochmals `python3 start.py --check` → «Auf dem neuesten Stand» [auto: test_start.Starter]
 - [ ] `r21-04` Eine Datei im Checkout ändern, `python3 start.py` → «Geänderte Dateien … kein Update», tinyops startet trotzdem [auto: test_start.Starter]
@@ -106,6 +103,20 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
+
+## 0.36.0
+
+Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32-04` und `r34-02` (IntelliJ), `r24-01` und `r24-02` durch `r34-01` (Helpdesk anheften), `r21-01` durch `r211-03` (Launcher).
+
+- [ ] `r36-01` Agent-Lauf fertig → im Lauf unten unter «Weiterführen» einen Satz schreiben, «Weiterführen» → neuer Lauf auf demselben Branch startet sofort; stellt der Agent eine Entscheidung (`tinyops-ask -d` oder «Offene Entscheidungen» im Bericht), steht sie mit Antwortfeldern da und geht mit
+- [ ] `r36-02` Einstellungen → Agenten: beim Remote-Agenten «Rollen-Vorschlag» und «pusht seinen Branch», speichern → Prompt beim Zuweisen beginnt mit `/developer`, nach dem Lauf liegt der Branch in GitLab; die Auswahl zeigt «… % frei» des Kontingents; Agent aus der Seitenleiste auf eine Aufgabe ziehen → Zuweisen-Dialog
+- [ ] `r36-03` Bei einem MR, in dem du Reviewer bist, in GitLab «Änderungen anfordern» → nach dem Abgleich steht er unter «Wartet» statt bei deinen Reviews; fordert der Autor das Review neu an, ist er wieder da
+- [ ] `r36-04` Helpdesk-Ticket im Fokus oder Panel → «Jira-Ticket daraus anlegen» → Entwurf mit Link und Problem prüfen, anlegen → Ticket in Jira, im Helpdesk-Panel steht der neue Key; das Helpdesk-Ticket ist unverändert
+- [ ] `r36-05` Einstellungen → App und Handy: Adresse (z. B. Tailscale) speichern, «Code erzeugen», auf dem Handy `<Adresse>/pair` mit dem Code → Panel auf dem Handy; «Entfernen» → Handy sieht «Noch nicht gekoppelt»; am Rechner «Als App installieren»
+- [ ] `r36-06` Fokus: die oberste Aufgabe zeigt «Worum es geht», «Fertig, wenn» und Teilschritte direkt im Hero [auto: test_ui.Views]
+- [ ] `r36-07` Jeder Dialog hat oben rechts ein ×, Klick daneben schliesst ihn (ausser mit Eingetipptem) [auto: test_ui.MrTry]
+- [ ] `r36-08` BCS nicht erreichbar → Meldung kommt sofort mit «nächster Versuch in …», statt eine Minute zu warten [auto: test_v36.BcsPause]
+- [ ] `r36-09` Handy ohne Kopplung → «Noch nicht gekoppelt»; gekoppelt darf es keine Einstellungen ändern [auto: test_v36.ServerFlow]
 
 ## 0.35.0
 
@@ -238,8 +249,6 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 ## 0.24.0
 
-- [ ] `r24-01` Fokus: bei einem Helpdesk-Ticket «Ticket ansehen» → Details öffnen sich im Panel mit Beschreibung und Kommentaren, kein neuer Tab
-- [ ] `r24-02` Im Panel «Als Fokus anheften, Zeit starten» → die Leiste unter der Kopfzeile zeigt das Ticket und «Zeit läuft, ohne Zeitbox»
 - [ ] `r24-03` Gruppe «Ich beobachte» → deine beobachteten Tickets, geänderte fett; eines anklicken → lesbar im Panel, danach nicht mehr fett [auto: test_v24.AppHd]
 - [ ] `r24-04` «Alle gesehen» bei «Ich beobachte» → nichts mehr fett; die Queue bleibt unverändert [auto: test_v24.AppHd]
 - [ ] `r24-05` Einstellungen → Helpdesk: Vorschlag unter «Queue» anklicken → Abfrage steht im Feld; «Verbindung testen» zeigt die Schritte «Queue» und «Ich beobachte»

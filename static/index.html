@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Arbeitspanel</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#2747d6">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   :root {
     color-scheme: light dark;
@@ -349,7 +354,23 @@
   #agLog { max-height: 42vh; min-height: 120px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .pchip input.pa { width: 120px; }
   dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); width: min(720px, 92vw); }
+  .agcont { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .agcont textarea { height: 90px; font-family: inherit; font-size: 14px; margin-top: 6px; }
+  .agdecs { margin-bottom: 10px; display: grid; gap: 8px; } .agdec { display: grid; gap: 4px; padding: 8px 10px; border-left: 3px solid var(--warn, #b7791f); background: var(--surface); border-radius: 6px; }
+  .agdec .opts button.on { border-color: var(--accent); color: var(--accent); }
+  .agq.dec { border-left: 3px solid var(--warn, #b7791f); }
+  .agdrags { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+  .agdrag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border: 1px dashed var(--line); border-radius: 999px; font-size: 12.5px; cursor: grab; background: var(--surface); }
+  .agdrag small { color: var(--quiet); } .agdrag.low small { color: var(--warn, #b7791f); } .agdrag.empty { opacity: .6; } .agdrag.empty small { color: var(--bad); }
+  #viewFocus [data-fid].dropok, #fx.dropok, .bcard.dropok { outline: 2px dashed var(--accent); outline-offset: 2px; }
+  .paircode { margin-top: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); display: grid; gap: 8px; }
+  .paircode .pc { font: 700 30px/1 var(--mono); letter-spacing: .18em; color: var(--focus); }
+  .devlist { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; }
+  .devlist li { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; } .devlist li span:first-child { font-weight: 600; } .devlist li button { margin-left: auto; }
   dialog::backdrop { background: rgba(8, 10, 14, .5); }
+  dialog > .dlgx { position: sticky; top: 0; float: right; z-index: 3; margin: -8px -8px 0 10px; width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 20px; line-height: 1;
+                   background: var(--surface); border: 1px solid var(--line); color: var(--quiet); }
+  dialog > .dlgx:hover { color: var(--ink); }
   dialog textarea { height: 300px; font-family: var(--mono); font-size: 13px; }
   .toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--ground); padding: 9px 16px; border-radius: 10px; z-index: 20; max-width: 90vw; }
 
@@ -685,6 +706,14 @@
   .hero .hbtns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button.big { font-size: 15px; padding: 10px 18px; border-radius: 11px; display: inline-flex; gap: 8px; align-items: center; }
   .hero.k-blocked button.primary { background: var(--k-blocked); border-color: var(--k-blocked); }
+  .hero .hwork { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 360px); gap: 26px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .hero .hwork h4 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--quiet); } .hero .hwork h4 small { font-weight: 500; margin-left: 4px; }
+  .hero .hwork h4:not(:first-child) { margin-top: 14px; }
+  .hero .hgoal { color: var(--ink); font-size: 15.5px; line-height: 1.5; max-width: 70ch; }
+  .hero .hcrit { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; line-height: 1.45; }
+  .hero .hside { border-left: 1px solid var(--line); padding-left: 22px; min-width: 0; }
+  .hero .hside .ck { margin: 0 0 6px; }
+  @media (max-width: 1100px) { .hero .hwork { grid-template-columns: minmax(0, 1fr); } .hero .hside { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 12px; } }
   .hero.calm { background-image: none; }
   .hcalm { display: grid; gap: 4px; } .hcalm b { font-size: 20px; } .hcalm span { color: var(--quiet); }
 
@@ -1071,7 +1100,7 @@ async function api(method, path, body) {
     if (track && !OFFLINE) uxPush({ k: 'fail', t: ep, e: { m: 'Panel nicht erreichbar' } });
     const x = new Error('Keine Verbindung zu tinyops. Es läuft nicht oder startet gerade neu.'); x.offline = true; throw x;
   }
-  if (OFFLINE) setOffline(false);
+  if (OFFLINE) { setOffline(false); if (!String(path).startsWith('/api/overview')) setTimeout(load, 0); }      // wieder da: gleich den ganzen Stand holen
   const data = await r.json().catch(() => ({}));
   const ms = Math.round(performance.now() - t0);
   if (track && ms > 1500 && ep !== 'GET /api/overview') uxPush({ k: 'slow', t: ep, e: { ms } });
@@ -1474,6 +1503,13 @@ const HELP = {
   github: `<ol><li>Auf github.com unter Settings → Developer settings ein «Fine-grained token» anlegen, nur lesend: Contents, Pull requests, Metadata.</li><li>Token eintragen, Repos wählen.</li></ol>
     <p>Für GitHub Enterprise die API-Adresse anpassen (<code>https://github.firma.ch/api/v3</code>).</p>`,
   sonar: `<p>Adresse und ein Benutzer-Token eintragen. Den Sonar-Schlüssel je Projekt trägst du bei den Projekten ein. tinyops fragt nur das Quality Gate ab.</p>`,
+  app: `<p><b>Als App am Rechner:</b> «Als App installieren» legt tinyops als eigenes Fenster ab. Es ist dieselbe Seite, nur ohne Browser-Leisten.</p>
+    <p><b>Aufs Handy, Schritt für Schritt:</b></p>
+    <ol><li>Den Rechner fürs Handy erreichbar machen, ohne tinyops ins Netz zu stellen. Am einfachsten mit <a href="https://tailscale.com/kb/1312/serve" target="_blank" rel="noopener">Tailscale Serve</a>: <code>tailscale serve --bg 8765</code>. Das gibt eine https-Adresse nur in deinem Tailnet; tinyops bleibt auf 127.0.0.1.</li>
+    <li>Diese Adresse oben eintragen und speichern.</li>
+    <li>«Code erzeugen». Auf dem Handy <code>&lt;Adresse&gt;/pair</code> öffnen und den Code eintippen.</li>
+    <li>Auf dem Handy im Browser-Menü «Zum Startbildschirm» bzw. «App installieren».</li></ol>
+    <p><b>Sicherheit:</b> Jede Anfrage, die nicht direkt von diesem Rechner kommt, braucht ein gekoppeltes Gerät. Gespeichert wird nur ein Hash des Geräte-Tokens. Daten werden auf dem Handy nicht zwischengespeichert, nur die leere Seite für den Start. Firmen-VPN oder Tailscale: kläre vorher, ob Dienstdaten auf ein privates Handy dürfen.</p>`,
   more: `<p>Hier schaltest du Funktionen ein, die nicht jeder braucht. Ausgeschaltet verschwinden sie aus der Oberfläche, ihre Daten bleiben erhalten.</p>
     <p><b>Ideenbox:</b> Einfälle festhalten (Taste <code>i</code>), bewerten lassen und als Ticket ausformulieren. <b>Testumgebungen:</b> die ältere Testumgebung je MR über Helm. Ab 0.34 geht sie in der Review-Umgebung auf (Einstellungen → IntelliJ und Review-Umgebung). <b>KI-Konten:</b> von Hand gepflegte Übersicht.</p>
     <p><b>UI-Nutzung erfassen:</b> Zählt Klicks, Mausweg, gewechselte Ansichten, Tasten ausserhalb von Feldern, Fehlermeldungen und langsame Antworten. Nie Eingaben, Titel oder Inhalte. Alles bleibt auf diesem Rechner. Den Bericht kopierst du unter «Prüfen» und gibst ihn weiter, wenn du willst.</p>`,
@@ -1591,9 +1627,9 @@ let TK = null;   // {item, meta, project, types}
 function tkMsg(html, cls) { $('tkMsg').innerHTML = html ? `<div class="banner ${cls || 'warn'}" style="margin:10px 0 0">${html}</div>` : ''; }
 function tkTypes(types, sel) { return types.map(t => `<option ${t === sel ? 'selected' : ''}>${esc(t)}</option>`).join(''); }
 
-async function openTicket(btn, ideaId) {
-  const item = ideaId ? { idea_id: ideaId } : { project_id: +btn.dataset.p, iid: btn.dataset.i ? +btn.dataset.i : null, branch: btn.dataset.b, create_url: btn.dataset.cu };
-  $('tkSrc').innerHTML = ideaId ? `<span class="src tiny">Idee #${ideaId}</span>` : `<span class="src gl">${item.iid ? 'MR !' + item.iid : 'Branch'}</span> <code>${esc(item.branch)}</code>`;
+async function openTicket(btn, ideaId, hdKey) {
+  const item = hdKey ? { hd_key: hdKey } : ideaId ? { idea_id: ideaId } : { project_id: +btn.dataset.p, iid: btn.dataset.i ? +btn.dataset.i : null, branch: btn.dataset.b, create_url: btn.dataset.cu };
+  $('tkSrc').innerHTML = hdKey ? `<span class="src hd">${esc(hdName())}</span> <code>${esc(hdKey)}</code>` : ideaId ? `<span class="src tiny">Idee #${ideaId}</span>` : `<span class="src gl">${item.iid ? 'MR !' + item.iid : 'Branch'}</span> <code>${esc(item.branch)}</code>`;
   $('tkBody').innerHTML = '<div class="quiet">Lade Entwurf …</div>';
   if (!$('tkDlg').open) $('tkDlg').showModal();
   try {
@@ -1614,14 +1650,15 @@ function renderTicket(r) {
     <div class="field"><label for="tk-sum">Titel</label><input type="text" id="tk-sum" value="${esc(d.summary)}" maxlength="255"></div>
     <div class="field"><label for="tk-desc">Beschreibung <span class="quiet small" style="font-weight:400">(Jira-Wiki-Format)</span></label>
       <textarea class="full" id="tk-desc" rows="12" spellcheck="false">${esc(d.description)}</textarea></div>
-    <div class="small quiet" id="tkSource">Entwurf: ${r.source === 'ki' ? 'vom lokalen Modell, bitte prüfen' : TK.item.idea_id ? 'Vorlage aus der Idee (Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten)' : 'Vorlage aus Branch, MR und Commit-Titeln'}</div>
+    ${r.linked ? `<div class="banner warn" style="margin:0 0 10px">Aus diesem Helpdesk-Ticket hast du schon <b>${esc(r.linked)}</b> angelegt.</div>` : ''}
+    <div class="small quiet" id="tkSource">Entwurf: ${r.source === 'helpdesk' ? 'Vorlage aus dem Helpdesk-Ticket (Link, Problem, Kriterien), bitte prüfen' : r.source === 'ki' ? 'vom lokalen Modell, bitte prüfen' : TK.item.idea_id ? 'Vorlage aus der Idee (Story, Akzeptanzkriterien, Risiken, Tests, Abhängigkeiten)' : 'Vorlage aus Branch, MR und Commit-Titeln'}</div>
     ${TK.item.idea_id ? `<label class="check" style="margin-top:8px"><input type="checkbox" id="tk-cl" checked><span>Akzeptanzkriterien als Teilschritte übernehmen</span></label>` : ''}
     <div id="tkMsg">${r.warning ? `<div class="banner warn" style="margin:10px 0 0">${esc(r.warning)}</div>` : ''}</div>
     ${m.llm ? `<div class="row" style="margin-top:10px"><input type="text" id="tk-hint" style="flex:1;min-width:200px" placeholder="Hinweis an das Modell (optional), z. B. «Fokus auf Tests»">
       <button id="tk-ai">Entwurf mit KI</button></div><div class="quiet small">${TK.item.idea_id ? `Gesendet wird der Text der Idee und ihre Bewertung an ${esc(m.llm_label || 'das lokale Modell')}.` : `Gesendet werden Titel, Branch, MR-Beschreibung und Commit-Titel an ${esc(m.llm_label || 'das lokale Modell')}. Keine Diffs, kein Code.`}</div>` : ''}
     <div class="row" style="margin-top:14px">
       ${m.can_create ? '<button class="primary" id="tk-create">In Jira anlegen</button>'
-        : TK.item.idea_id ? '' : `<a class="btn" id="tk-open" href="${esc(TK.item.create_url || '#')}" target="_blank" rel="noopener">In Jira öffnen</a>`}
+        : TK.item.idea_id || TK.item.hd_key ? '' : `<a class="btn" id="tk-open" href="${esc(TK.item.create_url || '#')}" target="_blank" rel="noopener">In Jira öffnen</a>`}
       ${TK.item.idea_id ? `<select id="tk-pool" aria-label="Kategorie">${poolOptions(null, true)}</select><button id="tk-tiny" ${m.can_create ? '' : 'class="primary"'} title="Lokale Aufgabe in tinyops statt Jira">Als tiny-Ticket</button>` : ''}
       <button id="tk-copy">Text kopieren</button>
     </div>
@@ -1654,6 +1691,7 @@ function renderTicket(r) {
   if ($('tk-create')) $('tk-create').onclick = async () => {
     const body = { project: $('tk-proj').value, issue_type: $('tk-type').value, summary: $('tk-sum').value, description: $('tk-desc').value };
     if (TK.item.idea_id) { body.idea_id = TK.item.idea_id; body.checklist = $('tk-cl').checked; }
+    if (TK.item.hd_key) body.hd_key = TK.item.hd_key;
     if (!body.summary.trim()) { tkMsg('Der Titel fehlt.', 'bad'); return; }
     if (!confirm(`In Jira ${body.project} als «${body.issue_type}» anlegen?\n\n${body.summary}`)) return;
     await busy($('tk-create'), 'Lege an …', async () => {
@@ -1748,7 +1786,7 @@ async function loadUsage(fresh) {
   if (!(state && (state.usage_providers || []).length)) { usageData = null; return; }
   if (!fresh && usageData && Date.now() - usageT < 30000) return;
   usageT = Date.now();
-  try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderUsageBox(); } catch (e) { /* nächstes Mal */ }
+  try { usageData = await api('GET', '/api/usage' + (fresh ? '?fresh=1' : '')); renderUsageBox(); if (state.agents && state.agents.enabled && $('fRailCards')) renderRail(); } catch (e) { /* nächstes Mal */ }
 }
 document.addEventListener('click', async ev => {
   const b = ev.target.closest && ev.target.closest('[data-sqrep]');
@@ -1932,6 +1970,26 @@ const post = (path, body) => api('POST', path, body);
 const AG = () => (state && state.agents) || { enabled: false, agents: [], runs: [], projects: [] };
 const AG_ST = { 'zugewiesen': 'tk', 'läuft': 'agent', 'fertig': 'sq-ok', 'fehlgeschlagen': 'sq-bad', 'abgebrochen': 'sq-none', 'verloren': 'warn', 'abgelaufen': 'warn' };
 const agCtx = {};
+// 0.36: Rollen und Kontingent der Agenten
+const QUOTA_DEF = { claude: 'claude', codex: 'codex', vibe: 'mistral' };
+const ROLE_L = { plan: 'Planer', develop: 'Entwickler', review: 'Reviewer', test: 'Tester' };
+function rolesText(r) { return r && typeof r === 'object' ? Object.entries(r).map(([k, v]) => k + '=' + v).join(', ') : (r || ''); }
+function agQuota(a) {          // freier Anteil des Abos, das der Agent verbraucht: { pct, text, cls }
+  const q = a.quota; if (!q || !usageData) return null;
+  const it = usageData.items.find(x => x.id === q); if (!it) return null;
+  if (!it.ok || !(it.windows || []).length) return { pct: null, text: 'Kontingent unbekannt', cls: '' };
+  const w = (q === 'mistral' && a.kind === 'vibe' && it.windows.find(x => /vibe/i.test(x.label))) || it.windows.reduce((m, x) => x.left_pct < m.left_pct ? x : m);
+  const pct = Math.round(w.left_pct);
+  return { pct, text: pct <= 0 ? 'Kontingent leer' : pct + ' % frei', cls: pct <= 0 ? 'empty' : pct < 20 ? 'low' : '' };
+}
+function agOptLabel(a, phase) {
+  const q = agQuota(a), role = phase && a.roles && a.roles.length < 4 ? (a.roles.includes(phase) ? ROLE_L[phase] : 'nicht als ' + ROLE_L[phase]) : '';
+  return [a.name + (a.where ? ' (' + a.where + ')' : ''), role, q ? q.text : ''].filter(Boolean).join(' · ');
+}
+function agBest(phase, prefer) {   // passender Agent für eine Phase: Rolle passt, Kontingent nicht leer, sonst der bisherige
+  const ag = AG().agents, ok = a => (a.roles || []).includes(phase) && !(agQuota(a) && agQuota(a).pct === 0);
+  return (ag.find(a => a.id === prefer && ok(a)) || ag.find(ok) || ag.find(a => a.id === prefer) || ag[0] || {}).id;
+}
 function agentRow(ticket, key, title, url, items) {
   const ag = AG();
   if (!ag.enabled || !ticket) return '';
@@ -1942,11 +2000,64 @@ function agentRow(ticket, key, title, url, items) {
   const cls = (ag.projects.find(p => p.id === pid) || {}).data_class;
   return `<div class="bagent">${chips}<select data-aassign="1" data-ticket="${esc(ticket)}" aria-label="Agent zuweisen"><option value="">Agent zuweisen …</option>${ag.agents.map(a => {
     const no = cls === 'restricted' && a.cloud;
-    return `<option value="${esc(a.id)}" ${no ? 'disabled' : ''}>${esc(a.name)} (${esc(a.where)})${no ? ' · nicht für restricted' : ''}</option>`; }).join('')}</select></div>`;
+    return `<option value="${esc(a.id)}" ${no ? 'disabled' : ''}>${esc(agOptLabel(a, 'develop'))}${no ? ' · nicht für restricted' : ''}</option>`; }).join('')}</select></div>`;
 }
 const fmtSecs = n => n >= 3600 ? Math.floor(n / 3600) + ' h ' + Math.floor(n % 3600 / 60) + ' min' : n >= 60 ? Math.floor(n / 60) + ' min ' + (n % 60) + ' s' : n + ' s';
 let agTimer = null;
 let agCloneT = null;
+// 0.36: tinyops als App (PWA) und Handy koppeln
+const PWA = { prompt: null, installed: window.matchMedia && matchMedia('(display-mode: standalone)').matches };
+window.addEventListener('beforeinstallprompt', ev => { ev.preventDefault(); PWA.prompt = ev; if ($('app-install')) { $('app-install').disabled = false; $('app-inst-msg').textContent = 'Öffnet tinyops in einem eigenen Fenster, mit Symbol im Dock oder Startmenü.'; } });
+window.addEventListener('appinstalled', () => { PWA.prompt = null; PWA.installed = true; toast('tinyops ist als App installiert.'); });
+if ('serviceWorker' in navigator && window.isSecureContext && !navigator.webdriver) navigator.serviceWorker.register('/sw.js').catch(() => { /* ohne App-Hülle geht es auch */ });
+let appCodeT = null;
+async function appDevices() {
+  const box = $('app-devs'); if (!box) return;
+  try {
+    const r = await api('GET', '/api/pair/devices');
+    box.innerHTML = r.devices.length ? `<b class="small">Gekoppelte Geräte</b><ul class="devlist">${r.devices.map(d => `<li><span>${esc(d.name)}</span><span class="quiet small">gekoppelt ${fmtDay(d.created)} · zuletzt ${d.last_seen ? devAgo(d.last_seen) : 'nie'}</span><button data-devrm="${d.id}">Entfernen</button></li>`).join('')}</ul>`
+      : '<div class="small quiet">Noch kein Gerät gekoppelt.</div>';
+  } catch (e) { box.innerHTML = `<div class="small quiet">${esc(e.message)}</div>`; }
+}
+const fmtDay = ts => new Date(ts * 1000).toLocaleDateString('de-CH');
+const devAgo = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 2 ? 'gerade' : m < 60 ? `vor ${m} min` : m < 1440 ? `vor ${Math.round(m / 60)} h` : fmtDay(ts); };
+function wireApp() {
+  if (!$('app-code')) return;
+  appDevices();
+  $('app-install').onclick = async () => { if (!PWA.prompt) return; PWA.prompt.prompt(); try { await PWA.prompt.userChoice; } catch (e) { /* egal */ } PWA.prompt = null; $('app-install').disabled = true; };
+  $('app-code').onclick = async () => {
+    try {
+      const r = await post('/api/pair/start', {}), url = (r.phone_url || val('app-phone') || 'https://<Adresse>') + '/pair';
+      clearInterval(appCodeT);
+      const tick = () => { const s = r.expires - Math.floor(Date.now() / 1000); const el = $('app-cdown'); if (!el) { clearInterval(appCodeT); return; }
+        if (s <= 0) { $('app-codebox').innerHTML = '<div class="small quiet">Code abgelaufen. Bei Bedarf einen neuen erzeugen.</div>'; clearInterval(appCodeT); appDevices(); return; }
+        el.textContent = `noch ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+      $('app-codebox').innerHTML = `<div class="paircode"><div class="pc">${esc(r.code)}</div><div class="small">Auf dem Handy öffnen: <b>${esc(url)}</b> <button class="quiet-btn" id="app-cpy">kopieren</button><br>Code eintippen. Gilt einmal, <span id="app-cdown"></span>.</div>
+        ${r.phone_url ? '' : '<div class="small" style="color:var(--warn)">Oben noch die Adresse fürs Handy eintragen und speichern, sonst lässt tinyops das Handy nicht herein.</div>'}</div>`;
+      $('app-cpy').onclick = () => copyText(url, 'Adresse');
+      tick(); appCodeT = setInterval(tick, 1000);
+      const poll = setInterval(() => { if (!$('app-cdown')) { clearInterval(poll); return; } appDevices(); }, 5000);
+    } catch (e) { toast(e.message); }
+  };
+  $('app-devs').onclick = async ev => {
+    const b = ev.target.closest('[data-devrm]'); if (!b) return;
+    if (!confirm('Dieses Gerät entfernen? Es sieht tinyops danach nicht mehr, bis du es neu koppelst.')) return;
+    try { await post('/api/pair/revoke', { id: +b.dataset.devrm }); appDevices(); toast('Gerät entfernt'); } catch (e) { toast(e.message); }
+  };
+}
+// 0.36: Jeder Dialog hat oben rechts ein ×, das beim Scrollen sichtbar bleibt, und schliesst mit einem Klick daneben,
+// solange darin nichts Eingetipptes verloren ginge (Nutzungsbericht: 20 Wutklicks im Agentenfenster).
+function dlgDirty(d) { return [...d.querySelectorAll('textarea, input[type=text], input:not([type])')].some(x => !x.readOnly && x.value !== x.defaultValue); }
+document.querySelectorAll('dialog').forEach(d => {
+  if (!d.querySelector(':scope > .dlgx')) {
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'dlgx'; x.textContent = '×'; x.title = 'Schliessen (Esc)'; x.setAttribute('aria-label', 'Schliessen');
+    x.onclick = () => d.close(); d.prepend(x);
+  }
+  let downOut = false;
+  const out = ev => { const r = d.getBoundingClientRect(); return ev.target === d && (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom); };
+  d.addEventListener('mousedown', ev => { downOut = out(ev); });
+  d.addEventListener('click', ev => { if (downOut && out(ev)) { if (!dlgDirty(d)) d.close(); else toast('Noch nicht gespeichert. Schliessen mit × oder Esc.'); } downOut = false; });
+});
 function agClose() { clearInterval(agTimer); agTimer = null; clearTimeout(agCloneT); $('agDlg').close(); }
 $('agDlg').addEventListener('close', () => { clearInterval(agTimer); agTimer = null; });
 async function openAgentDlg(o) {
@@ -1960,7 +2071,7 @@ async function openAgentDlg(o) {
   async function draw() {
     let info;
     try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined,
-      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, prereview: o.prereview || undefined, phase: phase || undefined, parent: o.parent || undefined }); }
+      brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, answers: o.answers || undefined, prereview: o.prereview || undefined, phase: phase || undefined, parent: o.parent || undefined }); }
     catch (e) { toast(e.message); return; }
     dirty = false;
     if (info.followup || info.prereview) pid = info.project_id;
@@ -2125,11 +2236,11 @@ function agGateHtml(r) {
   if (r.active || r.status === 'zugewiesen') return '';
   const lab = r.phase_label || 'Umsetzen', m = r.manual || [], left = m.length - (r.manual_done || 0);
   const warn = (r.guard_warnings || []).length ? `<ul class="gwarn">${r.guard_warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
-  const agentSel = id => `<select id="${id}" aria-label="Agent für die nächste Phase">${AG().agents.map(a => `<option value="${esc(a.id)}" ${a.id === r.agent ? 'selected' : ''}>${esc(a.name)}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>`;
+  const agentSel = (id, ph) => { const best = agBest(ph, r.agent); return `<select id="${id}" aria-label="Agent für die nächste Phase">${AG().agents.map(a => `<option value="${esc(a.id)}" ${a.id === best ? 'selected' : ''}>${esc(agOptLabel(a, ph))}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>`; };
   if (r.gate === 'ok') {
     const nx = NEXT_PH[r.phase];
     return `<div class="gatebox ok"><h3>${esc(lab)} freigegeben</h3>${r.gate_note ? `<div class="small">${esc(r.gate_note)}</div>` : ''}
-      <div class="row" style="margin-top:6px">${nx ? `<span class="small">Weiter mit <b>${PH_L[nx]}</b> durch</span>${agentSel('agNxA')}<button class="primary" id="agNext" data-ph="${nx}">${PH_L[nx]} vorbereiten …</button>` : '<span class="small">Der Zyklus ist durch. Jetzt MR, Review im Team und Merge wie gewohnt.</span>'}
+      <div class="row" style="margin-top:6px">${nx ? `<span class="small">Weiter mit <b>${PH_L[nx]}</b> durch</span>${agentSel('agNxA', nx)}<button class="primary" id="agNext" data-ph="${nx}">${PH_L[nx]} vorbereiten …</button>` : '<span class="small">Der Zyklus ist durch. Jetzt MR, Review im Team und Merge wie gewohnt.</span>'}
       <button class="quiet-btn" id="agGateReset" title="Freigabe zurücknehmen">Zurücknehmen</button></div></div>`;
   }
   if (r.gate === 'back') return `<div class="gatebox back"><h3>${esc(lab)} zurückgegeben</h3><div class="small">${esc(r.gate_note)}</div>
@@ -2189,7 +2300,7 @@ document.addEventListener('click', ev => {
 }, true);
 function agQuestionHtml(r) {
   const q = r.question;
-  return `<div class="agq"><b>${ic('chat')} ${esc(r.agent_name)} fragt${q.blocking === false ? ' (arbeitet weiter)' : ''}:</b><div style="margin-top:4px;white-space:pre-wrap">${esc(q.question)}</div>
+  return `<div class="agq ${q.decision ? 'dec' : ''}"><b>${ic('chat')} ${esc(r.agent_name)} ${q.decision ? 'braucht eine Entscheidung' : 'fragt'}${q.blocking === false ? ' (arbeitet weiter)' : ' und wartet'}:</b><div style="margin-top:4px;white-space:pre-wrap">${esc(q.question)}</div>
     ${(q.options || []).length ? `<div class="opts">${q.options.map(o => `<button data-qopt="${esc(o)}">${esc(o)}</button>`).join('')}</div>` : ''}
     <textarea id="agAns" maxlength="4000" placeholder="Eigene Antwort (Ctrl+Enter schickt)" spellcheck="true"></textarea>
     <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="primary" id="agAnsGo">Antwort schicken</button></div></div>`;
@@ -2236,6 +2347,17 @@ async function agTryLoad(id) {
   if ($('tyOpen')) $('tyOpen').onclick = () => window.open(es.url, '_blank', 'noopener');
   if (busy) setTimeout(() => { if ($('agTry')) agTryLoad(id); }, 3000);
 }
+// 0.36: Lauf direkt weiterführen, offene Entscheidungen beantworten
+function agContinueHtml(r) {
+  const od = r.open_decisions || [];
+  const dec = od.length ? `<div class="agdecs"><b>${ic('chat')} Offene Entscheidungen</b> <span class="quiet small">Der Agent hat hier nicht geraten. Deine Antworten gehen mit dem nächsten Lauf an ihn.</span>
+    ${od.map(d => `<div class="agdec"><div>${d.n}. ${esc(d.q)}</div>${d.options.length ? `<div class="opts">${d.options.map(o => `<button type="button" data-decopt="${d.n}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>` : ''}
+      <input type="text" data-dec="${d.n}" maxlength="600" placeholder="Deine Entscheidung" aria-label="Entscheidung ${d.n}"></div>`).join('')}</div>` : '';
+  return `<div class="agcont">${dec}
+    <label class="small" for="agCont"><b>Weiterführen</b> <span class="quiet">${esc(r.agent_name)} arbeitet auf dem Branch dieses Laufs weiter. Offene Kriterien und fehlgeschlagene Belege gehen automatisch mit.</span></label>
+    <textarea id="agCont" maxlength="4000" placeholder="Was soll als Nächstes passieren? (Ctrl+Enter startet)" spellcheck="true"></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="primary" id="agContGo">Weiterführen</button></div></div>`;
+}
 function agReportHtml(r) {
   const qa = (r.qa || []).map(x => `<li><span class="quiet">Frage ${x.id}:</span> ${esc(x.q)}<br><span class="quiet">Antwort:</span> ${esc(x.a)}</li>`).join('');
   const ck = (r.checks || []).map(c => `<li><span class="chip ${c.exit === 0 ? 'sq-ok' : 'sq-bad'}">Exit ${c.exit}</span><code>${esc(c.cmd)}</code><span class="quiet">${c.secs} s</span></li>`).join('');
@@ -2257,8 +2379,10 @@ function agReportHtml(r) {
   if (!r.active) parts.push(r.summary ? `<details class="small" ${rb && r.phase !== 'review' ? '' : 'open'}><summary><b>${r.phase === 'plan' ? 'Plan des Agenten' : r.phase === 'review' ? 'Befund des Agenten' : 'Ganzer Bericht des Agenten'}</b> <span class="quiet">(seine Angaben, nicht geprüft)</span></summary><div class="mdv">${mdHtml(r.summary)}</div></details>`
     : '<div class="small quiet">Kein Bericht (<code>tinyops-report</code> nicht benutzt). Das Log unten zeigt, was passiert ist.</div>');
   if (qa) parts.push(`<details class="small"><summary>Rückfragen (${r.qa.length})</summary><ul class="agchk">${qa}</ul></details>`);
-  if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow"><input type="text" id="agNote" maxlength="1000" placeholder="Was soll nachgebessert werden? (optional)" aria-label="Anmerkung für die Nachbesserung">
-    <button id="agFollow" title="Neuer Lauf desselben Agenten: offene Kriterien, fehlgeschlagene Belege und deine Anmerkung. Er baut auf dem Branch dieses Laufs auf.">Nachbessern …</button>
+  if ((r.decisions || []).length) parts.push(`<div class="small"><b>Entscheidungen</b> <span class="quiet">(von dir, gehen in Review und MR-Beschreibung)</span><ul class="agchk">${r.decisions.map(d => `<li>${esc(d.q)} → <b>${esc(d.a)}</b></li>`).join('')}</ul></div>`);
+  if (!r.active && r.status !== 'zugewiesen') parts.push(agContinueHtml(r));
+  if (!r.active && r.status !== 'zugewiesen') parts.push(`<div class="agfollow">
+    <button id="agFollow" title="Wie «Weiterführen», aber zuerst mit Vorschau und Bearbeiten des ganzen Prompts">Mit Vorschau …</button>
     <button id="agComment" title="Ergebnis als Kommentar-Entwurf in die Zwischenablage. tinyops schreibt nichts ins Ticket.">Als Ticket-Kommentar kopieren</button>
     ${rb ? '<button id="agMrDesc" title="Beschreibung für den MR: worum es geht, was und warum je Datei, wie testen. Für Reviewer im Team. tinyops erstellt keinen MR.">Als MR-Beschreibung kopieren</button>' : ''}</div>`);
   parts.push(agManualHtml(r), agGateHtml(r));
@@ -2725,11 +2849,13 @@ async function openRunDlg(id) {
   async function draw(first) {
     r = get();
     if (!r) { agClose(); return; }
+    draw.shape = JSON.stringify({ ...r, secs: 0 });
     const draft = $('agAns') ? { v: $('agAns').value, f: document.activeElement === $('agAns') } : null;
     let text = '';
     try { text = (await post('/api/agents/tail', { run: id, lines: 120 })).text; } catch (e) { text = e.message; }
     const atBottom = !$('agLog') || $('agLog').scrollTop + $('agLog').clientHeight >= $('agLog').scrollHeight - 30;
     const gdraft = $('agGateNote') ? $('agGateNote').value : '';
+    const cdraft = $('agCont') ? $('agCont').value : '', ddraft = [...document.querySelectorAll('#agBody [data-dec]')].map(x => [x.dataset.dec, x.value]);
     box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.phase_label || 'Umsetzen')} · ${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
       <div class="quiet small" style="margin:4px 0">${esc(r.title)}</div>
       ${agCycleHtml(r.ticket, r.id)}
@@ -2757,6 +2883,8 @@ async function openRunDlg(id) {
     if ($('agAns')) $('agAns').addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); sendAnswer($('agAns').value); } });
     if (draft && $('agAns')) { $('agAns').value = draft.v; if (draft.f) $('agAns').focus(); }
     if (gdraft && $('agGateNote')) $('agGateNote').value = gdraft;
+    if (cdraft && $('agCont')) $('agCont').value = cdraft;
+    ddraft.forEach(([n, v]) => { const x = box.querySelector(`[data-dec="${n}"]`); if (x && v) x.value = v; });
     wirePromptBox(box, 'agSent');
     if ($('agTry')) agTryLoad(id);
     if ($('agMrDesc')) $('agMrDesc').onclick = async () => { try { copyText((await post('/api/agents/mrdesc', { run: id })).text, 'MR-Beschreibung'); } catch (e) { toast(e.message); } };
@@ -2773,7 +2901,20 @@ async function openRunDlg(id) {
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
     if ($('agComment')) $('agComment').onclick = async () => { try { copyText((await post('/api/agents/comment', { run: id })).text, 'Kommentar-Entwurf'); } catch (e) { toast(e.message); } };
-    if ($('agFollow')) $('agFollow').onclick = () => { const note = $('agNote').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note, pid: r.project_id }); };
+    const contAnswers = () => { const o = {}; box.querySelectorAll('[data-dec]').forEach(x => { if (x.value.trim()) o[x.dataset.dec] = x.value.trim(); }); return o; };
+    box.querySelectorAll('[data-decopt]').forEach(b => b.onclick = () => { const inp = box.querySelector(`[data-dec="${b.dataset.decopt}"]`); inp.value = b.dataset.v;
+      box.querySelectorAll(`[data-decopt="${b.dataset.decopt}"]`).forEach(x => x.classList.toggle('on', x === b)); });
+    if ($('agFollow')) $('agFollow').onclick = () => { const note = $('agCont') ? $('agCont').value : ''; const answers = contAnswers(); agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note, answers, pid: r.project_id }); };
+    const contGo = async () => {
+      const text = $('agCont').value.trim(), answers = contAnswers();
+      if (!text && !Object.keys(answers).length) { toast('Schreib, wie es weitergehen soll, oder beantworte eine Entscheidung.'); $('agCont').focus(); return; }
+      await busy($('agContGo'), 'Starte …', async () => {
+        try { const x = await post('/api/agents/continue', { run: id, text, answers }); toast('Weitergeführt als Lauf ' + x.id); await load(); openRunDlg(x.id); }
+        catch (e) { toast(e.message); }
+      });
+    };
+    if ($('agContGo')) $('agContGo').onclick = contGo;
+    if ($('agCont')) $('agCont').addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); contGo(); } });
     if ($('agStop')) $('agStop').onclick = async () => { if (!confirm('Den Agenten wirklich stoppen? Die Sitzung wird beendet.')) return; try { await post('/api/agents/stop', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agTake')) $('agTake').onclick = async () => { try { const t = await post('/api/agents/takeover', { run: id }); toast(`Übernommen: Branch ${t.branch} (${t.files.length} Dateien)`); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agRemove')) $('agRemove').onclick = async () => {
@@ -2789,7 +2930,16 @@ async function openRunDlg(id) {
   $('agDlg').showModal();
   if (!r.active && r.status !== 'zugewiesen' && !r.ack) post('/api/agents/ack', { run: id }).then(load).catch(() => {});
   clearInterval(agTimer);
-  agTimer = setInterval(async () => { if (!$('agDlg').open) return; await load(); const cur = get(); if (cur && (cur.active || (draw.last !== cur.status))) { draw.last = cur.status; draw(false); } }, 4000);
+  const shape = x => JSON.stringify({ ...x, secs: 0 });
+  draw.shape = shape(r);
+  agTimer = setInterval(async () => {
+    if (!$('agDlg').open) return;
+    await load(); const cur = get(); if (!cur) return;
+    if (shape(cur) !== draw.shape) { draw.shape = shape(cur); draw(false); return; }      // nur bei echten Änderungen neu aufbauen
+    if (!cur.active || !$('agLog')) return;
+    const lg = $('agLog'), atB = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 30;   // sonst nur das Log nachführen, Klicks gehen nicht verloren
+    try { const tx = (await post('/api/agents/tail', { run: id, lines: 120 })).text; if (lg.textContent !== tx) { lg.textContent = tx; if (atB) lg.scrollTop = lg.scrollHeight; } } catch (e) { /* nächstes Mal */ }
+  }, 4000);
 }
 document.addEventListener('change', ev => {
   const s = ev.target.closest && ev.target.closest('select[data-aassign]');
@@ -2799,6 +2949,11 @@ document.addEventListener('click', ev => { const b = ev.target.closest && ev.tar
 
 // Ziehen
 document.addEventListener('dragstart', ev => {
+  const ad = ev.target.closest && ev.target.closest('[data-agdrag]');
+  if (ad) {                                                       // 0.36: Agent auf eine Aufgabe ziehen
+    ev.dataTransfer.setData(MIME, JSON.stringify({ t: 'agent', id: ad.dataset.agdrag })); ev.dataTransfer.effectAllowed = 'copy';
+    dragKind = 'agent'; ad.classList.add('dragging'); return;
+  }
   const bc = ev.target.closest && ev.target.closest('.bcard[data-bid]');
   const mc = ev.target.closest && ev.target.closest('.mrchip[data-rp]');
   if (mc || bc) {
@@ -2822,9 +2977,20 @@ document.addEventListener('dragstart', ev => {
 });
 document.addEventListener('dragend', () => { dragKind = ''; document.querySelectorAll('.dragging, .dropok').forEach(e => e.classList.remove('dragging', 'dropok')); });
 let dragKind = '';
+function agentDrop(aid, t) {
+  let c = null;
+  if (t.dataset.bid) c = state.board.cards.find(x => x.id === t.dataset.bid);
+  else { const e = fEntry(t.id === 'fx' ? FXID : t.dataset.fid); if (e && e.t === 'card') c = e.c;
+    else if (e) { toast(e.t === 'review' ? 'Reviews: im MR «Mit Agent» die offenen Punkte wählen.' : 'Helpdesk-Tickets erst als Jira-Ticket anlegen, dann zuweisen.'); return; } }
+  if (!c) { toast('Hier lässt sich kein Agent zuweisen.'); return; }
+  if (c.idea_id) { toast('Ideen zuerst einplanen, dann einen Agenten zuweisen.'); return; }
+  agentRow(c.id, c.key || '', c.title, c.url, c.items);
+  openAgentDlg({ ticket: c.id, agent: aid });
+}
 function target(ev) {
   const c = x => ev.target.closest && ev.target.closest(x);
   if (dragKind === 'card') return c('.bpool[data-pool]') || c('.bcol[data-stage]');
+  if (dragKind === 'agent') return c('#viewFocus [data-fid]') || c('#fx') || c('.bcard[data-bid]');
   return c('.bcard[data-bkey]') || c('.slot[data-skey]');
 }
 document.addEventListener('dragover', ev => {
@@ -2839,6 +3005,7 @@ document.addEventListener('drop', async ev => {
   ev.preventDefault();
   document.querySelectorAll('.dropok, .dragging').forEach(e => e.classList.remove('dropok', 'dragging'));
   const d = JSON.parse(ev.dataTransfer.getData(MIME));
+  if (d.t === 'agent') { agentDrop(d.id, t); return; }
   if (t.classList.contains('bpool')) {                    // Karte in eine Kategorie ziehen
     const c = state.board.cards.find(x => x.id === d.id);
     if (c && !c.idea_id) await act(() => post('/api/board/assign', c.key ? { key: c.key, pool_id: +t.dataset.pool } : { ref: c.id, pool_id: +t.dataset.pool }), 'Kategorie gesetzt');
@@ -3126,7 +3293,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -3365,6 +3532,16 @@ async function loadSettings() {
     <div class="row"><button class="primary" id="lm-test">Verbindung testen</button></div>
     <div id="lm-result"></div>`)}
 
+  ${sect('app', 'App und Handy', 'tinyops als eigenes Fenster auf dem Rechner und als App auf dem Handy. Das Panel bleibt dabei nur für gekoppelte Geräte offen.', `
+    <div class="row" style="align-items:center;gap:12px;margin-bottom:14px"><button id="app-install" ${PWA.prompt ? '' : 'disabled'}>${ic('plus')} Als App installieren</button>
+      <span class="quiet small" id="app-inst-msg">${PWA.installed ? 'Läuft schon als App.' : PWA.prompt ? 'Öffnet tinyops in einem eigenen Fenster, mit Symbol im Dock oder Startmenü.' : 'Chrome oder Edge: Menü → «App installieren». Safari: Teilen → «Zum Home-Bildschirm».'}</span></div>
+    ${field('app-phone', 'Adresse fürs Handy', S.app.phone_url, { ph: 'https://mein-rechner.tailnet.ts.net', err: 'app.phone_url', help: 'Unter dieser Adresse erreicht das Handy tinyops, z. B. über Tailscale (<code>tailscale serve --bg ' + esc(S.server.port) + '</code>) oder dein VPN. Mit https lässt sich tinyops auf dem Handy als App installieren. tinyops nimmt den Namen in die erlaubten Hosts auf.' })}
+    <h3 style="margin:16px 0 6px">Handy koppeln</h3>
+    <div class="small quiet">Nur gekoppelte Geräte sehen tinyops von aussen. Ein Gerät darf keine Einstellungen ändern und keine weiteren koppeln; entfernen geht jederzeit hier.</div>
+    <div class="row" style="margin-top:8px"><button id="app-code" ${S.demo ? 'disabled title="Im Demo-Modus aus"' : ''}>Code erzeugen</button></div>
+    <div id="app-codebox"></div>
+    <div id="app-devs" style="margin-top:12px"></div>`)}
+
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
@@ -3385,7 +3562,7 @@ async function loadSettings() {
   $('gh-test').onclick = testGithub; $('gh-search').onclick = searchGithub; $('gh-q').onkeydown = ev => { if (ev.key === 'Enter') searchGithub(); };
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false); renderM3Status();
-  renderLlmKey();
+  renderLlmKey(); wireApp();
   FA = S.focus.areas.map(a => ({ ...a, pools: (a.pools || []).join(', '), activities: (a.activities || []).join(', ') })); renderFocusAreas();
   $('fa-add').onclick = () => { FA.push({ id: '', name: '', target_pct: 0, ticket: '', pools: '', activities: '', blocks_text: '' }); renderFocusAreas(); };
   renderHdSecret(); $('hd-auth').onchange = renderHdSecret;
@@ -3808,12 +3985,16 @@ function renderAgentCfg() {
       <label class="sm" title="Anbieter, wie ${a.kind === 'goose' ? 'Goose (GOOSE_PROVIDER)' : 'opencode'} ihn nennt. ${a.kind === 'goose' ? 'Leer: Goose nimmt den Anbieter aus seiner eigenen Konfiguration (goose configure), tinyops setzt nur das Modell.' : ''}">Anbieter<input type="text" data-ag="${i}" data-f="provider" list="agProviders" value="${esc(a.provider ?? 'ollama')}" placeholder="${a.kind === 'goose' ? 'leer = wie in Goose eingestellt' : 'ollama'}"></label>` : ''}
       <label class="sm" title="Fehlt ein Projekt beim Agenten, bietet der Zuweisen-Dialog das Klonen an. SSH braucht einen Schlüssel des Zielrechners bei GitLab/GitHub, HTTPS dort gespeicherte Zugangsdaten.">Klonen über<select data-ag="${i}" data-f="clone_via"><option value="ssh" ${a.clone_via !== 'https' ? 'selected' : ''}>SSH</option><option value="https" ${a.clone_via === 'https' ? 'selected' : ''}>HTTPS</option></select></label>
       <label class="sm" title="Worktree: jeder Lauf bekommt einen eigenen Ordner und Branch agent/<key>-<nr>; der Hauptcheckout bleibt unberührt">Isolation<select data-ag="${i}" data-f="isolation"><option value="worktree" ${a.isolation !== 'shared' ? 'selected' : ''}>Worktree je Lauf (empfohlen)</option><option value="shared" ${a.isolation === 'shared' ? 'selected' : ''}>gemeinsamer Ordner (wie bis 0.15)</option></select></label>
+      <label class="sm" title="Für welche Phasen der Agent da ist, und mit welchem Befehl sein Prompt beginnt (z. B. eigene Slash-Befehle auf dem Agenten-Rechner). Leer: alle Phasen, ohne Befehl.">Rollen<input type="text" data-ag="${i}" data-f="roles" value="${esc(rolesText(a.roles))}" placeholder="plan=/planner, develop=/developer, review=/reviewer, test=/tester"></label>
+      <label class="sm" title="Welches Abo dieser Agent verbraucht. Die Auswahl beim Zuweisen zeigt dann, wie viel davon noch frei ist.">Kontingent<select data-ag="${i}" data-f="quota">${[['claude', 'Claude'], ['codex', 'Codex (ChatGPT)'], ['mistral', 'Mistral'], ['none', 'keins']].map(([v, l]) => `<option value="${v}" ${(a.quota || QUOTA_DEF[a.kind] || 'none') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="sm check" style="align-self:end" title="Der Agent pusht am Ende genau seinen Lauf-Branch (git push -u origin HEAD), nie main, master, develop oder release/*. tinyops selbst pusht nie."><input type="checkbox" data-ag="${i}" data-f="push" ${a.push ? 'checked' : ''}><span>pusht seinen Branch</span></label>
+      <div class="sm" style="align-self:end"><button type="button" data-agroles="${i}" title="Rollen mit /planner, /developer, /reviewer, /tester füllen">Rollen-Vorschlag</button></div>
     </div>
     ${['goose', 'opencode'].includes(a.kind) ? `<div class="quiet small"><label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label> · Aus lassen nur, wenn dieses Modell wirklich im eigenen Netz läuft. Nur dann darf der Agent an restricted-Projekte. Läuft alles über denselben Proxy, sieht tinyops den Unterschied nicht: Du sagst es hier je Agent.</div><datalist id="agProviders"><option value="ollama"><option value="openai"><option value="litellm"><option value="openrouter"></datalist>` : ''}
     ${a.kind === 'custom' ? `<div class="quiet small">Eigener Befehl: ${a.has_command ? 'in der config.json hinterlegt (<code>command</code>, mit <code>{prompt_file}</code> für die Prompt-Datei).' : '<strong>fehlt</strong>: in der config.json beim Agenten <code>"command"</code> eintragen. Die Oberfläche setzt ihn absichtlich nicht.'} <label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label></div>` : ''}
     <div class="row"><button data-agtest="${i}">Testen</button><button data-agdel="${i}">Entfernen</button><span class="quiet small">Prüft Verbindung, tmux, Arbeitsordner und Programm. Gespeichert wird erst mit «Speichern».</span></div>
     <div id="ag-res-${i}"></div>
-    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div><div class="ferr" data-err="agents.${i}.model"></div><div class="ferr" data-err="agents.${i}.provider"></div></div>`).join('')
+    <div class="ferr" data-err="agents.${i}.name"></div><div class="ferr" data-err="agents.${i}.connection"></div><div class="ferr" data-err="agents.${i}.workspace_root"></div><div class="ferr" data-err="agents.${i}.extra_args"></div><div class="ferr" data-err="agents.${i}.max_minutes"></div><div class="ferr" data-err="agents.${i}.roles"></div><div class="ferr" data-err="agents.${i}.quota"></div><div class="ferr" data-err="agents.${i}.model"></div><div class="ferr" data-err="agents.${i}.provider"></div></div>`).join('')
     : '<div class="quiet small" style="margin-bottom:8px">Noch kein Agent.</div>';
 }
 $('viewSettings').addEventListener('input', ev => {
@@ -3836,6 +4017,7 @@ $('viewSettings').addEventListener('click', async ev => {
   if (b.id === 'ag-add') { AGC.push({ name: '', kind: 'claude', connection: 'local', workspace_root: '', extra_args: '', isolation: 'worktree', max_minutes: 60 }); renderAgentCfg(); }
   if (b.dataset.cndel !== undefined) { const c = CN.splice(+b.dataset.cndel, 1)[0]; const id = c.id || agSlug(c.name); AGC.forEach(a => { if (a.connection === id) a.connection = 'local'; }); renderAgentCfg(); }
   if (b.dataset.agdel !== undefined) { AGC.splice(+b.dataset.agdel, 1); renderAgentCfg(); }
+  if (b.dataset.agroles !== undefined) { AGC[+b.dataset.agroles].roles = 'plan=/planner, develop=/developer, review=/reviewer, test=/tester'; renderAgentCfg(); }
   if (b.dataset.agtest !== undefined) {
     const i = +b.dataset.agtest, a = AGC[i], out = $('ag-res-' + i);
     const c = a.connection && a.connection !== 'local' ? CN.find(x => (x.id || agSlug(x.name)) === a.connection) : null;
@@ -3874,6 +4056,7 @@ function collect() {
     features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked, score: $('ft-score').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
     workspaces: { enabled: $('ws-on').checked, roots: val('ws-roots'), depth: val('ws-depth'), stale_days: val('ws-stale'), scan_minutes: val('ws-scan') },
+    app: { phone_url: val('app-phone') },
     m365: { enabled: $('m3-on').checked, tenant: val('m3-tenant'), client_id: val('m3-client'), mail: $('m3-mail').checked, calendar: $('m3-cal').checked,
       teams: $('m3-teams').checked, calendar_write: $('m3-write').checked, reply_days: val('m3-days'), refresh_minutes: val('m3-every') },
     helpdesk: { enabled: $('hd-on').checked, url: val('hd-url'), name: val('hd-name'), auth: val('hd-auth'), username: val('hd-user'), assigned_jql: val('hd-jql'),
@@ -4065,6 +4248,45 @@ function fRow(e) {
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
     <div class="fbtns">${doneBtn(e)}${goBtn(e)}</div></div>`;
 }
+// 0.36: Die Fokus-Aufgabe als Arbeitsfläche: worum es geht, wann es fertig ist, Teilschritte und Agenten direkt da
+// (Wunsch: «das Fokus-Ticket ist wie ein Titel, nicht etwas, um daran zu arbeiten»)
+function hdJiraBtn(key) {        // 0.36: aus einem Helpdesk-Ticket ein Jira-Ticket machen (nur mit Bestätigung, das Helpdesk-Ticket bleibt, wie es ist)
+  const j = ((state.flow || {}).hd_jira || {})[key];
+  return j ? `<div class="small">Jira-Ticket angelegt: <b>${esc(j)}</b> <button class="quiet-btn" data-hd2jira="${esc(key)}" title="Noch ein Ticket daraus anlegen">Weiteres …</button></div>`
+    : `<button data-hd2jira="${esc(key)}">${ic('plus')} Jira-Ticket daraus anlegen</button><div class="small quiet" style="margin-top:4px">Entwurf mit Link, Problem und Kriterien. Du prüfst und bestätigst; das Helpdesk-Ticket bleibt unverändert.</div>`;
+}
+const HBRIEF = {};
+function heroWork(e) {
+  let main = '', side = '';
+  if (e.t === 'card' && !e.c.idea_id) {
+    const k = e.c.key || e.c.id, b = HBRIEF[k];
+    if (b === undefined) {
+      HBRIEF[k] = null;
+      api('GET', `/api/focus/brief?key=${encodeURIComponent(k)}&title=${encodeURIComponent(e.c.title || '')}`)
+        .then(x => { HBRIEF[k] = x; if (view === 'focus') renderFocus(); })
+        .catch(err => { HBRIEF[k] = { error: err.message, goal: '', criteria: [] }; if (view === 'focus') renderFocus(); });
+    }
+    main = `<h4>Worum es geht</h4>${!b ? '<div class="quiet small">Lade das Ticket …</div>' : b.goal ? `<p class="hgoal">${esc(b.goal)}</p>`
+      : `<div class="quiet small">${esc(b.error || 'Das Ticket sagt nicht, worum es geht.')} Schreib das Ziel als ersten Teilschritt auf, dann weisst du es morgen noch.</div>`}
+      ${b && b.criteria.length ? `<h4>Fertig, wenn</h4><ul class="hcrit">${b.criteria.slice(0, 8).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : b ? '<h4>Fertig, wenn</h4><div class="quiet small">Keine Akzeptanzkriterien im Ticket. Zwei, drei Teilschritte rechts machen «fertig» greifbar.</div>' : ''}`;
+    const ck = e.d.checklist || [], dn = ck.filter(x => x.done).length;
+    side = `<h4>Teilschritte ${ck.length ? `<small>${dn} von ${ck.length}</small>` : ''}</h4>
+      ${ck.length ? `<ul class="ck">${ck.map(x => `<li class="${x.done ? 'done' : ''}"><input type="checkbox" data-fck="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(x.text)}"><span>${esc(x.text)}</span><button data-fckdel="${x.id}" title="Entfernen" aria-label="Entfernen">${ic('x')}</button></li>`).join('')}</ul>` : ''}
+      <div class="ckadd"><input id="hCkNew" data-hck="${esc(e.c.id)}" maxlength="200" placeholder="${ck.length ? 'Nächster kleiner Schritt …' : 'Erster kleiner Schritt, z. B. «Fehler nachstellen»'}" autocomplete="off"><button data-hckadd="${esc(e.c.id)}">Hinzufügen</button></div>
+      ${state.agents && state.agents.enabled ? `<h4>Agenten</h4>${agentRow(e.c.id, e.c.key || '', e.c.title, e.c.url, e.c.items)}` : ''}`;
+  } else if (e.t === 'hd') {
+    const d = HDD[e.h.key];
+    if (d === undefined) hdLoad(e.h.key);
+    const txt = d && d.description ? " ".concat(d.description).trim() : '';
+    main = `<h4>Worum es geht</h4>${!d ? '<div class="quiet small">Lade das Ticket …</div>' : d.error ? `<div class="quiet small">${esc(d.error)}</div>`
+      : txt ? `<p class="hgoal">${esc(txt.length > 420 ? txt.slice(0, 420) + ' …' : txt)}</p>` : '<div class="quiet small">Keine Beschreibung.</div>'}`;
+    side = `<h4>Entwicklung nötig?</h4>${hdJiraBtn(e.h.key)}`;
+  } else if (e.t === 'review') {
+    main = `<h4>Stand</h4><p class="hgoal">${esc(e.r.status || '')}</p>`;
+  }
+  if (!main && !side) return '';
+  return `<div class="hwork"><div class="hmain">${main}</div>${side ? `<div class="hside">${side}</div>` : ''}</div>`;
+}
 function heroHtml(e, g) {
   if (!e) return `<section class="hero calm"><div class="hcalm"><b>Nichts wartet gerade auf dich.</b><span>Was offen ist, liegt bei der CI, bei anderen oder bei einem Agenten. Gute Zeit für eine Idee aus dem Pool oder eine Pause.</span></div>${blockBanner()}</section>`;
   const n = e.d.next, url = eUrl(e);
@@ -4079,6 +4301,7 @@ function heroHtml(e, g) {
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
       <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}${state.focus && e.t !== 'review' ? `<button class="big" data-fsess="${esc(e.id)}" title="Fokus-Sitzung mit Zeitbox: Ablenkungen parken, Zeit läuft auf diese Aufgabe">${ic('clock')} Fokus</button>` : ''}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
+    ${heroWork(e)}
   </section>`;
 }
 function focusGroups() {
@@ -4125,7 +4348,9 @@ function renderFocus() {
   if (!state.flow) { box.innerHTML = fAlerts() + (state.configured ? '<div class="flist"><div class="fempty">lädt …</div></div>' : ''); $('fHero').innerHTML = ''; renderRail(); return; }
   const g = focusGroups();
   $('fAlerts').innerHTML = fAlerts() + fSources();
+  const hk = $('hCkNew'), hkv = hk ? [hk.dataset.hck, hk.value, document.activeElement === hk] : null;      // Eingabe im Hero über das Neuzeichnen retten
   $('fHero').innerHTML = heroHtml(g.hero, g);
+  if (hkv && $('hCkNew') && $('hCkNew').dataset.hck === hkv[0]) { $('hCkNew').value = hkv[1]; if (hkv[2]) $('hCkNew').focus(); }
   box.innerHTML = fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', g.mine, g.hero ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
     + fGroup('Andere warten auf dich', 'Reviews und dir zugeteilte MRs', g.reviews, '')
     + fGroup(hdName(), 'Dir zugewiesen, nach Priorität und SLA', g.hd, '')
@@ -4205,7 +4430,8 @@ function renderRail() {
   }
   const runs = ((state.agents && state.agents.runs) || []).filter(r => r.active || r.status === 'zugewiesen').slice(0, 6);
   if (state.agents && state.agents.enabled) {
-    h += `<section class="rcard"><h3>Agenten <small>${runs.filter(r => r.active).length} aktiv</small></h3>${runs.length ? runs.map(r => `<div class="ragent" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ic('clock')}<b>${esc(r.agent_name)}</b><span>${esc(r.ticket)} · ${esc(r.status)}</span></div>`).join('') : '<div class="small quiet">Kein Agent beschäftigt. Zuweisen geht im Detail jeder Aufgabe.</div>'}</section>`;
+    const drag = state.agents.agents.map(a => { const q = agQuota(a); return `<span class="agdrag ${q ? q.cls : ''}" draggable="true" data-agdrag="${esc(a.id)}" title="Auf eine Aufgabe im Fokus oder im Board ziehen${a.roles.length < 4 ? '. Rollen: ' + a.roles.map(x => ROLE_L[x]).join(', ') : ''}">${ic('play')}${esc(a.name)}${q ? ` <small>${esc(q.text)}</small>` : ''}</span>`; }).join('');
+    h += `<section class="rcard"><h3>Agenten <small>${runs.filter(r => r.active).length} aktiv</small></h3>${drag ? `<div class="agdrags">${drag}</div>` : ''}${runs.length ? runs.map(r => `<div class="ragent" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ic('clock')}<b>${esc(r.agent_name)}</b><span>${esc(r.ticket)} · ${esc(r.status)}</span></div>`).join('') : '<div class="small quiet">Kein Agent beschäftigt. Zuweisen geht im Detail jeder Aufgabe.</div>'}</section>`;
   }
   if (F().ideas) h += `<section class="rcard"><h3>Ideen <small>${(state.ideas || []).filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length}/${state.idea_cap || ''} im Pool</small></h3><button data-fidea="1">Idee festhalten <kbd class="small quiet">i</kbd></button></section>`;
   $('fRailCards').innerHTML = h;
@@ -4229,6 +4455,7 @@ function renderFx() {
 </div></div>`;
     body += `<div><h3>Beschreibung</h3>${!d ? '<div class="small quiet">Lade das Ticket …</div>' : d.error ? `<div class="banner bad">${esc(d.error)}</div>` : d.description ? `<div class="hdtxt">${esc(d.description)}</div>` : '<div class="small quiet">Keine Beschreibung.</div>'}</div>`;
     if (d && !d.error) body += `<div><h3>Letzte Kommentare <small>${d.comments.length}${d.comments_total > d.comments.length ? ' von ' + d.comments_total : ''}</small></h3>${d.comments.length ? `<div class="hdcm">${d.comments.map(c => `<div><small>${esc(c.author || 'unbekannt')}${c.age_h != null ? ' · vor ' + hAge(c.age_h) : ''}</small><p>${esc(c.body)}</p></div>`).join('')}</div>` : '<div class="small quiet">Noch keine Kommentare.</div>'}</div>`;
+    body += `<div><h3>Entwicklung nötig?</h3>${hdJiraBtn(h.key)}</div>`;
     if (mine) body += `<div class="small quiet">Angeheftet läuft die Zeit auf ${esc(h.key)} (Bereich Helpdesk) und landet in den Zeitentwürfen.</div>
       <div class="fxfoot">${state.flow.pinned === e.id ? '<button data-fpin="">Fokus lösen</button>' : `<button class="primary" data-fpin="${esc(e.id)}">${ic('chevron2')} Als Fokus anheften, Zeit starten</button>`}${FOC() ? `<button data-fsess="${esc(e.id)}">${ic('clock')} Fokus-Sitzung</button>` : ''}<button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
     else body += `<div class="small quiet">Nicht dir zugewiesen. Arbeitest du trotzdem daran, heftest du es an: Die Zeit läuft auf ${esc(h.key)} (Bereich Helpdesk), zuweisen bleibt im Helpdesk.</div>
@@ -4385,14 +4612,18 @@ document.addEventListener('click', async ev => {
   const ckd = t.closest('[data-fckdel]'); if (ckd) { await act(() => post('/api/flow/delete', { id: +ckd.dataset.fckdel })); return; }
   if (t.closest('[data-fckadd]') && e) { const v = $('fxCkNew').value.trim(); if (!v) return; $('fxCkNew').value = ''; await act(() => post('/api/flow/add', { key: e.c.id, text: v })); $('fxCkNew') && $('fxCkNew').focus(); return; }
   const tk = t.closest('#fx [data-tk]'); if (tk) { openTicket(tk); return; }
+  const h2j = t.closest('[data-hd2jira]'); if (h2j) { openTicket(null, null, h2j.dataset.hd2jira); return; }
+  const hca = t.closest('[data-hckadd]');
+  if (hca) { const inp = $('hCkNew'), v = inp.value.trim(); if (!v) { inp.focus(); return; } await act(() => post('/api/flow/add', { key: hca.dataset.hckadd, text: v })); $('hCkNew') && $('hCkNew').focus(); return; }
 
   const row = t.closest('#viewFocus .frow, #viewFocus .hero');
   if (!row && FXID && !t.closest('#fx, header, #fbar, dialog, #fmode, a, button, input, select, textarea, summary, label, [data-fopen], .rcard, .bcard[data-bid], .slot[data-skey]')) { closeFx(); return; }   // 0.30: Klick auf eine Board-Karte öffnet, statt sofort wieder zu schliessen
-  if (row && !t.closest('a, button, select, input')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
+  if (row && !t.closest('a, button, select, input, textarea, .hwork')) { fSel = [...document.querySelectorAll('#viewFocus [data-fid]')].indexOf(row); openFx(row.dataset.fid); }
 });
 document.addEventListener('change', ev => { const c = ev.target.closest && ev.target.closest('[data-fck]'); if (c) fCheck(+c.dataset.fck, c.checked, c); });
 document.addEventListener('keydown', ev => {
   if (ev.target.id === 'fxCkNew' && ev.key === 'Enter') { ev.preventDefault(); document.querySelector('[data-fckadd]').click(); return; }
+  if (ev.target.id === 'hCkNew' && ev.key === 'Enter') { ev.preventDefault(); document.querySelector('[data-hckadd]').click(); return; }
   if (ev.key === 'Escape' && FXID && !document.querySelector('dialog[open]')) { closeFx(); return; }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || ev.ctrlKey || ev.metaKey || ev.altKey || document.querySelector('dialog[open]')) return;
   if (view !== 'focus') return;

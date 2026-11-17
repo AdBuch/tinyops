@@ -38,6 +38,7 @@ import workspaces
 import briefing
 import m365
 import bcs
+import devices
 import groups
 from html import escape as html_escape
 import qa
@@ -60,7 +61,7 @@ import tlog
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 
-VERSION = "0.35.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.36.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -125,6 +126,7 @@ DEFAULTS = {
     "bind": "127.0.0.1",
     "port": 8765,
     "allowed_hosts": [],
+    "app": {"phone_url": ""},     # 0.36: Adresse, unter der das Handy tinyops erreicht (z. B. Tailscale)
     "connections": [],     # SSH-Ziele für Coding-Agenten (Einstellungen → Agenten)
     "agents": [],
     "ux": {"enabled": True, "days": 30},   # UI-Nutzung lokal erfassen (0.22), für die Optimierung der Oberfläche
@@ -684,6 +686,22 @@ class GitLabClient:
                 return e["external_url"], e.get("name", "")
         return "", ""
 
+    def _my_review(self, mr, username):
+        """0.36: Mein Stand als Reviewer (unreviewed, reviewed, requested_changes, approved, unapproved). Ein GET je MR und Änderung.
+        Fehlt die Funktion (ältere GitLab-Versionen), bleibt es leer und der MR erscheint wie bisher."""
+        cache = self.__dict__.setdefault("_rv_cache", {})
+        key = (mr["project_id"], mr["iid"], mr.get("updated_at", ""))
+        if key not in cache:
+            try:
+                rows = self.http.get("/projects/%s/merge_requests/%s/reviewers" % (mr["project_id"], mr["iid"])) or []
+                cache[key] = next((str(x.get("state") or "") for x in rows if ((x.get("user") or {}).get("username") or "") == username), "")
+            except UserError as e:
+                glog.debug("Reviewer-Stand von !%s nicht lesbar: %s", mr["iid"], e)
+                cache[key] = ""
+            if len(cache) > 500:
+                cache.pop(next(iter(cache)))
+        return cache[key]
+
     def _approvals(self, item):
         """Freigaben eines eigenen MR (ein GET je MR). Fehlt das Recht oder die Funktion, bleibt es «unbekannt»."""
         try:
@@ -860,7 +878,9 @@ class GitLabClient:
             rmrs = self.http.get("/merge_requests", {"state": "opened", "scope": "all",
                                                      "reviewer_username": username, "per_page": 50})
             for mr in rmrs:
-                review.append(self._mr_item(mr, "review", self._pname(mr["project_id"])))
+                it = self._mr_item(mr, "review", self._pname(mr["project_id"]))
+                it["my_review"] = self._my_review(mr, username)
+                review.append(it)
             step("gl-review", "Review-Queue", "ok", "%d MR" % len(review))
         except UserError as e:
             errors.append("Review-Queue: %s" % e)
@@ -1346,6 +1366,9 @@ class App:
         self._usage_cache, self._usage_lock = None, threading.Lock()
         self.llm_key = secrets.get("llm_key", "")
         self.store = links.Store(data_dir(cfg) / "tinyops.db")
+        if not hasattr(self, "devices"):
+            self.devices = devices.Devices(self.store)            # 0.36: gekoppelte Handys; offene Codes überleben ein Speichern der Einstellungen
+        self.devices.store = self.store
         self.audit_log = audit.AuditLog(data_dir(cfg) / "tinyops.db")
         if not hasattr(self, "_audit_ctx"):
             self._audit_ctx = threading.local()
@@ -2265,10 +2288,14 @@ class App:
         return dict(workspaces.totals(c, float(self.wsc["stale_days"])), scanning=c is None) if c else {"scanning": True, "repos": 0, "todo": 0, "stale": []}
 
     def _ws_repo(self, path):
-        c = self.ws_cache or {}
-        r = next((x for x in c.get("repos") or [] if x["path"] == str(path or "")), None)
+        def find():
+            return next((x for x in (self.ws_cache or {}).get("repos") or [] if x["path"] == str(path or "")), None)
+        r = find()
+        if r is None:                       # 0.36: Scan gerade verworfen oder veraltet (7× im Bericht): einmal selbst neu einlesen
+            self.workspaces_state(True)
+            r = find()
         if r is None:
-            raise UserError("Dieses Repo kennt der letzte Scan nicht. Workspaces neu einlesen.")
+            raise UserError("Dieses Repo liegt nicht (mehr) unter deinen Workspace-Ordnern. Pfad verschoben oder gelöscht?")
         return r
 
     def workspaces_action(self, action, b):
@@ -2283,7 +2310,6 @@ class App:
             self.audit("workspace.fetch", r["name"], ok=ok, path=r["path"], error=err or None)
             if not ok:
                 raise UserError(workspaces.fetch_hint(err))
-            self.ws_cache = None
             return self.workspaces_state(True)
         if action == "task":
             # Arbeit direkt aus dem Workspace vergeben: eine lokale Aufgabe anlegen, die der Agenten-Dialog dann zuweist
@@ -2308,7 +2334,6 @@ class App:
             self.audit("workspace.worktree_remove", r["name"], ok=ok, path=wt, message=msg)
             if not ok:
                 raise UserError(msg)
-            self.ws_cache = None
             return dict(self.workspaces_state(True), message=msg)
         raise UserError("Unbekannte Aktion.")
 
@@ -2598,6 +2623,8 @@ class App:
     def ticket_draft(self, body):
         if body.get("idea_id") not in (None, ""):
             return self._idea_draft(body)
+        if body.get("hd_key"):
+            return self._hd_draft(body)
         if not self.client:
             raise UserError("GitLab ist nicht verbunden.")
         try:
@@ -2633,6 +2660,31 @@ class App:
             dt = meta["default_type"]
             out["draft"]["issue_type"] = dt if dt in ctx["issue_types"] else ctx["issue_types"][0]
         return out
+
+    def _hd_draft(self, body):
+        """0.36: Jira-Ticket aus einem Helpdesk-Ticket (Wunsch). Das Helpdesk-Ticket bleibt unberührt; tinyops merkt sich nur die Verknüpfung."""
+        key = str(body.get("hd_key") or "")
+        hd = (self.cache or {}).get("helpdesk_jira") or {}
+        t = helpdesk.find(hd, key)
+        if t is None or self.hdj is None:
+            raise UserError("Dieses Helpdesk-Ticket zeigt tinyops gerade nicht. Einmal neu laden.")
+        try:
+            d = self.hdj.detail(key) if hasattr(self.hdj, "detail") else helpdesk.detail(self.hdj, key)
+        except (UserError, HttpStatus, ValueError) as e:
+            raise UserError("Helpdesk-Ticket nicht lesbar: %s" % scrub(e))
+        meta = self.ticket_meta()
+        project = str(body.get("project") or (meta["projects"][0] if meta["projects"] else "")).upper()
+        types = self._types(project) if project else [meta["default_type"]]
+        b = briefing.make("helpdesk", key, d.get("title") or t.get("title") or "", description=d.get("description") or "")
+        desc = ["Aus Helpdesk-Ticket [%s|%s]%s." % (key, d.get("url") or t.get("url") or "", " (%s)" % d.get("status") if d.get("status") else ""), "",
+                "h3. Problem", "", b["description"][:3000] or "(keine Beschreibung im Helpdesk-Ticket)", "",
+                "h3. Akzeptanzkriterien", ""] + (["* %s" % c for c in b["criteria"]] or ["* Das gemeldete Problem tritt nicht mehr auf", "* Helpdesk-Ticket %s kann beantwortet werden" % key])
+        if b["masked"]:
+            desc += ["", "_(%d Stellen, die nach Zugangsdaten aussahen, hat tinyops geschwärzt.)_" % b["masked"]]
+        itype = next((x for x in ("Bug", "Fehler") if x in types), meta["default_type"] if meta["default_type"] in types else types[0])
+        return {"meta": meta, "project": project, "issue_types": types, "source": "helpdesk", "hd_key": key, "linked": self.store.hd_jira_map().get(key, ""),
+                "warning": "Der Text kommt aus dem Helpdesk. Vor dem Anlegen prüfen, ob Kundendaten darin stehen, die nicht ins Entwicklungs-Jira gehören.",
+                "draft": {"summary": ("%s (%s)" % (d.get("title") or t.get("title") or key, key))[:255], "description": "\n".join(desc), "issue_type": itype}}
 
     def ticket_create(self, body):
         if not self.jira:
@@ -2670,6 +2722,10 @@ class App:
         self.cache_t = 0.0   # beim nächsten Abruf neu lesen
         if body.get("idea_id") not in (None, ""):
             res["checks"] = self._idea_done(body, res["key"], summary, description)
+        hk = str(body.get("hd_key") or "")
+        if hk and helpdesk.KEY_RE.match(hk):
+            self.store.hd_jira_set(hk, res["key"])
+            self.audit("helpdesk.to_jira", hk, jira=res["key"])
         return res
 
     # -- Ideen (0.20): bewerten, als Ticket ausformulieren
@@ -3170,6 +3226,7 @@ class App:
             data["flow"]["helpdesk"] = ent
             data["flow"]["hd_queue"] = queue
             data["flow"]["hd_watch"] = helpdesk.watched(hd, self.store.hd_seen_ts()) if hd else []
+            data["flow"]["hd_jira"] = self.store.hd_jira_map()          # 0.36: Helpdesk-Ticket → angelegtes Jira-Ticket
             data["flow"]["hd_info"] = {k: hd.get(k) for k in ("name", "url", "ok", "error", "outdated", "assigned_total", "queue_total", "watched_total", "watch_error", "sla_hours")} if hd else None
             pin = self.store.pin_get()
             if pin and pin.startswith("hd:") and any(e["id"] == pin for e in ent):
@@ -3408,7 +3465,7 @@ class App:
                     ov = svc.run_view(old)
                     base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "") or ov.get("branch") or ""
                     info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
-                                           template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"))})
+                                           template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"), b.get("answers"))})
                     info.update(branch=base, project_id=ov["project_id"], followup=ov["id"], parent=ov["id"], phase="develop",      # Nachbessern ändert Code: immer Umsetzen
                                 repo=self._repo_access(svc, aid, ov["project_id"]))
                     return info
@@ -3466,6 +3523,8 @@ class App:
                 parent = self._rid({"run": b.get("parent")}) if b.get("parent") not in (None, "") else None
                 rid = svc.start(self._rid(b), b.get("prompt"), self._pid(b.get("project_id")), b.get("branch"), phase=phase, parent=parent)
                 return {"id": rid}
+            if action == "continue":         # 0.36: Lauf direkt weiterführen: dein Text (und Antworten auf offene Entscheidungen) als neuer Lauf auf seinem Branch
+                return self._agent_continue(svc, b)
             if action == "gate":             # deine Freigabe am Ende einer Phase
                 g = str(b.get("gate") or "")
                 return svc.gate(self._rid(b), g, b.get("note") or "")
@@ -3522,6 +3581,27 @@ class App:
         except agents.AgentError as e:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
+
+    def _agent_continue(self, svc, b):
+        old = svc.store.agent_run(self._rid(b))
+        if not old:
+            raise UserError("Diesen Lauf gibt es nicht (mehr).")
+        if old["status"] in ("zugewiesen", "läuft"):
+            raise UserError("Der Lauf arbeitet noch. Fragt er etwas, antworte dort; sonst warten oder stoppen.")
+        text = str(b.get("text") or "").strip()
+        answers = {str(k): str(v)[:600] for k, v in (b.get("answers") or {}).items() if str(v or "").strip()} if isinstance(b.get("answers"), dict) else {}
+        if not text and not answers:
+            raise UserError("Schreib, wie es weitergehen soll, oder beantworte eine offene Entscheidung.")
+        aid = str(b.get("agent") or old["agent"])
+        info = self.agent_action("prompt", {"agent": aid, "followup": old["id"], "note": text, "answers": answers, "key": old["ticket"]})
+        rid = svc.assign(aid, old["ticket"], info["project_id"], info["branch"], old.get("title") or "")
+        try:
+            svc.start(rid, info["prompt"], info["project_id"], info["branch"], phase="develop", parent=old["id"])
+        except agents.AgentError:
+            svc.remove(rid, force=True)
+            raise
+        self.audit("agent.continue", old["ticket"], run=old["id"], new_run=rid, agent=aid, answers=len(answers), chars=len(text))
+        return {"id": rid}
 
     def _phase_prompt(self, svc, aid, phase, b):
         """Review oder Test auf dem Ergebnis eines beendeten Laufs: derselbe Branch, Kriterien und Bericht als Grundlage."""
@@ -3588,6 +3668,20 @@ class App:
         return st
 
     JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,30}-\d{1,9}$")
+
+    def focus_brief(self, key, title=""):
+        """Worum es geht und wann es fertig ist: aus dem Ticket (Jira, lokal), für die Arbeitsfläche im Fokus."""
+        key = str(key or "").strip()[:80]
+        if not key:
+            return {"goal": "", "criteria": [], "error": "", "source": ""}
+        b = self.ticket_brief(key, title)
+        desc = b.get("description") or ""
+        goal = " ".join(desc.split())
+        if len(goal) > 420:                       # die ersten Sätze reichen für «Worum es geht»; der Rest steht im Ticket
+            cut = goal[:420]
+            goal = cut[:max(cut.rfind(". "), 200) + 1] + " …"
+        return {"goal": goal, "criteria": b.get("criteria") or [], "error": b.get("error") or "", "source": b.get("source") or "",
+                "comments": len(b.get("comments") or []), "url": b.get("url") or ""}
 
     def ticket_brief(self, key, title=""):
         """Rohdaten für den Auftrag: lokale Aufgabe (Teilschritte), Helpdesk-Ticket oder Jira-Ticket. Zwei Minuten gemerkt, Fehler stehen im Ergebnis."""
@@ -3823,12 +3917,16 @@ class App:
 
     def bcs_day(self, d):
         c = self._bcs_client()
+        hit = getattr(self, "_bcs_day_cache", {}).get(d)
+        if hit and time.time() - hit[0] < 30:           # 0.36: jedes Neuladen der Zeit-Ansicht fragte BCS neu
+            return hit[1]
         day = self._bcs_call(c.day, d)
         out = {"day": bcs.day_summary(day)}
         try:
             out["week"] = c.overview(d, "week")
         except bcs.BcsError as e:
             out["week_error"] = str(e)
+        self._bcs_day_cache = {d: (time.time(), out)}
         return out
 
     def _bcs_included(self, d):
@@ -3853,6 +3951,8 @@ class App:
     def bcs_action(self, action, b, now=None):
         now = now or time.time()
         c = self._bcs_client()
+        if action in ("commit", "reconcile"):
+            self._bcs_day_cache = {}            # danach soll die Zeit-Ansicht die neuen Buchungen sehen
         d = str(b.get("date") or timesheet.today(now))
         if action == "targets":
             return {"items": self._bcs_call(c.targets, d, b.get("query"))}
@@ -4410,6 +4510,9 @@ def _stored(app):
     return stored
 
 
+PUBLIC_GET = ("/manifest.webmanifest", "/sw.js", "/pair", "/icon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable.png")
+
+
 def make_handler(app):
     cfg = _Cfg(app)
     html = (BASE / "static" / "index.html").read_bytes()
@@ -4438,9 +4541,10 @@ def make_handler(app):
             if not isinstance(body, bytes):
                 body = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
-            self.send_header("Content-Type", ctype + "; charset=utf-8")
+            self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith(("text/", "application/")) else ""))
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            if "Cache-Control" not in (extra or {}):
+                self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'")
@@ -4456,12 +4560,31 @@ def make_handler(app):
         def _gate(self, parsed):
             host = (self.headers.get("Host") or "").lower()
             host = host.rsplit(":", 1)[0] if not host.endswith("]") else host
-            allowed = {"localhost", "127.0.0.1", "[::1]"} | {h.lower() for h in cfg["allowed_hosts"]}
+            phone_host = devices.phone_url((cfg.get("app") or {}).get("phone_url"))[1]
+            allowed = {"localhost", "127.0.0.1", "[::1]"} | {h.lower() for h in cfg["allowed_hosts"]} | ({phone_host} if phone_host else set())
             if host not in allowed:
                 alog.warning("Abgelehnt: Host %r von %s nicht in allowed_hosts", host, self.client_address[0])
                 self._err(403, "Host nicht erlaubt (allowed_hosts in der config.json).")
                 return None
-            if token:
+            self._remote = devices.is_remote(self.client_address[0], self.headers.get("Host"), self.headers)
+            self._dev = None
+            self._public = False
+            if (self.command == "GET" and parsed.path in PUBLIC_GET) or (self.command == "POST" and parsed.path == "/api/pair/claim"):
+                self._public = True             # 0.36: App-Hülle und Koppeln brauchen kein Login (verraten nichts)
+                if self.command != "GET" and self.headers.get("X-Requested-With") != "tinyops":
+                    self._err(403, "Header X-Requested-With fehlt.")
+                    return None
+                return {}
+            self._dev = app.devices.check(self.headers.get("Cookie", ""))
+            if self._dev is None and self._remote and not token:
+                # 0.36: von woanders (Handy, Proxy, anderer Host-Name) nur mit gekoppeltem Gerät
+                alog.warning("Abgelehnt: %s %s von %s ohne gekoppeltes Gerät", self.command, parsed.path, self.client_address[0])
+                if self.command == "GET" and parsed.path == "/":
+                    self._send(401, devices.NOT_PAIRED_PAGE.encode("utf-8"), "text/html")
+                else:
+                    self._err(401, "Dieses Gerät ist nicht gekoppelt. Am Rechner: Einstellungen → App und Handy.")
+                return None
+            if token and self._dev is None:
                 given = (urllib.parse.parse_qs(parsed.query).get("token") or [""])[0]
                 if given and _eq(given, token):
                     # Token einmal gegen ein Cookie tauschen und aus der Adresszeile entfernen
@@ -4486,6 +4609,50 @@ def make_handler(app):
                 return None
             return {}
 
+        def _public_get(self, path):
+            if path == "/manifest.webmanifest":
+                return self._send(200, json.dumps(devices.MANIFEST, ensure_ascii=False).encode("utf-8"), "application/manifest+json")
+            if path == "/sw.js":
+                return self._send(200, (devices.SERVICE_WORKER % VERSION).encode("utf-8"), "text/javascript")
+            if path == "/pair":
+                return self._send(200, devices.PAIR_PAGE.encode("utf-8"), "text/html")
+            f = BASE / "static" / path.lstrip("/")
+            ctype = "image/svg+xml" if path.endswith(".svg") else "image/png"
+            return self._send(200, f.read_bytes(), ctype, {"Cache-Control": "max-age=86400"})
+
+        def _pair_route(self, method, path):
+            """Koppeln (0.36). Codes erzeugen und Geräte verwalten nur am Rechner selbst, nie von einem gekoppelten Gerät aus."""
+            if method == "POST" and path == "/api/pair/claim":
+                b = self._body()
+                try:
+                    val, dev = app.devices.claim(b.get("code"), b.get("name"), self.headers.get("User-Agent", ""))
+                except devices.DeviceError as e:
+                    app.audit("device.pair", "", ok=False, error=str(e), ip=self.client_address[0])
+                    return self._err(400, str(e))
+                app.audit("device.pair", dev["name"], device=dev["id"], ip=self.client_address[0])
+                secure = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https" or (cfg.get("app") or {}).get("phone_url", "").startswith("https://")
+                return self._send(200, {"ok": True, "device": dev["name"]}, extra={"Set-Cookie": devices.cookie(val, secure)})
+            if self._dev is not None:
+                return self._err(403, "Gekoppelte Geräte dürfen keine weiteren koppeln. Das geht nur am Rechner.")
+            if method == "GET" and path == "/api/pair/devices":
+                return self._send(200, {"devices": app.devices.list(), "phone_url": (cfg.get("app") or {}).get("phone_url", "")})
+            if method == "POST" and path == "/api/pair/start":
+                try:
+                    out = app.devices.new_code()
+                except devices.DeviceError as e:
+                    return self._err(400, str(e))
+                app.audit("device.code", "", expires=out["expires"])
+                return self._send(200, dict(out, phone_url=(cfg.get("app") or {}).get("phone_url", "")))
+            if method == "POST" and path == "/api/pair/revoke":
+                b = self._body()
+                try:
+                    app.devices.revoke(b.get("id"))
+                except (devices.DeviceError, TypeError, ValueError) as e:
+                    return self._err(400, str(e) or "Welches Gerät?")
+                app.audit("device.revoke", str(b.get("id")))
+                return self._send(200, {"devices": app.devices.list()})
+            return self._err(404, "Nicht gefunden.")
+
         def _body(self):
             n = int(self.headers.get("Content-Length") or 0)
             if n > 65536:
@@ -4507,6 +4674,12 @@ def make_handler(app):
                 return
             path = parsed.path
             try:
+                if self._public and method == "GET":        # 0.36: App-Hülle (Manifest, Service Worker, Icons) und Koppel-Seite
+                    return self._public_get(path)
+                if path.startswith("/api/pair/"):
+                    return self._pair_route(method, path)
+                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/")):
+                    return self._err(403, "Einstellungen ändern geht nur am Rechner, nicht vom gekoppelten Gerät.")
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)
                 if method == "GET" and path in ("/logo/jira", "/logo/gitlab"):
@@ -4560,6 +4733,9 @@ def make_handler(app):
                     return self._send(200, app.workspaces_state("fresh=1" in (parsed.query or "")))
                 if method == "POST" and path.startswith("/api/workspaces/"):
                     return self._send(200, app.workspaces_action(path.rsplit("/", 1)[1], self._body()))
+                if method == "GET" and path == "/api/focus/brief":       # 0.36: Ziel und Kriterien für die Fokus-Aufgabe (nur lesen, 2 min gemerkt)
+                    q = urllib.parse.parse_qs(parsed.query)
+                    return self._send(200, app.focus_brief((q.get("key") or [""])[0], (q.get("title") or [""])[0]))
                 if method == "GET" and path == "/api/helpdesk/ticket":
                     return self._send(200, app.helpdesk_ticket((urllib.parse.parse_qs(parsed.query).get("key") or [""])[0]))
                 if method == "POST" and path == "/api/helpdesk/seen":

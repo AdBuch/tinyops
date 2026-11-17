@@ -5,6 +5,38 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.36.0]
+
+Noch eine Version vor dem Umbau, auf deinen Wunsch: deine Wünsche und der Nutzungsbericht vom 17.11., dazu tinyops als App mit Handy-Kopplung. Der Plan ab «Server zerlegen» rückt um eine Version nach hinten.
+
+### Neu
+- **Lauf weiterführen** (Wunsch): Unten im Lauf schreibst du, wie es weitergehen soll, und «Weiterführen» startet sofort einen neuen Lauf auf demselben Branch. Offene Kriterien und fehlgeschlagene Belege gehen automatisch mit. «Mit Vorschau …» zeigt vorher den ganzen Prompt.
+- **Entscheidungen** (Wunsch):
+  - Der Agent fragt mit `tinyops-ask -d` und wartet, statt zu raten.
+  - Schreibt er «Offene Entscheidungen» in den Bericht, stehen sie im Lauf mit Antwortfeldern; deine Antworten gehen mit dem nächsten Lauf an ihn.
+  - Getroffene Entscheidungen stehen im Review und in der MR-Beschreibung.
+- **Agenten** (Wunsch):
+  - **Rollen** je Phase als Befehl am Anfang des Prompts, z. B. `/planner`, `/developer`, `/reviewer`, `/tester` für eigene Slash-Befehle auf dem Agenten-Rechner. «Weiter mit …» wählt den Agenten mit passender Rolle vor.
+  - **Push:** je Agent einschaltbar. Er pusht am Ende genau seinen Lauf-Branch, nie main, master, develop oder release/*. tinyops selbst pusht weiter nie.
+  - **Kontingent:** Jeder Agent hängt an einem Abo (Claude, Codex, Mistral). Die Auswahl zeigt, wie viel davon noch frei ist.
+  - **Ziehen:** Agenten stehen in der Seitenleiste und lassen sich auf eine Aufgabe im Fokus oder im Board ziehen.
+- **Fokus-Aufgabe als Arbeitsfläche** (Wunsch): Die oberste Aufgabe zeigt «Worum es geht» und «Fertig, wenn» aus dem Ticket, rechts Teilschritte zum Abhaken und die Agenten. Bei Helpdesk-Tickets die Beschreibung.
+- **Helpdesk → Jira** (Wunsch): «Jira-Ticket daraus anlegen» im Fokus und im Panel. Entwurf mit Link, Problem und Kriterien, Hinweis auf Kundendaten, Anlegen nur mit Bestätigung. Das Helpdesk-Ticket bleibt unverändert; tinyops merkt sich den neuen Key.
+- **tinyops als App:** «Als App installieren» unter Einstellungen → App und Handy. Am Rechner ein eigenes Fenster, auf dem Handy über eine eigene Adresse (z. B. Tailscale) und **Kopplung je Gerät** mit Einmal-Code. Von aussen sieht tinyops nur, wer gekoppelt ist; gekoppelte Geräte ändern keine Einstellungen und lassen sich jederzeit entfernen.
+
+### Behoben
+- **Agentenfenster:**
+  - Es baute sich bei laufenden Agenten alle 4 s neu auf, Klicks gingen verloren (20 Wutklicks im Bericht). Jetzt läuft nur das Log nach.
+  - Jeder Dialog hat oben rechts ein ×, das beim Scrollen sichtbar bleibt (Wunsch: «Agenten-Fenster braucht einen Close-Button»). Ein Klick daneben schliesst ihn, ausser etwas Eingetipptes ginge verloren.
+- **BCS nicht erreichbar:** Bisher wartete die Zeit-Ansicht bis über eine Minute (35× im Bericht, Median 73 s). Jetzt höchstens 8 s, danach eine Minute Pause mit klarer Meldung und «nächster Versuch in …». Die Tagesansicht wird 30 s zwischengespeichert.
+- **Fetch «kennt der letzte Scan nicht»** (7× im Bericht): tinyops liest Workspaces in diesem Fall selbst neu ein.
+- **Zurückgeschickte Reviews** (Wunsch): Hast du in GitLab Änderungen angefordert, kommentiert oder freigegeben, oder ist der MR wieder Entwurf, steht er unter «Wartet» statt bei deinen Reviews. Fordert der Autor das Review neu an, ist er wieder da.
+- War tinyops kurz weg, holt das Panel nach dem Wiederverbinden gleich den ganzen Stand.
+
+### Geändert
+- Nachbessern heisst jetzt «Weiterführen». Dein Text geht als eigener Abschnitt «Auftrag des Menschen» an den Agenten, mit Zeilenumbrüchen.
+- Prüfliste: `r20-07`, `r20-08`, `r24-01`, `r24-02` und `r21-01` sind abgelöst, weil neuere Punkte dasselbe prüfen.
+
 ## [0.35.1]
 
 Korrekturen nach deinem Test am 16.11.

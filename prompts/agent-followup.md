@@ -11,7 +11,8 @@
 {workspace_line}
 - Sieh dir zuerst an, was schon da ist (`git log`, `git diff`), und ändere nur, was für die offenen Punkte nötig ist.
 - Beschreibe die Schritte zum Prüfen von Hand neu, falls sie sich ändern: `tinyops-manual "Schritt" "Erwartet"`.
-- Kein Merge, kein Push, kein Force-Push, keine Änderungen an CI-Zugangsdaten oder Secrets.
+{push_line}
+- Entscheidungen, die das Ticket nicht klärt: nicht raten. Frag mit `tinyops-ask -d` und warte. Geht das nicht, schreib sie in den Bericht unter `## Offene Entscheidungen` (je Punkt «Frage? Optionen: A | B») und hör an dieser Stelle auf.
 
 {guards}
 ## Abschluss: Bericht mit `tinyops-report`
@@ -31,6 +32,9 @@ Die eine, zwei Stellen, an denen ein Fehler am meisten schadet.
 
 ## Getestet
 Was mit `tinyops-check` lief. Wie man es von Hand prüft, steht bei `tinyops-manual`.
+
+## Offene Entscheidungen
+Nur falls es welche gibt: «1. Frage? Optionen: A | B».
 
 ## Bewusst nicht gemacht
 Was offen bleibt oder ein eigenes Ticket verdient.

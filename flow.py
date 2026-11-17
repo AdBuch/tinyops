@@ -310,14 +310,37 @@ def review_view(data):
     out = []
     for it in (data.get("review") or []) + (data.get("assigned") or []):
         rev = it.get("kind") == "review"
-        out.append({"id": it.get("ref") or "%s:%s" % (it.get("project_id"), it.get("branch")), "title": it.get("title", ""), "project": it.get("project", ""),
+        status, waiting = review_status(it)
+        nxt = _step("do", "do_review" if rev else "assigned", "Review machen" if rev else "Zugeteilten MR ansehen",
+                    "%s wartet seit %d Tag%s auf dich." % (it.get("author") or "Jemand", it.get("age_days", 0), "" if it.get("age_days", 0) == 1 else "en"),
+                    url=it.get("url", ""))
+        if waiting:     # 0.36: zurückgeschickt, freigegeben oder Entwurf: liegt beim Autor, nicht bei dir
+            nxt = _step("wait", "review_back", "Wartet auf %s" % (it.get("author") or "den Autor"), status, owner="other", url=it.get("url", ""))
+        elif status.startswith(("Jemand", "Freigegeben")):
+            nxt["why"] = "%s. %s" % (status, nxt["why"])
+        out.append({"status": status, "waiting": waiting, "id": it.get("ref") or "%s:%s" % (it.get("project_id"), it.get("branch")), "title": it.get("title", ""), "project": it.get("project", ""),
                     "iid": it.get("iid"), "url": it.get("url", ""), "author": it.get("author", ""), "age_days": it.get("age_days", 0),
                     "pipeline": it.get("pipeline", "none"), "keys": it.get("keys") or [], "host": it.get("host", "gitlab"),
-                    "project_id": it.get("project_id"),
-                    "next": _step("do", "do_review" if rev else "assigned", "Review machen" if rev else "Zugeteilten MR ansehen",
-                                  "%s wartet seit %d Tag%s auf dich." % (it.get("author") or "Jemand", it.get("age_days", 0), "" if it.get("age_days", 0) == 1 else "en"),
-                                  url=it.get("url", ""))})
+                    "project_id": it.get("project_id"), "next": nxt})
     return out
+
+
+REVIEW_STATES = {"requested_changes": "Du hast Änderungen angefordert", "reviewed": "Du hast kommentiert", "approved": "Du hast freigegeben"}
+
+
+def review_status(it):
+    """Stand eines fremden MR aus deiner Sicht: (text, liegt beim Autor?). Kommt er nach einem erneuten Review-Wunsch zurück,
+    setzt GitLab deinen Stand auf «unreviewed» und er ist wieder bei dir."""
+    mine = it.get("my_review") or ""
+    if it.get("draft"):
+        return "Entwurf: der Autor arbeitet noch daran", True
+    if mine in REVIEW_STATES:
+        return REVIEW_STATES[mine] + ", jetzt ist der Autor dran", True
+    if it.get("merge_status") == "requested_changes":
+        return "Jemand hat Änderungen angefordert", False
+    if it.get("approved_by"):
+        return "Freigegeben von %s" % ", ".join(it["approved_by"][:3]), False
+    return "Wartet auf dein Review" if it.get("kind") == "review" else "Dir zugeteilt", False
 
 
 def build(cards, store, runs_by_ticket, complete, goal=3, now=None):

@@ -449,6 +449,28 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5f. Weiterführen, Rollen, App aufs Handy (neu in 0.36.0)
+
+**Lauf weiterführen.** Unten im Lauf steht «Weiterführen»: Du schreibst, wie es weitergehen soll, und derselbe Agent arbeitet auf dem Branch des Laufs weiter. Offene Kriterien und fehlgeschlagene Belege gehen von selbst mit.
+
+**Entscheidungen.** Ein Agent fragt mit `tinyops-ask -d "Frage" "Option A" "Option B"` und wartet auf dich. Was er im Bericht unter `## Offene Entscheidungen` auflistet, erscheint im Lauf mit Antwortfeldern. Deine Antworten stehen später im Review und in der MR-Beschreibung.
+
+**Agenten** (Einstellungen → Agenten):
+- *Rollen:* `plan=/planner, develop=/developer, review=/reviewer, test=/tester`. Der Befehl steht am Anfang des Prompts, passend für eigene Slash-Befehle auf dem Agenten-Rechner. Ohne Rollen ist der Agent für alle Phasen da.
+- *Kontingent:* welches Abo der Agent verbraucht. Die Auswahl beim Zuweisen zeigt den freien Anteil.
+- *pusht seinen Branch:* Der Agent pusht am Ende nur seinen Lauf-Branch. tinyops selbst pusht nie.
+- In der Seitenleiste lassen sich Agenten auf eine Aufgabe ziehen.
+
+**Helpdesk → Jira.** Bei einem Helpdesk-Ticket «Jira-Ticket daraus anlegen». Du prüfst den Entwurf (Link, Problem, Kriterien) und bestätigst. Das Helpdesk-Ticket bleibt unverändert.
+
+**App und Handy** (Einstellungen → App und Handy):
+1. «Als App installieren» legt tinyops als eigenes Fenster an.
+2. Fürs Handy den Rechner erreichbar machen, ohne tinyops ins Netz zu stellen, z. B. mit `tailscale serve --bg 8765`. tinyops bleibt auf 127.0.0.1.
+3. Die Adresse (z. B. `https://mein-rechner.tailnet.ts.net`) eintragen und speichern; tinyops lässt diesen Namen dann zu.
+4. «Code erzeugen», auf dem Handy `<Adresse>/pair` öffnen und den Code eintippen (gilt 5 Minuten, einmal).
+
+Von aussen sieht tinyops nur gekoppelte Geräte. Ein gekoppeltes Gerät ändert keine Einstellungen und koppelt keine weiteren; unter «App und Handy» entfernst du es jederzeit. Gespeichert wird nur ein Hash seines Tokens. Auf dem Handy wird nur die leere Seite für den Start zwischengespeichert, nie Daten.
+
 ## 5e. Weniger Begriffe, Worktrees, Verbindung (neu in 0.35.0)
 
 **Zwei Begriffe statt fünf** (Entscheid E4):
@@ -767,6 +789,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     audit.py             Verlauf: nur anhängend, Hash-Kette, Prüfen und Export
     review.py            Offene Review-Punkte: lesen, Prompt und JSON
     timesheet.py         Fokus-Zeit, Lücken, Zeitentwürfe (gebucht wird in BCS)
+    devices.py           App (PWA) und Handy-Kopplung: Codes, Geräte, wer von aussen darf
     qa.py                Prüfliste und Selbsttest
     QA-CHECKLIST.md      Prüfliste zum Abhaken, je Release ergänzt; [auto: …] prüft ein Test
     docs/DECISIONS.md    getroffene und offene Entscheide

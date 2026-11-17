@@ -85,7 +85,7 @@ class Criteria(unittest.TestCase):
         f = briefing.followup(run, "Bitte  auch Logging")
         self.assertIn("AK1: zwei", f)
         self.assertNotIn("eins", f)
-        self.assertIn("Anmerkung des Menschen: Bitte auch Logging", f)
+        self.assertIn("## Auftrag des Menschen für diese Fortsetzung\n\nBitte auch Logging", f)      # 0.36: als eigener Abschnitt
         self.assertIn("Exit 1: mvn test", f)
         c = briefing.comment(run)
         for w in ("(/) AK1: eins", "(?) AK2: zwei", "{{agent/dlp-1-5}}", "Exit 1: {{mvn test}}", "2 files changed, 1 Commit", "Fertig."):

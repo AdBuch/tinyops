@@ -1,8 +1,10 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-16. Ab hier gilt der Plan 0.33–0.45. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-17. Ab hier gilt der Plan 0.33–0.46. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
-## Plan 0.33 – 0.45: aufräumen, entscheiden, dann wenig Neues
+## Plan 0.33 – 0.46: aufräumen, entscheiden, dann wenig Neues
+
+**17.11.:** Auf deinen Wunsch kam vor dem Umbau noch 0.36.0 mit deinen Wünschen und dem Bericht vom 17.11. Alles ab «Server zerlegen» rückt um eine Version nach hinten. Die App (PWA) mit Handy-Kopplung ist aus dem letzten Release vorgezogen; dort bleibt der zweite Bereich.
 
 **Warum:** Der Plan 0.15–0.20 ist geliefert. Danach kamen 12 Releases in 9 Tagen. Das Testen kam nicht mit, es gibt Doppelungen, und die Kerndateien sind gross: `server.py` hat 5'250 Zeilen, `static/index.html` 4'800, `agents.py` 1'730, `settings.py` 1'630. Das widerspricht dem Ziel «einfach reviewen».
 
@@ -20,16 +22,17 @@
 | **0.33.0** ✓ | Sicherheitsnetz: UI-Tests im Repo, Prüfliste auf das reduzieren, was nur ein Mensch prüfen kann (geliefert 2026-11-15: 10 UI-Tests, 59 statt 198 Punkte von Hand) | Aufräumen | – |
 | **0.34.0** ✓ | Doppelungen I: eine Review-Umgebung, ein Buchungsweg; dazu Helpdesk-Fehler r23-04, Review-Umgebung vorbefüllt mit Umsystemen, Checkout aus Workspaces (geliefert 2026-11-16) | Entscheid + Entfernen | E1, E2 ✓ |
 | **0.35.0** ✓ | Weniger Begriffe: Fokus und Bereiche, Spielstand abschaltbar; dazu tote Klicks, Verbindungshinweis, Worktrees in Workspaces (geliefert 2026-11-16) | Entscheid + Vereinfachen | E3, E4 ✓ |
-| 0.36.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
-| 0.37.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
-| 0.38.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
-| 0.39.0 | Agenten aufräumen: ein Weg für Review und Nachbessern, leichter Standard-Zyklus | Refactoring + Vereinfachen | E5 |
-| 0.40.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
-| 0.41.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
-| 0.42.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
-| 0.43.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab) | Neu, klein | – |
-| 0.44.0 | Neu: angefangene Projekte aus Claude, ChatGPT und Mistral tracken | Neu, klein | E8 |
-| 0.45.0 | Neu: zweiter Bereich (Privat/Geschäft) mit eigenem Worker, tinyops als App (PWA) | Neu | E7 |
+| **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E9, E10 ✓ |
+| 0.37.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
+| 0.38.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
+| 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
+| 0.40.0 | Agenten aufräumen: ein Weg für Review und Nachbessern, leichter Standard-Zyklus | Refactoring + Vereinfachen | E5 |
+| 0.41.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
+| 0.42.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
+| 0.43.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
+| 0.44.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab) | Neu, klein | – |
+| 0.45.0 | Neu: angefangene Projekte aus Claude, ChatGPT und Mistral tracken | Neu, klein | E8 |
+| 0.46.0 | Neu: zweiter Bereich (Privat/Geschäft) mit eigenem Worker; die App gibt es seit 0.36 | Neu | E7 |
 
 ### Entscheide (mit meiner Empfehlung)
 
@@ -39,10 +42,12 @@
 | E2 | Alte Testumgebung je MR (Kubernetes, standardmässig ausgeblendet) und neue Review-Umgebung (0.32)? | **Entschieden 2026-11-15:** direkt ausführen über die Review-Umgebung, auch für MRs; Prompts und Shell-Befehle bleiben zum Kopieren, falls kein Agent da ist | 0.34 |
 | E3 | Spielstand: Punkte, Serie, Review-Punkte behalten? | **Entschieden 2026-11-16:** behalten, eine Karte im Fokus, abschaltbar | 0.35 |
 | E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | **Entschieden 2026-11-16:** **Fokus** (mit Sitzung) und **Bereiche** (Wochenziel); «Fokus-Modus» heisst «Vollbild» | 0.35 |
-| E5 | Standard-Zyklus der Agenten? | Umsetzen → Review als Standard; Planen und Test je Ticket zuschaltbar | 0.39 |
-| E6 | Oberfläche weiter ohne Build-Schritt (kein npm)? | Ja: ES-Module direkt aus `static/`, damit der Launcher einfach bleibt | 0.38 |
-| E7 | Privat und Geschäft: eine Datenbank mit zwei Bereichen oder zwei getrennte Instanzen? | Zwei getrennte Instanzen (eigene Daten, Secrets, Audit, Port) mit Umschalter. Keine Vermischung möglich | 0.45 |
-| E8 | KI-Projekte: woher kommen die Daten? | Nur was du gibst: Link mit Notiz (Lesezeichen «In tinyops merken») und Import des Daten-Exports. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.44 |
+| E5 | Standard-Zyklus der Agenten? | Umsetzen → Review als Standard; Planen und Test je Ticket zuschaltbar | 0.40 |
+| E6 | Oberfläche weiter ohne Build-Schritt (kein npm)? | Ja: ES-Module direkt aus `static/`, damit der Launcher einfach bleibt | 0.39 |
+| E7 | Privat und Geschäft: eine Datenbank mit zwei Bereichen oder zwei getrennte Instanzen? | Zwei getrennte Instanzen (eigene Daten, Secrets, Audit, Port) mit Umschalter. Keine Vermischung möglich | 0.46 |
+| E8 | KI-Projekte: woher kommen die Daten? | Nur was du gibst: Link mit Notiz (Lesezeichen «In tinyops merken») und Import des Daten-Exports. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.45 |
+| E9 | Dürfen Agenten pushen? | **Entschieden 2026-11-17:** je Agent einschaltbar; er pusht nur seinen eigenen Lauf-Branch, nie main/master/develop/release. tinyops selbst pusht weiter nie | 0.36 |
+| E10 | Handy: wie kommt es an tinyops, ohne das Panel zu öffnen? | **Entschieden 2026-11-17:** über eine eigene Adresse (Tailscale oder VPN) und Kopplung je Gerät mit Einmal-Code; von aussen nur gekoppelte Geräte, die keine Einstellungen ändern | 0.36 |
 
 ### Die Releases im Einzelnen
 
@@ -65,17 +70,23 @@
 
 **0.35.0 – Weniger Begriffe** ✓
 - E3 und E4 umgesetzt, Texte in Oberfläche und Hilfe angeglichen.
-- Ungenutzte Ansichten ausblenden: verschoben. Der Bericht deckt erst sieben Tage ab; neu bewertet wird mit 0.41 (siehe Auswertung unten).
+- Ungenutzte Ansichten ausblenden: verschoben. Der Bericht deckt erst sieben Tage ab; neu bewertet wird mit 0.42 (siehe Auswertung unten).
 - Dazu aus dem Nutzungsbericht: tote Klicks in Prüfen, Seitenleiste und Workspaces; Verbindungshinweis statt «Panel nicht erreichbar»; Worktrees in Workspaces.
 - **Fertig, wenn:** Jeder Begriff in der Oberfläche hat eine Bedeutung. Die kürzere Hauptnavigation folgt erst mit genug Daten.
 
-**0.36.0 – Server zerlegen I**
+**0.36.0 – Vor dem Umbau** ✓
+- Aus deinen Wünschen vom 17.11.: Lauf direkt weiterführen, Entscheidungsfelder, an denen der Agent wartet; Rollen je Phase (`/planner`, `/developer`, `/reviewer`, `/tester`), Push des eigenen Branches, Kontingent in der Auswahl, Agent auf Aufgabe ziehen; Fokus-Aufgabe als Arbeitsfläche; Helpdesk → Jira; zurückgeschickte Reviews ausblenden; × in jedem Dialog.
+- Aus dem Bericht: BCS-Pause statt 73 s Wartezeit, Fetch liest unbekannte Repos selbst neu ein, das Agentenfenster baut sich nicht mehr alle 4 s neu auf (20 Wutklicks).
+- Vorgezogen aus dem letzten Release: tinyops als App (PWA) mit Handy-Kopplung.
+- **Fertig, wenn:** Prüfabschnitt 0.36 durch, vor allem `r36-01` und `r36-05` mit echten Systemen.
+
+**0.37.0 – Server zerlegen I**
 - `make_handler` (720 Zeilen) wird eine Routentabelle in `routes.py`.
 - `GitLabClient`, `JiraClient`, `Http` und `DemoClient` kommen in eigene Module.
 - Vorher ein Test, der alle Routen und Antworten festhält, damit nichts verloren geht.
 - **Fertig, wenn:** Alle Tests sind grün, die Routen sind unverändert, und `server.py` ist 1'500 Zeilen kürzer.
 
-**0.37.0 – Server zerlegen II**
+**0.38.0 – Server zerlegen II**
 - `App` in Bereiche mit klaren Grenzen:
   - Übersicht und Sync
   - Tickets und Ideen
@@ -89,7 +100,7 @@
 - Gemeinsames (Audit, Cache, Store) wird hineingereicht, kein Zugriff kreuz und quer.
 - **Fertig, wenn:** `server.py` ist unter 1'500 Zeilen, und kein Modul hat mehr als 1'000.
 
-**0.38.0 – Oberfläche zerlegen**
+**0.39.0 – Oberfläche zerlegen**
 - `index.html` wird zu `app.css` und JS-Modulen, je Ansicht eines, plus gemeinsame Bausteine:
   - Dialog
   - Kopieren
@@ -100,25 +111,25 @@
 - Doppelte Stile und Dialog-Muster werden zusammengeführt.
 - **Fertig, wenn:** Keine Datei hat mehr als 1'200 Zeilen, die UI-Tests aus 0.33 sind grün, und es gibt sichtbar keinen Unterschied.
 
-**0.39.0 – Agenten aufräumen**
+**0.40.0 – Agenten aufräumen**
 - `agents.py` wird aufgeteilt in Verbindung (SSH, tmux, lokal), Hilfsbefehle, Ergebnisse und Phasen.
 - Ein Weg für Review, Vorprüfen und Nachbessern. Der alte Parameter `prereview` entfällt.
 - E5 umsetzen.
 - **Fertig, wenn:** Ein kleines Ticket braucht zwei Klicks bis zum Review, und Planen und Test lassen sich zuschalten.
 
-**0.40.0 – Einstellungen und Datenbank**
+**0.41.0 – Einstellungen und Datenbank**
 - `settings.py`: ein Schema je Feld (Typ, Grenzen, Hilfe) statt handgeschriebener Prüfungen. Die Oberfläche liest die Hilfe aus derselben Quelle.
 - Datenbank mit `schema_version` und nummerierten Migrationen statt tolerantem `alter table`.
 - Veraltete Einstellungen werden beim Laden migriert und entfernt.
-- **Fertig, wenn:** Eine neue Einstellung ist eine Zeile im Schema, und ein Upgrade von 0.25 auf 0.40 ist getestet.
+- **Fertig, wenn:** Eine neue Einstellung ist eine Zeile im Schema, und ein Upgrade von 0.25 auf 0.41 ist getestet.
 
-**0.41.0 – Tests und Doku**
+**0.42.0 – Tests und Doku**
 - 13 Testdateien `test_vNN.py` gehen in Testdateien je Modul auf.
 - Das README wird ein Handbuch nach Themen statt der Abschnitte «neu in 0.x».
 - Die Hilfe in der Oberfläche verweist auf dieselben Kapitel.
 - **Fertig, wenn:** Zu jedem Modul gibt es eine Testdatei, und das README hat höchstens 15 Kapitel.
 
-**0.42.0 – Echte Anbindungen härten**
+**0.43.0 – Echte Anbindungen härten**
 - Mit dir gemeinsam:
   - BCS gegen die echte Middleware
   - M365 nach der App-Registrierung durch die IT
@@ -128,22 +139,22 @@
 - Fehlerbilder, die dabei auftauchen, werden zu Tests mit Fault-Injection.
 - **Fertig, wenn:** Jede Anbindung ist einmal echt gelaufen oder hat einen klaren Blocker, den die IT lösen muss.
 
-**0.43.0 – Weitere Projekte tracken**
+**0.44.0 – Weitere Projekte tracken**
 - Ein «Vorhaben» ohne Jira und GitLab: Name, Ziel, nächster Schritt, Status, Links. Optional mit einem Ordner aus Workspaces oder einem GitHub-Repo.
 - Erscheint im Fokus und in den Listen wie ein Ticket.
 - **Fertig, wenn:** Ein privates GitHub-Projekt und ein Projekt ohne Repo stehen mit nächstem Schritt in den Listen.
 
-**0.44.0 – KI-Projekte aus Claude, ChatGPT, Mistral**
-- Lesezeichen «In tinyops merken»: Es übernimmt Titel und Link des offenen Chats oder Projekts als Vorhaben aus 0.43, mit Anbieter-Piktogramm.
+**0.45.0 – KI-Projekte aus Claude, ChatGPT, Mistral**
+- Lesezeichen «In tinyops merken»: Es übernimmt Titel und Link des offenen Chats oder Projekts als Vorhaben aus 0.44, mit Anbieter-Piktogramm.
 - Import der offiziellen Daten-Exporte, lokal ausgewertet: Projekt- und Chatnamen und Datum, ohne Inhalte, falls du das willst.
 - Ehrlich: Die drei Anbieter haben keine offizielle Schnittstelle, die deine Chatliste herausgibt. Mehr als Lesezeichen und Export geht nicht, ohne Regeln zu umgehen.
 - **Fertig, wenn:** Ein Claude-Projekt, ein ChatGPT-Chat und ein Mistral-Chat stehen als Vorhaben mit nächstem Schritt in tinyops.
 
-**0.45.0 – Zweiter Bereich und App**
+**0.46.0 – Zweiter Bereich**
 - E7: Privat und Geschäft als zwei Instanzen mit eigenem Datenordner, eigenen Secrets und eigenem Audit. Jede hat eigene Agenten, also einen eigenen Worker.
 - Ein Umschalter oben wechselt zwischen den beiden. Der Launcher startet beide.
-- **App:** tinyops als installierbare Web-App (PWA), auf dem Handy über VPN mit Zugriffstoken. Keine eigene native App.
-- **Fertig, wenn:** Ein privates Vorhaben ist in der Geschäfts-Instanz nicht sichtbar, und die App läuft auf dem Handy.
+- **App:** seit 0.36 da (PWA, Handy über Kopplung). Hier kommt nur der Umschalter dazu: Jede Instanz koppelt ihre Geräte selbst.
+- **Fertig, wenn:** Ein privates Vorhaben ist in der Geschäfts-Instanz nicht sichtbar, und das Handy kann zwischen beiden wechseln.
 
 ### Auswertung 16.11.: Prüf- und Nutzungsbericht 0.33, Verlauf
 
@@ -167,20 +178,41 @@
 
 | Wann | Empfehlung | Warum |
 |---|---|---|
-| **vor 0.36** | Pause bis zum 19.11. oder bis die Prüfabschnitte 0.34 und 0.35 durch sind. Dabei BCS (r29) und Review-Umgebung (r34-04) mit echten Systemen prüfen. | 0.33 bis 0.35 kamen in zwei Tagen, die Regel erlaubt höchstens zwei Releases pro Woche. |
-| Korrektur-Platz 0.36 | Klick neben das Detail-Panel schliesst es. Klick auf den Titel einer Zeile (`span.tt`) öffnet sie. | 27 + 16 tote Klicks. Das ist klein und gehört vor das Zerlegen, weil Refactoring kein Verhalten ändern darf. |
-| 0.36/0.37 | Beim Zerlegen das Testen der Verbindungen in Schritten zeigen (GitLab 5.8 s, GitHub 2.2 s). Das KI-Kontingent zwischenspeichern (`/api/usage` bis 2.3 s). | Langsame Antworten im Bericht. |
-| 0.38 | Breites Layout ab 2000 px: Das Detail-Panel steht neben der Liste statt darüber. | 2844 px, 31× Schliessen. |
-| 0.40 | Einstellungen nach Schema mit geführter Ersteinrichtung je Anbindung: erst Adresse, dann Test, dann Feinheiten. Für Helpdesk-JQL nur Vorschläge zum Anklicken. | 23 % der Zeit in Einstellungen. |
-| 0.41 | Ungenutzte Ansichten mit 30 Tagen Daten neu bewerten. Kandidat: «Listen» in Board und Workspaces aufgehen lassen. «Zeit» bleibt, weil dort gebucht wird. | Sieben Tage reichen nicht. |
-| 0.42 | Microsoft 365 Schritt für Schritt einrichten, mit einem fertigen Text für die IT (App-Registrierung, delegierte Rechte, kein Secret). Vorher mit der IT klären, ob es eine App-Registrierung gibt. | Hilfe 18× aufgeklappt, r28 noch ungeprüft. |
-| 0.43 | «Weitere Projekte» als **Projektgruppe**: mehrere Repos und Umsysteme unter einem Namen. Die Gruppe öffnet zusammen in IntelliJ und startet zusammen als Review-Umgebung. | Offener Wunsch vom 16.11. |
-| 0.45 | Getrennte Instanzen für Privat und Geschäft wie geplant (E7). | Im Bericht tauchte ein privates Projekt neben der Arbeit auf. |
+| ~~vor 0.36~~ | Nicht eingehalten: 0.36 kam auf deinen Wunsch direkt danach. Gilt jetzt vor 0.37: Pause bis zum 20.11. oder bis die Prüfabschnitte durch sind. Ursprünglich: Pause bis zum 19.11. oder bis die Prüfabschnitte 0.34 und 0.35 durch sind. Dabei BCS (r29) und Review-Umgebung (r34-04) mit echten Systemen prüfen. | 0.33 bis 0.35 kamen in zwei Tagen, die Regel erlaubt höchstens zwei Releases pro Woche. |
+| Korrektur-Platz 0.36 (teils erledigt) | Dialoge schliessen jetzt mit Klick daneben und ×; das Detail-Panel tat das schon seit 0.30. Offen: Klick auf den Titel einer Zeile (`span.tt`) öffnet sie; die toten Klicks auf den leeren Hintergrund bleiben ungeklärt. | 27 + 16 tote Klicks. Das ist klein und gehört vor das Zerlegen, weil Refactoring kein Verhalten ändern darf. |
+| 0.37/0.38 | Beim Zerlegen das Testen der Verbindungen in Schritten zeigen (GitLab 5.8 s, GitHub 2.2 s). Das KI-Kontingent zwischenspeichern (`/api/usage` bis 2.3 s). | Langsame Antworten im Bericht. |
+| 0.39 | Breites Layout ab 2000 px: Das Detail-Panel steht neben der Liste statt darüber. | 2844 px, 31× Schliessen. |
+| 0.41 | Einstellungen nach Schema mit geführter Ersteinrichtung je Anbindung: erst Adresse, dann Test, dann Feinheiten. Für Helpdesk-JQL nur Vorschläge zum Anklicken. | 23 % der Zeit in Einstellungen. |
+| 0.42 | Ungenutzte Ansichten mit 30 Tagen Daten neu bewerten. Kandidat: «Listen» in Board und Workspaces aufgehen lassen. «Zeit» bleibt, weil dort gebucht wird. | Sieben Tage reichen nicht. |
+| 0.43 | Microsoft 365 Schritt für Schritt einrichten, mit einem fertigen Text für die IT (App-Registrierung, delegierte Rechte, kein Secret). Vorher mit der IT klären, ob es eine App-Registrierung gibt. | Hilfe 18× aufgeklappt, r28 noch ungeprüft. |
+| 0.44 | «Weitere Projekte» als **Projektgruppe**: mehrere Repos und Umsysteme unter einem Namen. Die Gruppe öffnet zusammen in IntelliJ und startet zusammen als Review-Umgebung. | Offener Wunsch vom 16.11. |
+| 0.46 | Getrennte Instanzen für Privat und Geschäft wie geplant (E7). | Im Bericht tauchte ein privates Projekt neben der Arbeit auf. |
 
-### Bewusst nicht im Plan bis 0.45
-- Native App (iOS/Android), zentrale Datenbank, Agenten-Cluster über mehrere Rechner
+### Auswertung 17.11.: Prüf- und Nutzungsbericht 0.35.1
+
+**Was die Berichte zeigen**
+- **Prüfliste:** 17 von 68 geprüft, kein Fehler. Offen bleiben die Punkte mit echten Systemen (BCS, M365, SSH-Agenten).
+- **Ansichten:** Fokus 69 %, Einstellungen 15 %. Fokus und Einstellungen wechseln je 14× hin und her, meist wegen Agenten- und KI-Einstellungen. Die Hilfe zu M365 ging 30× auf, die zum KI-Entwurf 28×.
+- **Agentenfenster:** 151 Klicks, Median 3.1 s Zögern, 20 Wutklicks. Ursache: Bei laufenden Agenten baute es sich alle 4 s neu auf, und Klicks gingen verloren. In 0.36 behoben.
+- **BCS:** 35× «nicht erreichbar», Median 73 s Wartezeit. In 0.36 auf 8 s begrenzt, danach eine Minute Pause mit klarer Meldung.
+- **Lokales Modell:** Test 27 s, Bewertung einer Idee 50 bis 87 s. Das Modell ist für diese Aufgaben zu langsam oder zu gross.
+- **Wünsche:** alle sechs vom 17.11. in 0.36 umgesetzt (siehe Changelog).
+
+**Empfehlungen für die nächsten Releases**
+
+| Wann | Empfehlung | Warum |
+|---|---|---|
+| **vor 0.37** | Die Abschnitte 0.36 und 0.35 prüfen, vor allem `r36-01` (Weiterführen mit Entscheidung), `r36-02` (Push und Rollen auf devops) und `r36-05` (Handy über Tailscale). | Viel Neues an einem Tag. Das Zerlegen soll auf geprüftem Verhalten aufsetzen. |
+| 0.37/0.38 | Die neuen Teile beim Zerlegen gleich als eigene Module anlegen: `devices.py` ist es schon. Agenten-Fortsetzung und Entscheidungen gehören zu `agents`, der Hero zu einem Fokus-Modul. | Sonst wächst `server.py` wieder. |
+| 0.39 | Breites Layout: Arbeitsfläche und Detail nebeneinander. Das Agentenfenster wird ein Seitenpanel statt eines Dialogs. | 2844 px, 151 Klicks im Dialog. |
+| 0.40 | Agenten aufräumen: Rollen ersetzen die Auswahl je Phase; «Mit Vorschau» und «Weiterführen» zu einem Weg zusammenlegen, wenn sich «Weiterführen» bewährt. | Zwei Wege für dasselbe. |
+| 0.41 | Einstellungen: Agenten und KI-Entwurf als geführte Einrichtung mit Test. Hinweis, wenn das lokale Modell länger als 20 s braucht (kleineres Modell vorschlagen). | 14× Fokus ↔ Einstellungen, Hilfe 28×, Bewertung bis 87 s. |
+| 0.43 | M365 Schritt für Schritt mit Text für die IT (wie geplant). | Hilfe jetzt 30× aufgeklappt. |
+
+### Bewusst nicht im Plan bis 0.46
+- Native App (iOS/Android; die Web-App seit 0.36 reicht), zentrale Datenbank, Agenten-Cluster über mehrere Rechner
 - Schreiben in GitLab (Approve, Merge), Confluence
-- Neue Anbindungen ausser denen in 0.43 bis 0.45
+- Neue Anbindungen ausser denen in 0.44 bis 0.46
 
 ---
 

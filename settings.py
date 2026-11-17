@@ -14,6 +14,7 @@ import urllib.parse
 from pathlib import Path
 
 import agents
+import devices
 import github
 import llm
 import net
@@ -1087,6 +1088,7 @@ def view(cfg, config_path, features_default=None):
         "m365": dict(m365.cfg(cfg), redirect="http://localhost:%d/api/m365/callback" % int(cfg.get("port") or 8765),
                      scopes=m365.scopes(m365.cfg(cfg))),
         "workspaces": dict(workspaces.cfg(cfg), found=workspaces.roots_of(cfg)),
+        "app": {"phone_url": (cfg.get("app") or {}).get("phone_url", ""), "bind": cfg.get("bind") or "127.0.0.1"},
         "focus": _focus_view(cfg),
         "agent_kinds": [{"id": k, "label": v["label"], "provider": v["provider"], "local": bool(v.get("local"))} for k, v in agents.KINDS.items()],
         "data_classes": [{"id": c, "label": agents.CLASS_LABEL[c]} for c in agents.CLASSES],
@@ -1477,6 +1479,12 @@ def build_config(current, p):
         cfg["m365"] = mc
     if isinstance(p.get("focus"), dict):
         cfg["focus"] = _clean_focus(p["focus"], errors)
+    if isinstance(p.get("app"), dict):          # 0.36: Adresse fürs Handy (ihr Host gilt dann als erlaubter Host)
+        url, _, err = devices.phone_url(p["app"].get("phone_url"))
+        if err:
+            errors["app.phone_url"] = err
+        else:
+            cfg["app"] = dict(cfg.get("app") or {}, phone_url=url)
     if isinstance(p.get("workspaces"), dict):
         w, wc = p["workspaces"], workspaces.cfg(cfg)
         wc["enabled"] = bool(w.get("enabled", wc["enabled"]))

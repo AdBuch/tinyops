@@ -18,12 +18,16 @@ Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis
 | 2026-11-16 | **E3:** Spielstand bleibt, als eine Karte im Fokus, abschaltbar | Level-Balken entfällt, Schalter «Spielstand» unter Weiteres (0.35). Entschieden mit «implement plans for 35» nach meiner Empfehlung |
 | 2026-11-16 | **E4:** Zwei Begriffe: **Fokus** (woran du bist, mit Sitzung) und **Bereiche** (Wochenziel) | «Fokus-Modus» heisst «Vollbild», die Leiste gehört zur Sitzung (0.35). Entschieden wie E3 |
 | 2026-11-16 | BCS-Middleware darf auch im eigenen Netz laufen, nur mit Haken und nur private Adressen | Wunsch: Middleware läuft auf dem Windows-Host. Bevorzugt bleibt 127.0.0.1 über WSL mirrored oder SSH-Tunnel (0.35.1) |
+| 2026-11-17 | **E9:** Agenten dürfen ihren eigenen Lauf-Branch pushen, wenn du es je Agent einschaltest | Wunsch «Remote agents müssen pushen». Nie main, master, develop, release/*, kein Force-Push. tinyops selbst pusht weiter nie (0.36) |
+| 2026-11-17 | **E10:** Handy über eigene Adresse (Tailscale/VPN) und Kopplung je Gerät | Von aussen nur gekoppelte Geräte (Einmal-Code, 5 min, 5 Versuche; nur Hash gespeichert). Gekoppelte Geräte ändern keine Einstellungen. Die App (PWA) ist dafür aus dem letzten Release vorgezogen (0.36) |
+| 2026-11-17 | Plan verschiebt sich um eine Version: 0.36 vor dem Umbau, «Server zerlegen» ab 0.37 | Auf deinen Wunsch («nochmals eine Version vor dem grossen Refactoring») |
+| 2026-11-17 | Rollen je Phase als Befehl am Anfang des Prompts (z. B. `/planner`) | Passt zu eigenen Slash-Befehlen auf dem Agenten-Rechner; ohne Rollen gilt der Agent für alle Phasen (0.36) |
 
 ## Offen
 
 | Nr. | Frage | Optionen | Empfehlung | Bis |
 |---|---|---|---|---|
-| E5 | Standard-Zyklus der Agenten? | a) Umsetzen → Review, Planen und Test zuschaltbar · b) immer alle vier Phasen | **a** | 0.39 |
-| E6 | Oberfläche mit oder ohne Build-Schritt? | a) ohne: ES-Module direkt aus `static/` · b) mit npm und Bundler | **a**: der Launcher bleibt einfach | 0.38 |
-| E7 | Privat und Geschäft? | a) zwei getrennte Instanzen mit Umschalter · b) eine Datenbank mit zwei Bereichen | **a**: Daten, Secrets und Audit bleiben sicher getrennt | 0.45 |
-| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · b) mehr | **a**. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.44 |
+| E5 | Standard-Zyklus der Agenten? | a) Umsetzen → Review, Planen und Test zuschaltbar · b) immer alle vier Phasen | **a** | 0.40 |
+| E6 | Oberfläche mit oder ohne Build-Schritt? | a) ohne: ES-Module direkt aus `static/` · b) mit npm und Bundler | **a**: der Launcher bleibt einfach | 0.39 |
+| E7 | Privat und Geschäft? | a) zwei getrennte Instanzen mit Umschalter · b) eine Datenbank mit zwei Bereichen | **a**: Daten, Secrets und Audit bleiben sicher getrennt | 0.46 |
+| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · b) mehr | **a**. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.45 |

@@ -52,6 +52,36 @@ CLASSES = ("restricted", "internal", "public")
 CLASS_LABEL = {"restricted": "restricted (nur lokale Agenten)", "internal": "internal (Cloud mit Freigabe)", "public": "public"}
 PATH_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,199}$")
 ISOLATION = ("worktree", "shared")
+# 0.36: Rollen je Phase als Befehl, mit dem der Prompt beginnt (z. B. eigene Slash-Befehle /planner auf dem Agenten-Rechner)
+ROLE_PHASES = ("plan", "develop", "review", "test")
+ROLE_DEFAULTS = {"plan": "/planner", "develop": "/developer", "review": "/reviewer", "test": "/tester"}
+ROLE_CMD_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9:_-]{0,39}$")
+QUOTAS = ("claude", "codex", "mistral")
+QUOTA_DEFAULT = {"claude": "claude", "codex": "codex", "vibe": "mistral"}
+
+
+def parse_roles(raw):
+    """«plan=/planner, develop=/developer» oder {"plan": "/planner"} → ({phase: befehl}, fehler)."""
+    if isinstance(raw, dict):
+        items = list(raw.items())
+    else:
+        items = [x.split("=", 1) if "=" in x else (x, "") for x in re.split(r"[,\s]+", str(raw or "").strip()) if x]
+    out = {}
+    for k, v in items:
+        k, v = str(k).strip().lower(), str(v).strip()
+        k = {"planner": "plan", "developer": "develop", "reviewer": "review", "tester": "test"}.get(k, k)
+        if k not in ROLE_PHASES:
+            return {}, "Rollen: plan, develop, review, test (z. B. plan=/planner)."
+        v = v or ROLE_DEFAULTS[k]
+        if not ROLE_CMD_RE.fullmatch(v):
+            return {}, "Befehl je Rolle wie /planner: Schrägstrich, dann Buchstaben, Ziffern, - _ :"
+        out[k] = v
+    return out, ""
+
+
+def agent_roles(a):
+    """Für welche Phasen ein Agent da ist. Ohne Angabe: alle."""
+    return [p for p in ROLE_PHASES if p in (a.get("roles") or {})] or list(ROLE_PHASES)
 STATUS_ACTIVE = ("läuft",)
 STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen", "verloren", "abgelaufen")
 DEFAULT_MAX_MINUTES = 60
@@ -90,11 +120,12 @@ case "$N" in ""|*[!0-9]*) echo "tinyops: TINYOPS_RUN_ID fehlt, das geht nur in e
 j() { printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 '''
 HELPERS = {
-    "tinyops-ask": _HELPER_HEAD + r'''# tinyops-ask [-n] [-t SEK] "Frage" ["Option" ...]   fragt den Menschen in tinyops und gibt die Antwort aus
+    "tinyops-ask": _HELPER_HEAD + r'''# tinyops-ask [-n] [-d] [-t SEK] "Frage" ["Option" ...]   fragt den Menschen in tinyops und gibt die Antwort aus
+# -d: eine Entscheidung (wird im Bericht und im Review als Entscheidung festgehalten)
 # tinyops-ask --wait NR [-t SEK]                     wartet weiter auf die Antwort zu Frage NR
 # Exit 3: noch keine Antwort nach SEK Sekunden (Standard 100). Dann mit --wait NR weiter warten, nicht neu fragen.
-wait=1; to="${TINYOPS_ASK_TIMEOUT:-100}"; K=""
-while [ $# -gt 0 ]; do case "$1" in -n) wait=0; shift;; -t) to="$2"; shift 2;; --wait) K="$2"; shift 2;; *) break;; esac; done
+wait=1; to="${TINYOPS_ASK_TIMEOUT:-100}"; K=""; dec=false
+while [ $# -gt 0 ]; do case "$1" in -n) wait=0; shift;; -d) dec=true; shift;; -t) to="$2"; shift 2;; --wait) K="$2"; shift 2;; *) break;; esac; done
 case "$to" in ""|*[!0-9]*) to=100;; esac
 if [ -z "$K" ]; then
   [ -n "$1" ] || { echo 'Aufruf: tinyops-ask [-n] [-t SEK] "Frage" ["Option" ...]' >&2; exit 2; }
@@ -102,7 +133,7 @@ if [ -z "$K" ]; then
   Q=$(j "$1"); shift; O=""
   for o in "$@"; do O="$O${O:+, }\"$(j "$o")\""; done
   b=true; [ "$wait" = 1 ] || b=false
-  printf '{"id": %d, "question": "%s", "options": [%s], "blocking": %s, "ts": %s}\n' "$K" "$Q" "$O" "$b" "$(date +%s)" > "$R/$N.question.tmp" && mv "$R/$N.question.tmp" "$R/$N.question.json"
+  printf '{"id": %d, "question": "%s", "options": [%s], "blocking": %s, "decision": %s, "ts": %s}\n' "$K" "$Q" "$O" "$b" "$dec" "$(date +%s)" > "$R/$N.question.tmp" && mv "$R/$N.question.tmp" "$R/$N.question.json"
   [ "$wait" = 1 ] || { echo "$K"; exit 0; }
   echo "[tinyops] Frage $K gestellt. Warte auf die Antwort in tinyops ..." >&2
 fi
@@ -181,7 +212,7 @@ def parse_question(text):
         qid = 1
     opts = [clean_text(str(o), 200).strip() for o in (q.get("options") or []) if str(o).strip()][:8] if isinstance(q.get("options"), list) else []
     return {"id": qid, "question": clean_text(str(q.get("question") or ""), 1000).strip() or "(leere Frage)", "options": opts,
-            "blocking": q.get("blocking") is not False}
+            "blocking": q.get("blocking") is not False, "decision": q.get("decision") is True}
 
 
 def parse_checks(text):
@@ -299,6 +330,17 @@ def clean_agents(raw, conn_ids, existing, errors):
                 entry["provider"] = prov
         via = a.get("clone_via")
         entry["clone_via"] = via if via in ("ssh", "https") else "ssh"
+        roles, err = parse_roles(a.get("roles"))
+        if err:
+            errors[k + "roles"] = err
+        if roles:
+            entry["roles"] = roles
+        if a.get("push"):
+            entry["push"] = True            # 0.36: pusht am Ende seinen Lauf-Branch (sonst nie)
+        q = str(a.get("quota") if a.get("quota") is not None else QUOTA_DEFAULT.get(kind, "")).strip().lower()
+        if q and q not in QUOTAS + ("none",):
+            errors[k + "quota"] = "Kontingent: claude, codex, mistral oder leer."
+        entry["quota"] = q if q in QUOTAS else ""
         cmd = (old.get(aid) or {}).get("command")
         if kind == "custom" and cmd:
             entry["command"] = str(cmd)
@@ -1101,12 +1143,18 @@ class Service:
         return shlex.quote(path) if agent["connection"] == "local" else _sh_path(path)
 
     WORKSPACE_LINES = {
-        "worktree": "Du arbeitest in einem eigenen Worktree auf dem Branch agent/<key>-<nr> (abgezweigt von {branch}). Committe dort; den Branch pusht der Mensch.",
+        "worktree": "Du arbeitest in einem eigenen Worktree auf dem Branch agent/<key>-<nr> (abgezweigt von {branch}). Committe dort; {pusher}.",
         "export": "Du siehst nur einen Ausschnitt des Repositorys: {paths}. Ändere nur Dateien darin. tinyops übernimmt die Änderungen nach Prüfung als Branch.",
         "shared": "Arbeite im aktuellen Repository. Lege den Branch an, falls er fehlt (vom Hauptbranch aus), und arbeite nur dort.",
     }
 
-    def default_prompt(self, title, key, project, branch, url="", mode="shared", paths=(), template="agent-task", extra=None):
+    PUSH_LINES = {
+        False: "- Kein Merge, kein Push, kein Force-Push, keine Änderungen an CI-Zugangsdaten oder Secrets.",
+        True: "- Kein Merge, kein Force-Push, keine Änderungen an CI-Zugangsdaten oder Secrets.\n"
+              "- **Pushen:** Am Ende pushst du genau deinen Arbeits-Branch: `git push -u origin HEAD`. Nie main, master, develop oder release/*.",
+    }
+
+    def default_prompt(self, title, key, project, branch, url="", mode="shared", paths=(), template="agent-task", extra=None, agent=None):
         """Prompt aus prompts/<template>.md plus die Werkzeug-Hinweise aus prompts/agent-tools.md."""
         f = self.base / "prompts" / ("%s.md" % template)
         try:
@@ -1121,15 +1169,20 @@ class Service:
         class D(dict):
             def __missing__(self, k):
                 return ""
-        ws = self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
+        push = bool((agent or {}).get("push"))
+        ws = (self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
+              .replace("{pusher}", "am Ende pushst du diesen Branch" if push else "den Branch pusht der Mensch"))
+        phase = {v: k for k, v in PHASE_TEMPLATE.items()}.get(template, "review" if template == "agent-prereview" else "develop")
         vals = D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
-                 url_line=("Link: %s\n" % url) if url else "", workspace_line=ws,
-                 guards=guards_text(guards_cfg(self.cfg), {v: k for k, v in PHASE_TEMPLATE.items()}.get(template, "develop")))
+                 url_line=("Link: %s\n" % url) if url else "", workspace_line=ws, push_line=self.PUSH_LINES[push],
+                 guards=guards_text(guards_cfg(self.cfg), phase))
         vals.update(extra or {})
         out = re.sub(r"\n{3,}", "\n\n", tpl.format_map(vals)).strip() + "\n"
         if "{guards}" not in tpl:                      # eigene Vorlagen ohne Platzhalter bekommen die Leitplanken trotzdem
             out += "\n" + vals["guards"]
-        return out + ("\n" + tools + "\n" if tools else "")
+        out += ("\n" + tools + "\n" if tools else "")
+        role = ((agent or {}).get("roles") or {}).get(phase)
+        return ("%s\n\n%s" % (role, out)) if role else out      # 0.36: Rolle als erster Befehl (z. B. /developer)
 
     def prompt_info(self, aid, ticket, pid, branch, title, key, url="", template="agent-task", extra=None):
         a = self.agent(aid)
@@ -1149,7 +1202,7 @@ class Service:
         if KINDS[a["kind"]].get("local") and not a.get("cloud", True) and looks_cloud(a.get("model", "")):
             hints.append("Das Modell «%s» sieht nach einem Cloud-Modell aus, der Agent ist aber als lokal eingetragen. Stimmt das nicht, unter "
                          "Einstellungen → Agenten «sendet Daten an einen Cloud-Anbieter» anhaken." % a.get("model"))
-        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or [], template, extra), "workdir": wd,
+        return {"prompt": self.default_prompt(title, key, p.get("name", ""), branch, url, mode, p.get("cloud_paths") or [], template, extra, agent=a), "workdir": wd,
                 "hints": hints, "model": a.get("model", ""),
                 "where": "lokal auf diesem Rechner" if conn is None else "%s (%s)" % (conn["name"], ("%s@%s" % (conn["user"], conn["host"])) if conn["user"] else conn["host"]),
                 "cloud": bool(a.get("cloud", True)), "provider": KINDS[a["kind"]]["provider"], "kind": KINDS[a["kind"]]["label"],
@@ -1198,6 +1251,8 @@ class Service:
         v["ack"] = bool(r.get("ack"))
         v["review_brief"] = briefing.review_brief(v) if v["phase"] != "plan" and v.get("result") and r["status"] not in ("zugewiesen", "läuft") else None
         v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
+        v["decisions"] = briefing.decisions(v)                                                       # 0.36: mit tinyops-ask -d entschieden
+        v["open_decisions"] = briefing.open_decisions(briefing.report_sections(r.get("summary") or "").get("decide")) if r["status"] not in STATUS_ACTIVE else []
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
                  where=("lokal" if a and a["connection"] == "local" else conn["name"] if conn else "?"),
                  active=r["status"] in STATUS_ACTIVE, secs=int(end - r["started"]) if r["started"] else 0,
@@ -1207,6 +1262,7 @@ class Service:
     def view(self):
         agents = [{"id": a["id"], "name": a["name"], "kind": a["kind"], "label": KINDS[a["kind"]]["label"], "cloud": a.get("cloud", True),
                    "isolation": a.get("isolation", "worktree"), "model": a.get("model", ""),
+                   "roles": agent_roles(a), "role_cmds": a.get("roles") or {}, "push": bool(a.get("push")), "quota": a.get("quota", QUOTA_DEFAULT.get(a["kind"], "")),
                    "where": "lokal" if a["connection"] == "local" else (self.conns().get(a["connection"]) or {}).get("name", "?"),
                    "workspace_root": a["workspace_root"]} for a in self.agent_list()]
         projects = [{"id": p["id"], "name": p.get("name") or str(p["id"]), "data_class": data_class(p)} for p in self.projects()]
@@ -1394,7 +1450,8 @@ class Service:
                 if rc != 0 or "ok" not in out:
                     raise AgentError("Antwort nicht zugestellt (Exit %d): %s" % (rc, clean_text(err or out, 200).strip()))
             qa = json.loads(r["qa"]) if r.get("qa") else []
-            qa.append({"id": qid, "q": cur.get("question", ""), "options": cur.get("options") or [], "a": text[:2000], "ts_q": cur.get("ts"), "ts_a": time.time()})
+            qa.append({"id": qid, "q": cur.get("question", ""), "options": cur.get("options") or [], "a": text[:2000], "ts_q": cur.get("ts"), "ts_a": time.time(),
+                       "decision": bool(cur.get("decision"))})
             self.store.agent_run_update(run_id, question="", answered=str(qid), qa=json.dumps(qa[-20:], ensure_ascii=False))
             self._ev("agent.answer", r, qid=qid, question=cur.get("question", "")[:300], answer=text[:300])
             return {"ok": True}
