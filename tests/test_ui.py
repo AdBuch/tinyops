@@ -425,6 +425,21 @@ class AppAndPhone(UiCase):
         self.wait_js("!!document.querySelector('#app-devs') && /Gerät/.test(document.querySelector('#app-devs').textContent)")
 
 
+class FxLayout(UiCase):
+    def test_buttons_below_chips_one_draft(self):
+        """0.36.3: In «MRs und Branches» stehen die Knöpfe unter Titel und Chips, und «Draft» kommt nur einmal."""
+        pg = self.pg
+        q = "focusEntries().find(e => e.t === 'card' && (e.c.items || []).some(i => i.draft))"
+        self.wait_js(q, 15000)
+        fid = pg.evaluate("(%s).id" % q)
+        pg.evaluate("openFx(%r)" % fid)
+        it = pg.locator("#fx .fxitem:has(.chip.draft)").first
+        it.wait_for()
+        self.assertEqual(it.locator(".chip.draft").count(), 1)
+        nm, bt = it.locator(".nm").bounding_box(), it.locator(".ibtns").bounding_box()
+        self.assertGreaterEqual(bt["y"], nm["y"] + nm["height"] - 1)
+
+
 class Terms(UiCase):
     def test_score_switch_and_areas(self):
         """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""

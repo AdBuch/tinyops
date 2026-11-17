@@ -5,6 +5,12 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.36.3]
+
+### Behoben
+- **Detail-Panel, «MRs und Branches»:** Die Knöpfe (MR, Pipeline, IntelliJ, Offene Punkte …) lagen über den Chips und verdeckten sie. Sie stehen jetzt in einer eigenen Zeile darunter.
+- «Draft» stand bei Draft-MRs doppelt (Draft-Markierung und Merge-Status von GitLab). Jetzt nur einmal.
+
 ## [0.36.2]
 
 ### Neu
