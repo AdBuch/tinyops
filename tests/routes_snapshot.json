@@ -1,0 +1,483 @@
+{
+ "DELETE /api/ideas/999": {
+  "keys": [
+   "ok"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /": {
+  "status": 200,
+  "type": "text/html"
+ },
+ "GET /api/audit": {
+  "keys": [
+   "instance",
+   "rows"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/audit/export": {
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/audit/verify": {
+  "keys": [
+   "broken_at",
+   "count",
+   "last_hash",
+   "ok",
+   "reason"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/bcs/day?date=2026-11-18": {
+  "keys": [
+   "day",
+   "week"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/focus/brief?key=TINY-999&title=x": {
+  "keys": [
+   "comments",
+   "criteria",
+   "error",
+   "goal",
+   "source",
+   "url"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/helpdesk/ticket?key=NOPE-1": {
+  "error": "Dieses Helpdesk-Ticket zeigt tinyops gerade nicht.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "GET /api/ideas/triage-prompt": {
+  "error": "Keine offenen Ideen.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "GET /api/log?n=5": {
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/m365": {
+  "keys": [
+   "calendar",
+   "calendar_write",
+   "demo",
+   "enabled",
+   "errors",
+   "logged_in",
+   "mail",
+   "me",
+   "ok",
+   "teams",
+   "ts"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/m365/callback?error=x": {
+  "status": 400,
+  "type": "text/html"
+ },
+ "GET /api/nichts": {
+  "error": "Nicht gefunden.",
+  "status": 404,
+  "type": "application/json"
+ },
+ "GET /api/overview": {
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/pair/devices": {
+  "keys": [
+   "devices",
+   "phone_url"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/qa": {
+  "keys": [
+   "file",
+   "sections",
+   "version"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/settings": {
+  "keys": [
+   "agent_guards",
+   "agent_kinds",
+   "agent_log_days",
+   "agents",
+   "app",
+   "branch_filter",
+   "configured",
+   "connections",
+   "data_classes",
+   "demo",
+   "features",
+   "focus",
+   "github",
+   "gitlab",
+   "helpdesk",
+   "hints",
+   "ide_command",
+   "jira",
+   "jql_default",
+   "llm",
+   "m365",
+   "problems",
+   "projects",
+   "review_kinds",
+   "secrets",
+   "server",
+   "sonar",
+   "storage",
+   "time",
+   "usage",
+   "ux",
+   "workspaces"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/sonar/report?project_id=1&iid=1": {
+  "keys": [
+   "hotspots",
+   "issues",
+   "text",
+   "total",
+   "truncated"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/time/day?date=2026-11-18": {
+  "keys": [
+   "bcs",
+   "booked_minutes",
+   "date",
+   "draft_minutes",
+   "drafts",
+   "earlier_open",
+   "gaps",
+   "llm",
+   "round",
+   "segments",
+   "total_secs"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/update/news": {
+  "keys": [
+   "text"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/usage": {
+  "keys": [
+   "enabled",
+   "fetched",
+   "items"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/ux/report?days=7": {
+  "keys": [
+   "active_min",
+   "days",
+   "enabled",
+   "events",
+   "hints",
+   "sessions",
+   "stored",
+   "text",
+   "wishes"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /api/workspaces": {
+  "keys": [
+   "agents",
+   "classes",
+   "enabled",
+   "partial",
+   "plain",
+   "repos",
+   "roots",
+   "runs",
+   "secs",
+   "stale_days",
+   "totals",
+   "ts"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /healthz": {
+  "keys": [
+   "ok",
+   "version"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "GET /icon-192.png": {
+  "status": 200,
+  "type": "image/png"
+ },
+ "GET /icon.svg": {
+  "status": 200,
+  "type": "image/svg+xml"
+ },
+ "GET /logo/jira": {
+  "error": "kein Logo hinterlegt",
+  "status": 404,
+  "type": "application/json"
+ },
+ "GET /manifest.webmanifest": {
+  "keys": [
+   "background_color",
+   "description",
+   "display",
+   "icons",
+   "lang",
+   "name",
+   "scope",
+   "short_name",
+   "start_url",
+   "theme_color"
+  ],
+  "status": 200,
+  "type": "application/manifest+json"
+ },
+ "GET /pair": {
+  "status": 200,
+  "type": "text/html"
+ },
+ "GET /sw.js": {
+  "status": 200,
+  "type": "text/javascript"
+ },
+ "PATCH /api/ideas/999": {
+  "error": "Unbekannter Status.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "PATCH /api/settings": {
+  "error": "Nicht gefunden.",
+  "status": 404,
+  "type": "application/json"
+ },
+ "POST /api/agents/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ai/x": {
+  "error": "Diese Funktion ist ausgeschaltet (Einstellungen → Weitere Funktionen).",
+  "status": 404,
+  "type": "application/json"
+ },
+ "POST /api/bcs/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/board/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/flow/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/focus/x": {
+  "error": "Es läuft keine Fokus-Sitzung.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/groups": {
+  "error": "Ticket-Key wie DLP-123 erwartet.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/helpdesk/seen": {
+  "keys": [
+   "seen"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/ide/close": {
+  "error": "Kein IntelliJ-Worktree für diesen MR.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ide/open": {
+  "error": "project_id und iid müssen Zahlen sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ideas": {
+  "error": "Leere Idee.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ideas/999/assess": {
+  "error": "Diese Idee gibt es nicht (mehr).",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/links": {
+  "error": "project_id muss eine Zahl sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/links/delete": {
+  "error": "project_id muss eine Zahl sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/m365/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/mr/env": {
+  "error": "project_id und iid müssen Zahlen sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/nichts": {
+  "error": "Nicht gefunden.",
+  "status": 404,
+  "type": "application/json"
+ },
+ "POST /api/pair/claim": {
+  "error": "Der Code stimmt nicht oder ist abgelaufen. Am Rechner einen neuen erzeugen.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/pair/revoke": {
+  "error": "Dieses Gerät gibt es nicht (mehr).",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/pools/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/prompt": {
+  "error": "Ungültige Anfrage.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/qa/x": {
+  "error": "Diesen Prüfpunkt gibt es nicht (mehr).",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/review/export": {
+  "error": "project_id und iid müssen Zahlen sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/review/topics": {
+  "error": "project_id und iid müssen Zahlen sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/settings/identity": {
+  "keys": [
+   "error"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/settings/nichts": {
+  "error": "Nicht gefunden.",
+  "status": 404,
+  "type": "application/json"
+ },
+ "POST /api/settings/save": {
+  "error": "Im Demo-Modus werden keine Einstellungen gespeichert.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/settings/test/agent": {
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/settings/test/sonar": {
+  "keys": [
+   "ok",
+   "steps"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/ticket/create": {
+  "error": "Das Anlegen von Tickets ist ausgeschaltet (Einstellungen → Jira → «Tickets aus dem Panel anlegen»).",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ticket/draft": {
+  "error": "project_id und iid müssen Zahlen sein.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/time/x": {
+  "error": "Diesen Entwurf gibt es nicht.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/update/seen": {
+  "keys": [
+   "ok"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/usage/push": {
+  "error": "Mistral ist in den Einstellungen (KI-Kontingent) nicht eingeschaltet.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/ux/events": {
+  "keys": [
+   "n",
+   "ok"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/ux/wish": {
+  "error": "Der Wunsch ist leer.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/workspaces/x": {
+  "error": "Dieses Repo liegt nicht (mehr) unter deinen Workspace-Ordnern. Pfad verschoben oder gelöscht?",
+  "status": 400,
+  "type": "application/json"
+ }
+}

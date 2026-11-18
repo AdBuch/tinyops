@@ -783,7 +783,14 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 
 ## 10. Dateien
 
-    server.py            Server, GitLab- und Jira-Client, Ideen (SQLite in data/)
+    server.py            Config, App (Zustand und Aktionen), Start
+    routes.py            HTTP: Zugang (Host, Token, Geräte), Routentabelle, Antworten
+    common.py            gemeinsame Bausteine: Fehlerarten, Zeit, Jira-Keys, Secrets auflösen
+    httpclient.py        HTTP-Client für GitLab, Jira und Co. (ohne Weiterleitungen)
+    gitlab_client.py     GitLab lesen: MRs, Branches, Pipelines, Freigaben
+    jira_client.py       Jira lesen, Tickets nur mit Freigabe anlegen
+    ideas.py             Ideen (SQLite in data/) und ähnliche finden
+    demo.py              Demo-Daten für --demo und die Tests
     settings.py          Einstellungsseite: Verbindungstests, Speichern
     net.py               Netzwerk: TLS, Fehlerarten, keine Weiterleitungen
     tlog.py              Logging (Rotation, Schwärzung)

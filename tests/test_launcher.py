@@ -57,7 +57,7 @@ class Launcher(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "launcher"))
         import build
         self.pyz = build.build(self.d / "l.pyz")
-        rc, out = self.launch(pyz=True)
+        rc, out = self.launch("--demo", pyz=True)          # deckt r211-06 ab: die .pyz mit Demo-Daten
         self.assertEqual(rc, 0, out)
         self.assertIn("server gestartet", out)
         r = subprocess.run([sys.executable, str(self.pyz), "--version"], capture_output=True, text=True)

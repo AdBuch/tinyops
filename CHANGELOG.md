@@ -5,6 +5,26 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.37.0]
+
+Server zerlegen I. Ein reines Refactoring: Für dich ändert sich nichts. `server.py` ist um 1'500 Zeilen kürzer (5'301 → 3'794).
+
+### Geändert
+- **Eigene Module statt einer grossen Datei:**
+  - `routes.py`: der HTTP-Teil mit Zugang (Host, Token, gekoppelte Geräte) und einer **Routentabelle** statt der langen if-Kette. Eine neue Route ist eine Zeile.
+  - `gitlab_client.py`, `jira_client.py`, `httpclient.py`: die Clients.
+  - `demo.py`: die Demo-Daten.
+  - `ideas.py`: die Ideenbox.
+  - `common.py`: was alle brauchen (Fehlerarten, Zeit, Jira-Keys, Secrets).
+- Die Namen bleiben über `server` erreichbar, damit Werkzeuge und Tests nicht brechen.
+- Verbindungstests in den Einstellungen laufen über eine kleine Tabelle statt sieben gleicher Blöcke.
+
+### Neu (für die Entwicklung)
+- **Sicherheitsnetz für das Zerlegen:** `tests/test_routes.py` ruft 74 Routen auf und vergleicht Status, Typ und Form der Antwort mit einem Schnappschuss von vor dem Umbau. Ein zweiter Test passt auf, dass `server.py` nicht wieder wächst.
+
+### Behoben
+- Zwei UI-Tests waren wackelig, wenn die Liste beim Abgleich neu gezeichnet wurde.
+
 ## [0.36.3]
 
 ### Behoben

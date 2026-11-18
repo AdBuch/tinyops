@@ -37,7 +37,7 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 
 | Nr. | Frage | Optionen | Empfehlung | Bis |
 |---|---|---|---|---|
-| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · b) mehr | **a**. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.45 |
+| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · c) **Prompt zum Kopieren** (neu 18.11.): tinyops gibt dir je App einen Prompt, die App listet deine offenen Themen als JSON, du fügst das in tinyops ein · d) **Sitzungen der Coding-Agenten** (neu 18.11.): Claude Code, Codex und Vibe legen ihre Sitzungen als Dateien auf deinem Rechner ab; tinyops liest Ordner, Titel und Datum · b) mehr | **a + c + d**. c nutzt, was die Chat-Apps selbst über deine Chats wissen (bei Claude die Suche in früheren Chats); das ist hilfreich, aber nicht vollständig. d ist vollständig für die Agenten, weil es deine eigenen Dateien sind. Die Agenten selbst sehen deine Web-Chats nicht. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.45 |
 
 ## Ideen, nicht geplant
 

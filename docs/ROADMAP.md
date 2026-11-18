@@ -1,6 +1,6 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-17. Ab hier gilt der Plan 0.33–0.46. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-18. Ab hier gilt der Plan 0.33–0.46. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
 ## Plan 0.33 – 0.46: aufräumen, entscheiden, dann wenig Neues
 
@@ -23,7 +23,7 @@
 | **0.34.0** ✓ | Doppelungen I: eine Review-Umgebung, ein Buchungsweg; dazu Helpdesk-Fehler r23-04, Review-Umgebung vorbefüllt mit Umsystemen, Checkout aus Workspaces (geliefert 2026-11-16) | Entscheid + Entfernen | E1, E2 ✓ |
 | **0.35.0** ✓ | Weniger Begriffe: Fokus und Bereiche, Spielstand abschaltbar; dazu tote Klicks, Verbindungshinweis, Worktrees in Workspaces (geliefert 2026-11-16) | Entscheid + Vereinfachen | E3, E4 ✓ |
 | **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E12, E13 ✓ |
-| 0.37.0 | Server zerlegen I: Routen und Clients in eigene Module | Refactoring | – |
+| **0.37.0** ✓ | Server zerlegen I: Routentabelle in `routes.py`, Clients und Demo in eigene Module, `server.py` 5'301 → 3'794 Zeilen (geliefert 2026-11-18) | Refactoring | – |
 | 0.38.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
 | 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
 | 0.40.0 | Agenten aufräumen: ein Weg für Review und Nachbessern, leichter Standard-Zyklus | Refactoring + Vereinfachen | E5 |
@@ -45,7 +45,7 @@
 | E5 | Standard-Zyklus der Agenten? | **Entschieden 2026-11-16:** Umsetzen → Review, Planen und Test je Ticket zuschaltbar | 0.40 |
 | E6 | Oberfläche mit oder ohne Build-Schritt? | **Entschieden 2026-11-16:** Build (React) nur für die eigene Privat-App; die tinyops-Seite bleibt ohne Build | 0.39 |
 | E7 | Privat und Geschäft? | **Entschieden 2026-11-16:** zwei lokale Instanzen; die Privat-App in eigenem Repo mit eigenem Release-Zyklus (E7a) | 0.46 |
-| E8 | KI-Projekte: woher kommen die Daten? | Nur was du gibst: Link mit Notiz (Lesezeichen «In tinyops merken») und Import des Daten-Exports. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.45 |
+| E8 | KI-Projekte: woher kommen die Daten? | Lesezeichen und Daten-Export, dazu neu (18.11.): ein Prompt, mit dem die Chat-App deine offenen Themen als JSON liefert, und die lokalen Sitzungen der Coding-Agenten. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.45 |
 | E9–E11 | App: React-PWA, HTTPS mit echtem Namen, Heim- und Arbeitsadresse je Instanz | **Entschieden 2026-11-16** (siehe Entscheide) | 0.46 |
 | E12 | Dürfen Agenten pushen? | **Entschieden 2026-11-17:** je Agent einschaltbar; nur der eigene Lauf-Branch. tinyops selbst pusht nie | 0.36 |
 | E13 | Wie koppelt sich ein Gerät? | **Entschieden 2026-11-17:** Einmal-Code je Gerät; die tinyops-Seite per Cookie, die eigene React-App per Token und CORS | 0.36 |
@@ -81,7 +81,7 @@
 - Vorgezogen aus dem letzten Release: tinyops als App (PWA) mit Handy-Kopplung. 0.36.2 ergänzt die Kopplung für die eigene React-App (E9, E11): Token statt Cookie, CORS für ihre Adresse.
 - **Fertig, wenn:** Prüfabschnitt 0.36 durch, vor allem `r36-01` und `r36-05` mit echten Systemen.
 
-**0.37.0 – Server zerlegen I**
+**0.37.0 – Server zerlegen I** ✓ (Routen-Schnappschuss mit 74 Aufrufen, `routes.py`, `common.py`, `httpclient.py`, `gitlab_client.py`, `jira_client.py`, `ideas.py`, `demo.py`)
 - `make_handler` (720 Zeilen) wird eine Routentabelle in `routes.py`.
 - `GitLabClient`, `JiraClient`, `Http` und `DemoClient` kommen in eigene Module.
 - Vorher ein Test, der alle Routen und Antworten festhält, damit nichts verloren geht.

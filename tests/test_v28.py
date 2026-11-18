@@ -267,8 +267,8 @@ class Ui(unittest.TestCase):
         self.assertEqual(ids - helped - {"more"}, set())
 
     def test_logo_route_and_callback_page(self):
-        src = (ROOT / "server.py").read_text(encoding="utf-8")
-        self.assertIn('path == "/api/m365/callback"', src)
+        src = (ROOT / "routes.py").read_text(encoding="utf-8")          # 0.37: Routen liegen in routes.py
+        self.assertIn('"/api/m365/callback"', src)
         self.assertIn("html_escape(msg)", src)
 
 

@@ -575,7 +575,7 @@ class AppApi(unittest.TestCase):
         self.assertIn("restricted", str(cm.exception))
 
     def test_agents_route_not_gated(self):
-        src = (ROOT / "server.py").read_text()
+        src = (ROOT / "server.py").read_text() + (ROOT / "routes.py").read_text()
         self.assertNotIn('"testenv"', src)                 # 0.34 (E2): die alte Testumgebung und ihr Schalter sind weg
 
 

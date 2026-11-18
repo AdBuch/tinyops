@@ -102,7 +102,15 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 - [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
-- [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten
+- [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
+
+## 0.37.0
+
+Reines Refactoring. Von Hand nur ein Rundgang, ob sich wirklich nichts geändert hat.
+
+- [ ] `r37-01` Einen Arbeitstag normal mit tinyops arbeiten: Fokus, Detail-Panel, Board, Einstellungen speichern, Agent zuweisen, Zeit ansehen. Fällt etwas anders aus als mit 0.36, ist das ein Fehler
+- [ ] `r37-02` Alle Routen antworten wie vor dem Umbau (Status, Typ, Form) [auto: test_routes.Routes]
+- [ ] `r37-03` `server.py` bleibt unter 3'800 Zeilen [auto: test_routes.Sizes]
 
 ## 0.36.0
 

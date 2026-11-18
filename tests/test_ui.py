@@ -296,9 +296,16 @@ class AgentCycle(UiCase):
     def test_plan_gate_develop_brief_manual(self):
         pg = self.pg
         self.tab("Listen")
-        sel = pg.locator("select[data-aassign]:visible").first
-        sel.scroll_into_view_if_needed()
-        sel.select_option("ui")
+        for i in range(5):                          # die Liste wird beim Abgleich neu gezeichnet; dann einfach nochmals
+            try:
+                sel = pg.locator("select[data-aassign]:visible").first
+                sel.scroll_into_view_if_needed(timeout=3000)
+                sel.select_option("ui", timeout=3000)
+                break
+            except Exception:
+                if i == 4:
+                    raise
+                pg.wait_for_timeout(300)
         pg.wait_for_selector("#agPrompt", state="attached")
         pg.click('[data-aph="plan"]')
         pg.wait_for_timeout(800)
@@ -416,7 +423,7 @@ class AppAndPhone(UiCase):
         """0.36: App-Hülle verlinkt, Abschnitt «App und Handy» mit Koppeln; Agenten zum Ziehen in der Seitenleiste."""
         pg = self.pg
         self.assertEqual(pg.evaluate("document.querySelector('link[rel=manifest]').getAttribute('href')"), "/manifest.webmanifest")
-        self.assertGreater(pg.locator("[data-agdrag]").count(), 0)
+        self.wait_js("document.querySelectorAll('[data-agdrag]').length > 0", 15000)     # erscheint, sobald die Agenten geladen sind
         self.tab("Einstellungen")
         pg.wait_for_selector("#s-app")
         txt = pg.locator("#s-app").inner_text()
