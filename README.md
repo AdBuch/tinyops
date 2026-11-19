@@ -326,7 +326,7 @@ Voraussetzung: tinyops muss in diesem Browser unter der gewohnten Adresse erreic
 Agenten sind CLI-Programme (Claude Code, Codex, Mistral Vibe oder dein eigener Befehl), die auf diesem Rechner oder per SSH auf einem anderen laufen. Du weist sie auf der Karte einem Ticket zu; der Status steht danach direkt auf der Karte.
 
 1. Einstellungen → **Coding-Agenten** → «Verbindung hinzufügen» (Name, Rechner, Benutzer, Port, optional Schlüsseldatei). Auf dem Zielhost müssen `tmux` und der Agent installiert und angemeldet sein, und der SSH-Schlüssel muss ohne Passwortabfrage funktionieren (ssh-agent). Der Host-Schlüssel muss bekannt sein: einmal im Terminal `ssh <rechner>` ausführen.
-2. «Agent hinzufügen»: Name, Art, Verbindung (oder lokal), **Arbeitsordner** (auf dem Zielhost absolut, z. B. `/home/adrian/work`), optional zusätzliche Argumente (`--model opus`). «Testen» zeigt, woran es hängt.
+2. «Agent hinzufügen»: Name, Art, Verbindung (oder lokal), **Arbeitsordner** (auf dem Zielhost absolut, z. B. `/home/me/work`), optional zusätzliche Argumente (`--model opus`). «Testen» zeigt, woran es hängt.
 3. Unter GitLab → Projekte: optional **Agent-Ordner** (Standard: Projektname; das Repository muss unter dem Arbeitsordner liegen) und **Cloud-Agent erlaubt**.
 4. Auf der Karte «Agent zuweisen …», Prompt prüfen, «Zuweisen & starten». Der Chip zeigt den Stand; ein Klick öffnet das Log, «Stoppen» beendet die Sitzung.
 
@@ -670,7 +670,7 @@ Unter **Releases** auf https://github.com/AdBuch/tinyops liegt für jedes System
 - `tinyops-launcher-linux-x64`
 - `tinyops-launcher.pyz`: läuft überall mit `python3 tinyops-launcher.pyz`
 
-Herunterladen und starten (macOS/Linux vorher `chmod +x`). Beim ersten Mal lädt er tinyops in einen eigenen Ordner, danach hält `start.py` es aktuell. Der Browser geht auf, sobald tinyops läuft. Voraussetzung: git und Python 3.10+.
+Herunterladen und starten (macOS/Linux vorher `chmod +x`). Bricht der Start mit einem Fehler zu `ssl` oder `OPENSSL` ab (Launcher vor 0.37.1), startest du direkt mit `python3 ~/.local/share/tinyops/app/start.py` oder nimmst `tinyops-launcher.pyz`. Beim ersten Mal lädt er tinyops in einen eigenen Ordner, danach hält `start.py` es aktuell. Der Browser geht auf, sobald tinyops läuft. Voraussetzung: git und Python 3.10+.
 
     tinyops-launcher                 # laden bzw. aktualisieren, starten, Browser
     tinyops-launcher --demo          # mit Demo-Daten

@@ -111,6 +111,7 @@ Reines Refactoring. Von Hand nur ein Rundgang, ob sich wirklich nichts geändert
 - [ ] `r37-01` Einen Arbeitstag normal mit tinyops arbeiten: Fokus, Detail-Panel, Board, Einstellungen speichern, Agent zuweisen, Zeit ansehen. Fällt etwas anders aus als mit 0.36, ist das ein Fehler
 - [ ] `r37-02` Alle Routen antworten wie vor dem Umbau (Status, Typ, Form) [auto: test_routes.Routes]
 - [ ] `r37-03` `server.py` bleibt unter 3'800 Zeilen [auto: test_routes.Sizes]
+- [ ] `r37-04` Gepackter Launcher gibt seine Bibliothekspfade nicht an Python und git weiter [auto: test_launcher.Launcher]
 
 ## 0.36.0
 

@@ -3980,7 +3980,7 @@ function renderAgentCfg() {
       <label class="sm">Name<input type="text" data-ag="${i}" data-f="name" value="${esc(a.name || '')}" placeholder="claude-devvm" maxlength="40"></label>
       <label class="sm">Art<select data-ag="${i}" data-f="kind">${kinds.map(k => `<option value="${esc(k.id)}" ${a.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select></label>
       <label class="sm">Verbindung<select data-ag="${i}" data-f="connection">${conOpts(a.connection || 'local')}</select></label>
-      <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/adrian/work"></label>
+      <label class="sm">Arbeitsordner<input type="text" data-ag="${i}" data-f="workspace_root" value="${esc(a.workspace_root || '')}" placeholder="/home/me/work"></label>
       <label class="sm">Zusätzliche Argumente<input type="text" data-ag="${i}" data-f="extra_args" value="${esc(a.extra_args || '')}" placeholder="--model opus"></label>
       <label class="sm" title="Danach wird der Lauf beendet (Prozesse und tmux-Sitzung). 0 = kein Limit">Zeitlimit in Minuten<input type="number" min="0" max="1440" data-ag="${i}" data-f="max_minutes" value="${esc(a.max_minutes ?? 60)}"></label>
       ${['goose', 'opencode'].includes(a.kind) ? `<label class="sm" title="Modellname, wie ihn der Anbieter oder Proxy kennt. Laufen alle Modelle über denselben Proxy: je Modell einen eigenen Agenten anlegen.">Modell<input type="text" data-ag="${i}" data-f="model" value="${esc(a.model || '')}" placeholder="qwen2.5-coder:32b"></label>

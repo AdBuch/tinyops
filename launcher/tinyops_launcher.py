@@ -42,6 +42,24 @@ def default_dir():
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "tinyops" / "app"
 
 
+def clean_frozen_env(environ=None, frozen=None):
+    """Als PyInstaller-Datei zeigt LD_LIBRARY_PATH (macOS: DYLD_LIBRARY_PATH) auf die mitgepackten Bibliotheken.
+    Erbt das System-Python das, lädt es dort eine ältere OpenSSL und «import ssl» bricht ab (0.37.1, Python 3.14).
+    Für alle Kindprozesse (Python, git, Browser) den ursprünglichen Wert zurücksetzen bzw. die Variable entfernen."""
+    env = os.environ if environ is None else environ
+    if not (getattr(sys, "frozen", False) if frozen is None else frozen):
+        return env
+    for var in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+        orig = env.get(var + "_ORIG")
+        if orig is not None:
+            env[var] = orig
+        else:
+            env.pop(var, None)
+    for var in ("PYTHONHOME", "PYTHONPATH"):
+        env.pop(var, None)
+    return env
+
+
 def find_python():
     """Ein Python ≥ 3.10 auf dem Rechner. Als .exe gebaut ist sys.executable der Launcher selbst, nicht Python."""
     cands = []
@@ -141,6 +159,7 @@ def open_when_up(port, timeout=90):
 
 
 def main(argv=None):
+    clean_frozen_env()                     # vor dem ersten Kindprozess (Python suchen, git, Browser)
     ap = argparse.ArgumentParser(prog="tinyops-launcher", description="Lädt tinyops, hält es aktuell und startet es.")
     ap.add_argument("--dir", default=os.environ.get("TINYOPS_APP_DIR") or str(default_dir()), help="Installationsordner")
     ap.add_argument("--repo", default=os.environ.get("TINYOPS_REPO") or DEFAULT_REPO, help="Repo, aus dem geladen wird")

@@ -5,6 +5,12 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.37.1]
+
+### Behoben
+- **Linux-Launcher startete tinyops nicht** (auf einem neuen PC mit Python 3.14): «`import ssl` … version `OPENSSL_3.3.0` not found». Der gepackte Launcher gab den Pfad zu seinen mitgepackten Bibliotheken (`LD_LIBRARY_PATH`) an das System-Python weiter, das dann eine ältere OpenSSL lud. Jetzt setzt er den Pfad für alle Kindprozesse (Python, git, Browser) zurück; unter macOS ebenso `DYLD_LIBRARY_PATH`.
+- Ausweg mit älteren Launchern: `python3 ~/.local/share/tinyops/app/start.py` oder `python3 tinyops-launcher.pyz`.
+
 ## [0.37.0]
 
 Server zerlegen I. Ein reines Refactoring: Für dich ändert sich nichts. `server.py` ist um 1'500 Zeilen kürzer (5'301 → 3'794).

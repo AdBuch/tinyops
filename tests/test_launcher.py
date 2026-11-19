@@ -75,6 +75,18 @@ class Launcher(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("Herunterladen fehlgeschlagen", out)
 
+    def test_frozen_env_does_not_leak_bundled_libs(self):
+        """0.37.1: Der gepackte Launcher gab LD_LIBRARY_PATH (mitgepackte OpenSSL) an das System-Python weiter → «import ssl» brach ab."""
+        sys.path.insert(0, str(ROOT / "launcher"))
+        import tinyops_launcher as tl
+        env = {"LD_LIBRARY_PATH": "/tmp/_MEIabc", "LD_LIBRARY_PATH_ORIG": "/opt/lib", "DYLD_LIBRARY_PATH": "/tmp/_MEIabc", "PYTHONHOME": "/tmp/_MEIabc", "PATH": "/usr/bin"}
+        tl.clean_frozen_env(env, frozen=True)
+        self.assertEqual(env, {"LD_LIBRARY_PATH": "/opt/lib", "LD_LIBRARY_PATH_ORIG": "/opt/lib", "PATH": "/usr/bin"})
+        env = {"LD_LIBRARY_PATH": "/tmp/_MEIabc"}
+        self.assertEqual(tl.clean_frozen_env(env, frozen=True), {})
+        env = {"LD_LIBRARY_PATH": "/usr/local/lib"}
+        self.assertEqual(tl.clean_frozen_env(env, frozen=False), {"LD_LIBRARY_PATH": "/usr/local/lib"})      # als Skript: nichts anfassen
+
     def test_hints(self):
         import tinyops_launcher as tl
         self.assertIn("git", tl.hint_install("git"))
