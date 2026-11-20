@@ -783,7 +783,17 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
 
 ## 10. Dateien
 
-    server.py            Config, App (Zustand und Aktionen), Start
+    server.py            Ort der Config, Kern von App (Clients, Speicher, Audit), Start
+    config.py            Standardwerte, Config laden, Umgebungsvariablen
+    area_sync.py         Bereich Übersicht und Sync (GitLab, Jira, GitHub, Sonar, Helpdesk)
+    area_tickets.py      Bereich Tickets, Board und Ideen
+    area_agents.py       Bereich Agenten-Anbindung, Review-Punkte, Prompts
+    area_time.py         Bereich Zeit und BCS
+    area_focus.py        Bereich Fokus (Schritte, Sitzung, Arbeitsfläche)
+    area_qa.py           Bereich Prüfen und Nutzungsbericht
+    area_workspaces.py   Bereich Workspaces
+    area_m365.py         Bereich Microsoft 365
+    area_ide.py          Bereich IntelliJ und Review-Umgebung
     routes.py            HTTP: Zugang (Host, Token, Geräte), Routentabelle, Antworten
     common.py            gemeinsame Bausteine: Fehlerarten, Zeit, Jira-Keys, Secrets auflösen
     httpclient.py        HTTP-Client für GitLab, Jira und Co. (ohne Weiterleitungen)

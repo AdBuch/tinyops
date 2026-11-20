@@ -5,6 +5,29 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.38.0]
+
+Server zerlegen II. Ein reines Refactoring: Für dich ändert sich nichts. `server.py` hat noch 743 Zeilen (vor 0.37: 5'301).
+
+### Geändert
+- **App in neun Bereiche geteilt**, je ein Modul `area_*.py`:
+  - Übersicht und Sync
+  - Tickets, Board und Ideen
+  - Agenten-Anbindung
+  - Zeit und BCS
+  - Fokus
+  - Prüfen
+  - Workspaces
+  - Microsoft 365
+  - IntelliJ und Review-Umgebung
+- `server.py` behält nur den Kern: Config anwenden, Clients, Speicher, Audit, Start. Standardwerte und Config-Hilfen liegen in `config.py`.
+- **Grenzen sichtbar:** Jeder Bereich nennt in `USES`, welche Methoden anderer Bereiche er aufruft. `tests/test_areas.py` prüft, dass es genau diese sind, dass keine Methode doppelt steht und dass die Grössen eingehalten sind (`server.py` unter 1'500, jeder Bereich unter 1'000 Zeilen).
+- Ehrlich: Die Bereiche teilen sich weiter `self` (Config, Speicher, Audit, Cache). Sie sind Mixins, keine Dienste mit eigenem Zustand. Die Querzugriffe sind jetzt aber aufgeschrieben und geprüft; die Übersicht (Sync) braucht als einzige fast alle anderen.
+- `agents.py` und `settings.py` sind noch grösser als 1'000 Zeilen. Sie kommen mit 0.40 und 0.41 dran.
+
+### Prüfliste
+- `r21-06` (Windows-Start) ist in `r211-03` aufgegangen.
+
 ## [0.37.1]
 
 ### Behoben

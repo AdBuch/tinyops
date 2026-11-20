@@ -112,9 +112,9 @@ class Routes(unittest.TestCase):
 
 class Sizes(unittest.TestCase):
     def test_server_stays_small(self):
-        """0.37: server.py ist 1'500 Zeilen kürzer (5'301 → unter 3'800). Neues gehört in eigene Module, nicht zurück in server.py."""
+        """0.37: server.py ist 1'500 Zeilen kürzer (5'301 → unter 3'800); 0.38: unter 1'500 (siehe test_areas). Neues gehört in eigene Module."""
         n = len((ROOT / "server.py").read_text(encoding="utf-8").splitlines())
-        self.assertLess(n, 3800, "server.py wächst wieder: %d Zeilen" % n)
+        self.assertLess(n, 1500, "server.py wächst wieder: %d Zeilen" % n)
         self.assertNotIn("def make_handler(app):\n    cfg", (ROOT / "server.py").read_text(encoding="utf-8"))
 
 

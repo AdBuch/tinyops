@@ -96,13 +96,20 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r21-03` Nochmals `python3 start.py --check` → «Auf dem neuesten Stand» [auto: test_start.Starter]
 - [ ] `r21-04` Eine Datei im Checkout ändern, `python3 start.py` → «Geänderte Dateien … kein Update», tinyops startet trotzdem [auto: test_start.Starter]
 - [ ] `r21-05` VPN/Netz aus, `python3 start.py` → «Nicht erreichbar … Start mit dem, was da ist» [auto: test_start.Starter]
-- [ ] `r21-06` Windows (falls genutzt): Doppelklick auf `start.cmd` startet wie unter Linux; beim Launcher die SmartScreen-Warnung mit «Weitere Informationen → Trotzdem ausführen» übergehen
 
 ## 0.21.1
 
-- [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf
+- [ ] `r211-03` Launcher für dein System herunterladen und starten (ohne bestehende Installation) → lädt nach `~/.local/share/tinyops/app` bzw. `%LOCALAPPDATA%\tinyops\app`, Browser geht auf; unter Windows auch Doppelklick auf `start.cmd`, SmartScreen mit «Weitere Informationen → Trotzdem ausführen» übergehen (früher `r21-06`)
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
+
+## 0.38.0
+
+Reines Refactoring. `r21-06` (Windows-Start) ist in `r211-03` aufgegangen.
+
+- [ ] `r38-01` Einen Arbeitstag normal mit tinyops arbeiten, wie bei `r37-01`. Fällt etwas anders aus als mit 0.37, ist das ein Fehler
+- [ ] `r38-02` Jeder Bereich ruft nur die Bereiche auf, die er in USES nennt; `server.py` unter 1'500 Zeilen, kein Bereich über 1'000 [auto: test_areas.Areas]
+- [ ] `r38-03` Alle Routen antworten wie vor dem Umbau [auto: test_routes.Routes]
 
 ## 0.37.0
 

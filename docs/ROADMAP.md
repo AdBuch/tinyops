@@ -1,6 +1,6 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-18. Ab hier gilt der Plan 0.33–0.46. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-20. Ab hier gilt der Plan 0.33–0.46. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
 ## Plan 0.33 – 0.46: aufräumen, entscheiden, dann wenig Neues
 
@@ -24,13 +24,13 @@
 | **0.35.0** ✓ | Weniger Begriffe: Fokus und Bereiche, Spielstand abschaltbar; dazu tote Klicks, Verbindungshinweis, Worktrees in Workspaces (geliefert 2026-11-16) | Entscheid + Vereinfachen | E3, E4 ✓ |
 | **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E12, E13 ✓ |
 | **0.37.0** ✓ | Server zerlegen I: Routentabelle in `routes.py`, Clients und Demo in eigene Module, `server.py` 5'301 → 3'794 Zeilen (geliefert 2026-11-18) | Refactoring | – |
-| 0.38.0 | Server zerlegen II: App in Bereiche, `server.py` unter 1'500 Zeilen | Refactoring | – |
-| 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt | Refactoring | E6 |
-| 0.40.0 | Agenten aufräumen: ein Weg für Review und Nachbessern, leichter Standard-Zyklus | Refactoring + Vereinfachen | E5 |
+| **0.38.0** ✓ | Server zerlegen II: App in neun Bereiche (`area_*.py`) mit geprüften Querzugriffen, `config.py`, `server.py` 3'794 → 743 Zeilen (geliefert 2026-11-20) | Refactoring | – |
+| 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt; dazu QR-Code beim Koppeln, Klickbares im Detail-Panel | Refactoring + Korrekturen | E6 |
+| 0.40.0 | Agenten aufräumen: ein Weg für Review und Nachbessern, leichter Standard-Zyklus; dazu Sitzung fortsetzen, Git-User je Agent, KI-Vorfilter für fremde Reviews, Prüfliste je Ticket | Refactoring + Wünsche | E5 |
 | 0.41.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
 | 0.42.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
 | 0.43.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
-| 0.44.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab) | Neu, klein | – |
+| 0.44.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab), tinyops ohne Code-Plattform nutzbar | Neu, klein | – |
 | 0.45.0 | Neu: angefangene Projekte aus Claude, ChatGPT und Mistral tracken | Neu, klein | E8 |
 | 0.46.0 | Neu: zweiter Bereich (Privat/Geschäft) mit eigenem Worker; die App gibt es seit 0.36 | Neu | E7 |
 
@@ -87,7 +87,7 @@
 - Vorher ein Test, der alle Routen und Antworten festhält, damit nichts verloren geht.
 - **Fertig, wenn:** Alle Tests sind grün, die Routen sind unverändert, und `server.py` ist 1'500 Zeilen kürzer.
 
-**0.38.0 – Server zerlegen II**
+**0.38.0 – Server zerlegen II** ✓ (Bereiche als Mixins mit `USES`, geprüft von `tests/test_areas.py`; `agents.py` und `settings.py` bleiben bis 0.40/0.41 über 1'000 Zeilen)
 - `App` in Bereiche mit klaren Grenzen:
   - Übersicht und Sync
   - Tickets und Ideen
@@ -110,12 +110,21 @@
   - Felder
   - Hilfe
 - Doppelte Stile und Dialog-Muster werden zusammengeführt.
+- Korrektur-Platz aus den Berichten vom 20.11.:
+  - **QR-Code beim Koppeln** (Prüfbericht `r36-05`): Adresse und Code als QR, erzeugt ohne Fremdbibliothek.
+  - **Klickbares im Detail-Panel:** Branch- und Code-Angaben kopieren beim Klick, Chips filtern (16 tote Klicks).
+  - **Agentenfenster als Seitenpanel** statt Dialog (182 Klicks, 24 Wutklicks im Dialog).
 - **Fertig, wenn:** Keine Datei hat mehr als 1'200 Zeilen, die UI-Tests aus 0.33 sind grün, und es gibt sichtbar keinen Unterschied.
 
 **0.40.0 – Agenten aufräumen**
 - `agents.py` wird aufgeteilt in Verbindung (SSH, tmux, lokal), Hilfsbefehle, Ergebnisse und Phasen.
 - Ein Weg für Review, Vorprüfen und Nachbessern. Der alte Parameter `prereview` entfällt.
 - E5 umsetzen.
+- Aus deinen Wünschen vom 18. und 20.11.:
+  - **Sitzung fortsetzen:** «Weiterführen» setzt dieselbe Agenten-Sitzung fort (z. B. `claude --resume`), statt einen neuen Lauf zu starten. Der Agent nennt am Ende seine Sitzung, damit du sie selbst öffnen kannst. Vermutlich der Grund, warum `r36-01` fehlschlug.
+  - **Git-User je Agent:** Name und E-Mail für Commits, für den Lauf gesetzt (auch auf entfernten Rechnern).
+  - **KI-Vorfilter für fremde Reviews:** Ein Agent sieht einen MR von Kollegen zuerst durch und markiert, was du anschauen musst. Nur lesend, nichts geht nach GitLab.
+  - **Prüfliste je Ticket:** wie «Prüfen», aber je Ticket: was geändert wurde, was zu testen ist, was getestet ist. Gespeist aus den Berichten und `tinyops-manual` der Läufe.
 - **Fertig, wenn:** Ein kleines Ticket braucht zwei Klicks bis zum Review, und Planen und Test lassen sich zuschalten.
 
 **0.41.0 – Einstellungen und Datenbank**
@@ -143,6 +152,8 @@
 **0.44.0 – Weitere Projekte tracken**
 - Ein «Vorhaben» ohne Jira und GitLab: Name, Ziel, nächster Schritt, Status, Links. Optional mit einem Ordner aus Workspaces oder einem GitHub-Repo.
 - Erscheint im Fokus und in den Listen wie ein Ticket.
+- **Ohne Code-Plattform nutzbar** (19.11.): tinyops läuft auch nur mit Workspaces, Ideen und Vorhaben, etwa zu Hause ohne GitLab. Die Meldung «GitLab-Adresse fehlt» erscheint nicht mehr, wenn GitHub oder gar keine Plattform eingerichtet ist.
+- **Forgejo** als dritte Quelle neben GitLab und GitHub, sobald du eines hast. Gehört nach E7a vielleicht eher in die Privat-App.
 - **Fertig, wenn:** Ein privates GitHub-Projekt und ein Projekt ohne Repo stehen mit nächstem Schritt in den Listen.
 
 **0.45.0 – KI-Projekte aus Claude, ChatGPT, Mistral**
@@ -209,6 +220,17 @@
 | 0.40 | Agenten aufräumen: Rollen ersetzen die Auswahl je Phase; «Mit Vorschau» und «Weiterführen» zu einem Weg zusammenlegen, wenn sich «Weiterführen» bewährt. | Zwei Wege für dasselbe. |
 | 0.41 | Einstellungen: Agenten und KI-Entwurf als geführte Einrichtung mit Test. Hinweis, wenn das lokale Modell länger als 20 s braucht (kleineres Modell vorschlagen). | 14× Fokus ↔ Einstellungen, Hilfe 28×, Bewertung bis 87 s. |
 | 0.43 | M365 Schritt für Schritt mit Text für die IT (wie geplant). | Hilfe jetzt 30× aufgeklappt. |
+
+### Auswertung 20.11.: Prüf- und Nutzungsbericht 0.37
+
+**Was die Berichte zeigen**
+- **Prüfliste:** 24 geprüft, 2 Fehler.
+  - `r36-01` (Weiterführen) ohne Notiz. Dein Wunsch vom 18.11. «in der gleichen Session weitergehen» lässt vermuten, dass du die bestehende Agenten-Sitzung erwartet hast, nicht einen neuen Lauf. Kommt in 0.40.
+  - `r36-05`: Es fehlte der QR-Code. Kommt in 0.39.
+- **Ansichten:** Fokus 73 %, Einstellungen 12 %, Prüfen 6 %.
+- **Agentenfenster:** weiter das meistgeklickte Ziel (182 Klicks, 24 Wutklicks). Das × wurde 21× benutzt. Als Seitenpanel in 0.39.
+- **BCS:** 69 Meldungen «nicht erreichbar». 23 davon schon mit der Pause aus 0.36 («nächster Versuch in …»), die übrigen und der Median von 40 s stammen aus älteren Versionen (zweimal 20 s).
+- **Wünsche:** vier neue (Review-Vorfilter, Sitzung fortsetzen, Git-User je Agent, Prüfliste je Ticket), alle in 0.40.
 
 ### Bewusst nicht im Plan bis 0.46
 - Native App (iOS/Android; die Web-App seit 0.36 reicht), zentrale Datenbank, Agenten-Cluster über mehrere Rechner
