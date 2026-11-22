@@ -98,11 +98,23 @@ function fxItem(c, x) {
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   if (x.iid) b.push(`<button class="ibtn" data-mrtry="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" title="Prompts, git-Befehle und Review-Umgebung">${ic('flask')} Ausprobieren</button>`);
   return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : branchIcon(x.branch, 20)}
-    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code>${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms && !(x.draft && x.merge_status === 'draft_status') ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code data-copy="${esc(x.branch)}" title="Klick kopiert den Branch">${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms && !(x.draft && x.merge_status === 'draft_status') ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
 }
-function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); }
-function closeFx() { FXID = null; const p = $('fx'); p.classList.remove('on'); setTimeout(() => { if (!FXID) p.hidden = true; }, 200); }
+function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; document.body.classList.add('fxopen'); requestAnimationFrame(() => p.classList.add('on')); }
+function closeFx() { FXID = null; const p = $('fx'); p.classList.remove('on'); document.body.classList.remove('fxopen'); setTimeout(() => { if (!FXID) p.hidden = true; }, 200); }
+// 0.39: Klicks im Detail-Panel tun etwas (Nutzungsbericht: 30 tote Klicks auf Code, Namen, Chips und Titel).
+// Code und Namen kopieren, Chips erklären sich, der Titel eines MR oder Branches öffnet ihn.
+$('fx').addEventListener('click', ev => {
+  const t = ev.target;
+  if (!t.closest || t.closest('a, button, input, textarea, select, label, summary')) return;
+  const cp = t.closest('code, .picn, [data-copy]');
+  if (cp) { const v = cp.dataset.copy || (cp.querySelector('code') || cp).textContent.trim(); if (v) copyText(v, 'Kopiert'); return; }
+  const chip = t.closest('.chip[title]');
+  if (chip) { toast(chip.title); return; }
+  const it = t.closest('.fxitem'), a = it && t.closest('.nm b') && it.querySelector('.ibtns a.ibtn[href^="http"]');
+  if (a) window.open(a.href, '_blank', 'noopener');
+});
 function fEntry(id) { return focusEntries().find(x => x.id === id); }
 async function fStage(c, stage) {
   await post('/api/board/stage', c.key ? { key: c.key, stage } : { ref: c.id, stage });

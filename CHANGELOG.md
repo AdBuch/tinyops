@@ -5,6 +5,29 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.39.0]
+
+Oberfläche zerlegen, dazu drei Korrekturen aus deinen Berichten vom 20.11.
+
+### Neu
+- **QR-Code beim Koppeln** (Prüfbericht `r36-05`): Einstellungen → App und Handy → «Code erzeugen» zeigt neben dem Code einen QR-Code. Die Handy-Kamera öffnet damit die Kopplungsseite, der Code steht schon im Feld; du tippst nur noch «Koppeln». Der Code steht hinter `#` in der Adresse: Er geht nicht übers Netz und landet in keinem Log, und die Seite nimmt ihn gleich wieder aus der Adresse. Erzeugt ohne Fremdbibliothek (`qr.py`). Ohne eingetragene Adresse fürs Handy gibt es keinen QR-Code.
+
+### Geändert
+- **Agentenfenster als Seitenpanel** (Nutzungsbericht: 182 Klicks, 24 Wutklicks im Dialog): Zuweisen und Lauf öffnen sich rechts. Fokus und Listen bleiben daneben bedienbar, ein Klick daneben schliesst nichts mehr. × oder Esc schliessen. Ab 2'300 px Breite steht es neben dem Detail-Panel statt darüber. Kommt es aus einem anderen Dialog (z. B. Workspaces), öffnet es wie bisher darüber.
+- **Klicks im Detail-Panel tun etwas** (30 tote Klicks): Branch-Code und Namen von Repo und Branch kopieren beim Klick, Chips mit Erklärung zeigen sie, der Titel eines MR öffnet ihn.
+
+### Intern
+- **Oberfläche zerlegt:** `static/index.html` (5'155 Zeilen) ist jetzt `index.html` (nur HTML), `app.css` und 16 Dateien in `static/js/`, je Ansicht eine, dazu Bausteine (`core.js`: API, Meldungen, Kopieren, Speicher, Felder, Dialoge, Markdown, Piktogramme; `help.js`: Hilfe). Keine Datei hat mehr als 900 Zeilen.
+- Ohne Build-Schritt: `ui.py` setzt die Teile beim Start wieder zu einer Seite mit einem Skript zusammen, genau wie bis 0.38. Darum bleibt das Verhalten gleich, und der Offline-Cache der App braucht nichts Neues.
+- Ein Test prüft, dass jede Datei in `ui.py` steht, keine 1'200 Zeilen erreicht und das Skript fehlerfrei ist.
+- Ein Zeit-Test schlug kurz vor Mitternacht fehl (die Fokus-Sitzung endete am nächsten Tag). Er startet jetzt um 10 Uhr.
+
+### Prüfliste
+- `r37-01` und `r38-01` (Arbeitstag nach dem Umbau) gehen in `r39-01` auf, `r36-05` (Koppeln) in `r39-02`.
+
+### Nicht gemacht
+- Doppelte Stile und Dialog-Muster sind noch nicht zusammengeführt. Das hätte sichtbare Unterschiede gebracht; es kommt mit den Oberflächen-Änderungen in 0.40 und 0.41, wo die Dialoge ohnehin neu gebaut werden.
+
 ## [0.38.0]
 
 Server zerlegen II. Ein reines Refactoring: Für dich ändert sich nichts. `server.py` hat noch 743 Zeilen (vor 0.37: 5'301).

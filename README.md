@@ -467,7 +467,7 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 1. «Als App installieren» legt tinyops als eigenes Fenster an.
 2. Fürs Handy den Rechner erreichbar machen, ohne tinyops ins Netz zu stellen, z. B. mit `tailscale serve --bg 8765`. tinyops bleibt auf 127.0.0.1.
 3. Die Adresse (z. B. `https://mein-rechner.tailnet.ts.net`) eintragen und speichern; tinyops lässt diesen Namen dann zu.
-4. «Code erzeugen», auf dem Handy `<Adresse>/pair` öffnen und den Code eintippen (gilt 5 Minuten, einmal).
+4. «Code erzeugen». Mit der Handy-Kamera den QR-Code daneben scannen: Die Kopplungsseite öffnet sich mit eingesetztem Code. Ohne Kamera: auf dem Handy `<Adresse>/pair` öffnen und den Code eintippen (gilt 5 Minuten, einmal).
 
 **Eigene App** (React-PWA aus dem eigenen Repo, Entscheide E9–E11): Ihre Adresse unter «Adressen der eigenen App» eintragen. Sie koppelt sich mit demselben Code über `POST /api/pair/claim` mit `{"code": "…", "name": "…", "mode": "token"}`, bekommt `token` zurück und schickt es danach als `Authorization: Bearer <token>` (dazu `X-Requested-With: tinyops`). CORS gilt nur für die eingetragenen Adressen.
 
@@ -506,7 +506,7 @@ Von aussen sieht tinyops nur gekoppelte Geräte. Ein gekoppeltes Gerät ändert 
 
 **Zyklus.** Ein Ticket durchläuft mit Agenten vier Phasen, jede mit deiner Freigabe:
 
-1. **Planen.** Im Agenten-Dialog «Phase: Planen» wählen. Der Agent ändert nichts und liefert einen Plan. Du liest ihn und gibst frei oder gibst zurück.
+1. **Planen.** Im Agenten-Panel (seit 0.39 rechts neben der Liste) «Phase: Planen» wählen. Der Agent ändert nichts und liefert einen Plan. Du liest ihn und gibst frei oder gibst zurück.
 2. **Umsetzen.** Nach der Freigabe «Umsetzen vorbereiten …». Der Plan steht im Auftrag. Kleine Aufgaben kannst du ohne Plan direkt umsetzen lassen.
 3. **Review.** Ein zweiter Agent, gern ein lokales Modell, liest das Ergebnis und meldet je Kriterium sein Urteil.
 4. **Test.** Tests laufen lassen und ergänzen, Schritte für deinen Test von Hand beschreiben (`tinyops-manual`).
@@ -819,7 +819,11 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     aiquota.py           Rest-Kontingent der KI-Abos (früher usage.py)
     reviewenv.py         Review-Umgebung: Befehle, Umsysteme, Compose-Datei
     helpdesk.py          Helpdesk-Jira, nur lesend
-    static/index.html    Oberfläche
+    ui.py                setzt die Oberfläche zusammen: index.html + app.css + static/js in fester Reihenfolge, ohne Build
+    qr.py                QR-Code als SVG für die Handy-Kopplung, ohne Fremdbibliothek
+    static/index.html    Oberfläche: nur HTML, mit Platzhaltern für CSS und Skript
+    static/app.css       alle Stile
+    static/js/*.js       Skript je Ansicht (lists, board, agents, time, qa, settings, focus, detail, session, workspaces …), Bausteine in core.js
     prompts/*.md         Prompt-Vorlagen
     tests/               Unit-Tests und Fake-GitLab/Jira: python3 -m unittest discover -s tests -v
 

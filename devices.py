@@ -199,6 +199,9 @@ button{margin-top:18px;width:100%;font:600 16px system-ui,sans-serif;padding:13p
 <label for="name">Name dieses Geräts</label><input id="name" maxlength="40" placeholder="z. B. Mein Handy">
 <button type="submit">Koppeln</button><div id="msg" role="status"></div></form>
 </main><script>
+// 0.39: aus dem QR-Code kommt der Code nach dem #; er wird eingesetzt und aus der Adresse genommen
+(() => { const m = /[#&]code=([A-Za-z0-9-]{4,12})/.exec(location.hash); if (!m) return;
+  document.getElementById('code').value = m[1].toUpperCase(); history.replaceState(null, '', '/pair'); document.getElementById('name').focus(); })();
 document.getElementById('f').onsubmit = async ev => {
   ev.preventDefault();
   const m = document.getElementById('msg'); m.textContent = '';

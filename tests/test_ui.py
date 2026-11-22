@@ -447,6 +447,51 @@ class FxLayout(UiCase):
         self.assertGreaterEqual(bt["y"], nm["y"] + nm["height"] - 1)
 
 
+class SidePanel(UiCase):
+    def test_agent_window_is_side_panel(self):
+        """0.39: Das Agentenfenster ist ein Seitenpanel; die Seite daneben bleibt bedienbar, Esc schliesst es."""
+        pg = self.pg
+        self.tab("Listen")
+        for i in range(5):
+            try:
+                sel = pg.locator("select[data-aassign]:visible").first
+                sel.scroll_into_view_if_needed(timeout=3000)
+                sel.select_option("ui", timeout=3000)
+                break
+            except Exception:
+                if i == 4:
+                    raise
+                pg.wait_for_timeout(300)
+        pg.wait_for_selector("#agDlg[open] #agPrompt", state="attached")
+        self.assertTrue(pg.evaluate("$('agDlg').classList.contains('side') && !$('agDlg').matches(':modal')"))
+        box = pg.locator("#agDlg").bounding_box()
+        self.assertGreater(box["x"], 300)                                    # rechts, nicht in der Mitte über allem
+        pg.locator('.tab[data-view="focus"]').click()                        # daneben klicken geht und schliesst nicht
+        self.wait_js("!document.getElementById('viewFocus').hidden")
+        self.assertTrue(pg.evaluate("$('agDlg').open"))
+        pg.keyboard.press("Escape")
+        self.wait_js("!$('agDlg').open")
+
+    def test_detail_clicks_copy_and_explain(self):
+        """0.39: Im Detail-Panel kopiert ein Klick auf Branch-Code, Chips mit Erklärung zeigen sie (tote Klicks im Nutzungsbericht)."""
+        pg = self.pg
+        self.ctx.grant_permissions(["clipboard-read", "clipboard-write"])
+        q = "focusEntries().find(e => e.t === 'card' && (e.c.items || []).some(i => i.branch))"
+        self.wait_js(q, 15000)
+        pg.evaluate("openFx((%s).id)" % q)
+        code = pg.locator("#fx code[data-copy]").first
+        code.wait_for()
+        want = code.get_attribute("data-copy")
+        code.click()
+        self.wait_js("[...document.querySelectorAll('.toast')].some(t => t.textContent === 'Kopiert')")
+        self.assertEqual(pg.evaluate("navigator.clipboard.readText()"), want)
+        chip = pg.locator("#fx .chip[title]").first
+        if chip.count():
+            title = chip.get_attribute("title")
+            chip.click()
+            self.wait_js("[...document.querySelectorAll('.toast')].some(t => t.textContent === %s)" % json.dumps(title))
+
+
 class Terms(UiCase):
     def test_score_switch_and_areas(self):
         """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""

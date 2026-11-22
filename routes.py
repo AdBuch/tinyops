@@ -9,6 +9,7 @@ from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler
 
 import devices
+import qr
 import ui
 import secretstore as store
 import settings
@@ -353,7 +354,10 @@ def make_handler(app, base, version, load_config):
                 except devices.DeviceError as e:
                     return self._err(400, str(e))
                 app.audit("device.code", "", expires=out["expires"])
-                return self._send(200, dict(out, phone_url=(cfg.get("app") or {}).get("phone_url", "")))
+                phone = (cfg.get("app") or {}).get("phone_url", "")
+                # 0.39: QR-Code mit Adresse und Code (nach #, geht nicht übers Netz und landet in keinem Log)
+                link = phone.rstrip("/") + "/pair#code=" + out["code"] if phone else ""
+                return self._send(200, dict(out, phone_url=phone, link=link, qr=qr.svg(link) if link else ""))
             if method == "POST" and path == "/api/pair/revoke":
                 b = self._body()
                 try:

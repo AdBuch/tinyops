@@ -103,11 +103,21 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.39.0
+
+Oberfläche zerlegt (sichtbar gleich), dazu QR-Code, Agentenfenster als Seitenpanel und Klicks im Detail-Panel. Abgelöst: `r37-01` und `r38-01` (Arbeitstag nach dem Umbau) durch `r39-01`, `r36-05` (Koppeln) durch `r39-02`.
+
+- [ ] `r39-01` Einen Arbeitstag normal mit tinyops arbeiten: Fokus, Detail-Panel, Board, Listen, Zeit, Prüfen, Einstellungen speichern, Agent zuweisen. Ausser den Punkten unten sieht alles aus wie mit 0.37/0.38 und tut dasselbe; sonst ist das ein Fehler
+- [ ] `r39-02` Einstellungen → App und Handy: Adresse fürs Handy gespeichert, «Code erzeugen» → QR-Code neben dem Code; mit der Handy-Kamera scannen → Kopplungsseite mit eingesetztem Code, «Koppeln» → Panel auf dem Handy; «Entfernen» → Handy sieht «Noch nicht gekoppelt»
+- [ ] `r39-03` Agent zuweisen oder Lauf öffnen → Seitenpanel rechts; daneben im Fokus weiterklicken geht, das Panel bleibt offen; auf dem breiten Bildschirm steht es neben dem Detail-Panel; × oder Esc schliesst es. Im Detail-Panel öffnet ein Klick auf den Titel eines MR den MR
+- [ ] `r39-04` Detail-Panel: Klick auf Branch-Code, Repo- oder Branch-Namen kopiert ihn; Klick auf einen Chip mit Erklärung zeigt sie; das Agentenfenster ist ein Seitenpanel [auto: test_ui.SidePanel]
+- [ ] `r39-05` Jede Datei der Oberfläche steht in `ui.py`, keine hat 1'200 Zeilen oder mehr; die Seite ist ein Skript wie bisher [auto: test_v39.Parts]
+- [ ] `r39-06` QR-Code: Reed-Solomon, Suchmuster und Format nach Norm; ein Decoder liest Adresse und Code zurück [auto: test_v39.Qr]
+
 ## 0.38.0
 
 Reines Refactoring. `r21-06` (Windows-Start) ist in `r211-03` aufgegangen.
 
-- [ ] `r38-01` Einen Arbeitstag normal mit tinyops arbeiten, wie bei `r37-01`. Fällt etwas anders aus als mit 0.37, ist das ein Fehler
 - [ ] `r38-02` Jeder Bereich ruft nur die Bereiche auf, die er in USES nennt; `server.py` unter 1'500 Zeilen, kein Bereich über 1'000 [auto: test_areas.Areas]
 - [ ] `r38-03` Alle Routen antworten wie vor dem Umbau [auto: test_routes.Routes]
 
@@ -115,7 +125,6 @@ Reines Refactoring. `r21-06` (Windows-Start) ist in `r211-03` aufgegangen.
 
 Reines Refactoring. Von Hand nur ein Rundgang, ob sich wirklich nichts geändert hat.
 
-- [ ] `r37-01` Einen Arbeitstag normal mit tinyops arbeiten: Fokus, Detail-Panel, Board, Einstellungen speichern, Agent zuweisen, Zeit ansehen. Fällt etwas anders aus als mit 0.36, ist das ein Fehler
 - [ ] `r37-02` Alle Routen antworten wie vor dem Umbau (Status, Typ, Form) [auto: test_routes.Routes]
 - [ ] `r37-03` `server.py` bleibt unter 3'800 Zeilen [auto: test_routes.Sizes]
 - [ ] `r37-04` Gepackter Launcher gibt seine Bibliothekspfade nicht an Python und git weiter [auto: test_launcher.Launcher]
@@ -128,7 +137,6 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 - [ ] `r36-02` Einstellungen → Agenten: beim Remote-Agenten «Rollen-Vorschlag» und «pusht seinen Branch», speichern → Prompt beim Zuweisen beginnt mit `/developer`, nach dem Lauf liegt der Branch in GitLab; die Auswahl zeigt «… % frei» des Kontingents; Agent aus der Seitenleiste auf eine Aufgabe ziehen → Zuweisen-Dialog
 - [ ] `r36-03` Bei einem MR, in dem du Reviewer bist, in GitLab «Änderungen anfordern» → nach dem Abgleich steht er unter «Wartet» statt bei deinen Reviews; fordert der Autor das Review neu an, ist er wieder da
 - [ ] `r36-04` Helpdesk-Ticket im Fokus oder Panel → «Jira-Ticket daraus anlegen» → Entwurf mit Link und Problem prüfen, anlegen → Ticket in Jira, im Helpdesk-Panel steht der neue Key; das Helpdesk-Ticket ist unverändert
-- [ ] `r36-05` Einstellungen → App und Handy: Adresse (z. B. Tailscale) speichern, «Code erzeugen», auf dem Handy `<Adresse>/pair` mit dem Code → Panel auf dem Handy; «Entfernen» → Handy sieht «Noch nicht gekoppelt»; am Rechner «Als App installieren»
 - [ ] `r36-06` Fokus: die oberste Aufgabe zeigt «Worum es geht», «Fertig, wenn» und Teilschritte direkt im Hero [auto: test_ui.Views]
 - [ ] `r36-07` Jeder Dialog hat oben rechts ein ×, Klick daneben schliesst ihn (ausser mit Eingetipptem) [auto: test_ui.MrTry]
 - [ ] `r36-08` BCS nicht erreichbar → Meldung kommt sofort mit «nächster Versuch in …», statt eine Minute zu warten [auto: test_v36.BcsPause]

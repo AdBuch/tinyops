@@ -39,6 +39,22 @@ const fmtSecs = n => n >= 3600 ? Math.floor(n / 3600) + ' h ' + Math.floor(n % 3
 let agTimer = null;
 let agCloneT = null;
 function agClose() { clearInterval(agTimer); agTimer = null; clearTimeout(agCloneT); $('agDlg').close(); }
+// 0.39: Das Agentenfenster ist ein Seitenpanel (Nutzungsbericht: 182 Klicks, 24 Wutklicks im Dialog). Fokus und Listen bleiben
+// daneben bedienbar. Ist schon ein anderer Dialog offen (z. B. Workspaces), öffnet es wie bisher darüber.
+function agShow() {
+  const d = $('agDlg'), modal = [...document.querySelectorAll('dialog')].some(x => x !== d && x.open && x.matches(':modal'));
+  d.classList.toggle('side', !modal);
+  if (!(d.open && d.matches(':modal') === modal)) {
+    if (d.open) d.close();
+    if (modal) d.showModal(); else d.show();
+  }
+  d.scrollTop = 0;
+}
+document.addEventListener('keydown', ev => {   // Esc schliesst das Seitenpanel, solange kein Dialog darüber liegt
+  const d = $('agDlg');
+  if (ev.key !== 'Escape' || !d.open || d.matches(':modal') || document.querySelector('dialog:modal')) return;
+  ev.preventDefault(); ev.stopPropagation(); agClose();
+}, true);
 $('agDlg').addEventListener('close', () => { clearInterval(agTimer); agTimer = null; });
 async function openAgentDlg(o) {
   const ag = AG(), ctx = agCtx[o.ticket] || { key: '', title: '', url: '', items: [] };
@@ -134,7 +150,7 @@ async function openAgentDlg(o) {
     if ($('agAssign')) $('agAssign').onclick = () => go(false);
   }
   await draw();
-  $('agDlg').showModal();
+  agShow();
 }
 const PH_ORDER = ['plan', 'develop', 'review', 'test'], PH_L = { plan: 'Planen', develop: 'Umsetzen', review: 'Review', test: 'Test' };
 const NEXT_PH = { plan: 'develop', develop: 'review', review: 'test' };
@@ -465,7 +481,7 @@ async function openRunDlg(id) {
     };
   }
   await draw(true);
-  $('agDlg').showModal();
+  agShow();
   if (!r.active && r.status !== 'zugewiesen' && !r.ack) post('/api/agents/ack', { run: id }).then(load).catch(() => {});
   clearInterval(agTimer);
   const shape = x => JSON.stringify({ ...x, secs: 0 });

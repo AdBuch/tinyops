@@ -352,6 +352,9 @@
   .agdrag small { color: var(--quiet); } .agdrag.low small { color: var(--warn, #b7791f); } .agdrag.empty { opacity: .6; } .agdrag.empty small { color: var(--bad); }
   #viewFocus [data-fid].dropok, #fx.dropok, .bcard.dropok { outline: 2px dashed var(--accent); outline-offset: 2px; }
   .paircode { margin-top: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); display: grid; gap: 8px; }
+  .paircode.withqr { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; }
+  .paircode .pqr svg { display: block; width: 176px; height: 176px; border-radius: 6px; }
+  @media (max-width: 560px) { .paircode.withqr { grid-template-columns: minmax(0, 1fr); } }
   .paircode .pc { font: 700 30px/1 var(--mono); letter-spacing: .18em; color: var(--focus); }
   .devlist { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; }
   .devlist li { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; } .devlist li span:first-child { font-weight: 600; } .devlist li button { margin-left: auto; }
@@ -360,6 +363,11 @@
                    background: var(--surface); border: 1px solid var(--line); color: var(--quiet); }
   dialog > .dlgx:hover { color: var(--ink); }
   dialog textarea { height: 300px; font-family: var(--mono); font-size: 13px; }
+  /* 0.39: Agentenfenster als Seitenpanel rechts; auf sehr breiten Bildschirmen neben dem Detail-Panel statt darüber */
+  dialog.side { position: fixed; inset: calc(52px + var(--bar, 0px)) 0 0 auto; margin: 0; width: min(780px, 100vw) !important; max-width: 100vw; height: auto; max-height: none;
+                overflow: auto; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -16px 0 40px rgba(10, 14, 22, .18); z-index: 11; padding: 18px 22px 40px; }
+  @media (min-width: 2300px) { body.fxopen dialog.side { right: min(50vw, 860px); } }
+  @media (max-width: 800px) { dialog.side { inset: 0; z-index: 13; } }
   .toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--ground); padding: 9px 16px; border-radius: 10px; z-index: 20; max-width: 90vw; }
 
   /* Einstellungen */
@@ -893,6 +901,7 @@
   #fx { position: fixed; top: calc(52px + var(--bar, 0px)); right: 0; bottom: 0; width: min(50vw, 860px); z-index: 9; background: var(--surface); border-left: 1px solid var(--line);
         box-shadow: -16px 0 40px rgba(10, 14, 22, .14); transform: translateX(102%); transition: transform .18s ease; display: flex; flex-direction: column; }
   #fx.on { transform: none; }
+  #fx code, #fx .picn, #fx [data-copy] { cursor: copy; } #fx .chip[title] { cursor: help; } #fx .fxitem .nm b { cursor: pointer; }
   #fx .fxhead { padding: 16px 22px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
   #fx .fxtop { display: flex; gap: 8px; align-items: center; }
   #fx .fxtop .sp { flex: 1; }

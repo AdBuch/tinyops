@@ -26,8 +26,9 @@ function wireApp() {
       const tick = () => { const s = r.expires - Math.floor(Date.now() / 1000); const el = $('app-cdown'); if (!el) { clearInterval(appCodeT); return; }
         if (s <= 0) { $('app-codebox').innerHTML = '<div class="small quiet">Code abgelaufen. Bei Bedarf einen neuen erzeugen.</div>'; clearInterval(appCodeT); appDevices(); return; }
         el.textContent = `noch ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-      $('app-codebox').innerHTML = `<div class="paircode"><div class="pc">${esc(r.code)}</div><div class="small">Auf dem Handy öffnen: <b>${esc(url)}</b> <button class="quiet-btn" id="app-cpy">kopieren</button><br>Code eintippen. Gilt einmal, <span id="app-cdown"></span>.</div>
-        ${r.phone_url ? '' : '<div class="small" style="color:var(--warn)">Oben noch die Adresse fürs Handy eintragen und speichern, sonst lässt tinyops das Handy nicht herein.</div>'}</div>`;
+      // 0.39: QR-Code (Prüfbericht r36-05): Kamera aufs Bild, der Code steht dann schon im Feld
+      $('app-codebox').innerHTML = `<div class="paircode${r.qr ? ' withqr' : ''}">${r.qr ? `<div class="pqr" title="Mit der Kamera des Handys scannen">${r.qr}</div>` : ''}<div><div class="pc">${esc(r.code)}</div><div class="small">${r.qr ? 'Mit der Kamera scannen, oder auf' : 'Auf'} dem Handy öffnen: <b>${esc(url)}</b> <button class="quiet-btn" id="app-cpy">kopieren</button><br>${r.qr ? 'Der Code steht nach dem Scannen schon im Feld' : 'Code eintippen'}. Gilt einmal, <span id="app-cdown"></span>.</div>
+        ${r.phone_url ? '' : '<div class="small" style="color:var(--warn)">Oben noch die Adresse fürs Handy eintragen und speichern, sonst lässt tinyops das Handy nicht herein.</div>'}</div></div>`;
       $('app-cpy').onclick = () => copyText(url, 'Adresse');
       tick(); appCodeT = setInterval(tick, 1000);
       const poll = setInterval(() => { if (!$('app-cdown')) { clearInterval(poll); return; } appDevices(); }, 5000);

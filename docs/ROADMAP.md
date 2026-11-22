@@ -1,6 +1,6 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-20. Ab hier gilt der Plan 0.33–0.48. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-22. Ab hier gilt der Plan 0.33–0.48. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
 ## Plan 0.33 – 0.48: aufräumen, entscheiden, dann wenig Neues
 
@@ -33,7 +33,7 @@ Dafür kamen zwei Releases dazu (0.41 und 0.42). Alles ab «Einstellungen und Da
 | **0.36.0** ✓ | Vor dem Umbau: Lauf weiterführen mit Entscheidungen, Agenten mit Rollen/Push/Kontingent, Fokus-Aufgabe als Arbeitsfläche, Helpdesk → Jira, zurückgeschickte Reviews, BCS ohne Wartezeit, App mit Handy-Kopplung (geliefert 2026-11-17) | Wünsche + Korrekturen | E12, E13 ✓ |
 | **0.37.0** ✓ | Server zerlegen I: Routentabelle in `routes.py`, Clients und Demo in eigene Module, `server.py` 5'301 → 3'794 Zeilen (geliefert 2026-11-18) | Refactoring | – |
 | **0.38.0** ✓ | Server zerlegen II: App in neun Bereiche (`area_*.py`) mit geprüften Querzugriffen, `config.py`, `server.py` 3'794 → 743 Zeilen (geliefert 2026-11-20) | Refactoring | – |
-| 0.39.0 | Oberfläche zerlegen: CSS und JS in Module, ohne Build-Schritt; dazu QR-Code beim Koppeln, Klickbares im Detail-Panel | Refactoring + Korrekturen | E6 |
+| **0.39.0** ✓ | Oberfläche zerlegen: `index.html` 5'155 Zeilen → HTML, `app.css` und 16 Skriptteile (grösster 808 Zeilen), zusammengesetzt von `ui.py` ohne Build; dazu QR-Code beim Koppeln, Klickbares im Detail-Panel, Agentenfenster als Seitenpanel (geliefert 2026-11-22) | Refactoring + Korrekturen | E6 ✓ |
 | 0.40.0 | Agenten: vier Rollen und der Kreislauf. Planen → Entwickeln → Review → Test, Befunde gehen mit einem Klick zurück ans Entwickeln, in derselben Sitzung; `agents.py` aufgeteilt, Git-User je Agent | Refactoring + Wünsche | E5 ✓ |
 | 0.41.0 | Schneller zum Testen von Hand: «Jetzt testen» öffnet den Stand in IntelliJ, startet die Review-Umgebung und zeigt die Prüfliste je Ticket; ein Fehler geht mit Notiz zurück ans Entwickeln | Neu | – |
 | 0.42.0 | Reviews in GitLab: «Review starten» legt die Punkte eines Agenten als Entwurf in GitLab an, abschicken machst du dort. Dazu «Was tinyops nach aussen tut»: jeder Aufruf je Anbindung in den Einstellungen | Neu | E14 ✓ |
@@ -112,7 +112,7 @@ Dafür kamen zwei Releases dazu (0.41 und 0.42). Alles ab «Einstellungen und Da
 - Gemeinsames (Audit, Cache, Store) wird hineingereicht, kein Zugriff kreuz und quer.
 - **Fertig, wenn:** `server.py` ist unter 1'500 Zeilen, und kein Modul hat mehr als 1'000.
 
-**0.39.0 – Oberfläche zerlegen**
+**0.39.0 – Oberfläche zerlegen** ✓ (ohne Build: `ui.py` setzt die Teile zu einer Seite mit einem Skript zusammen, so bleibt das Verhalten gleich. Nicht gemacht: doppelte Stile und Dialog-Muster zusammenführen, das kommt mit 0.40/0.41)
 - `index.html` wird zu `app.css` und JS-Modulen, je Ansicht eines, plus gemeinsame Bausteine:
   - Dialog
   - Kopieren

@@ -11,7 +11,7 @@ function uxPush(e) {
   if (UX.q.length > 400) UX.q.splice(0, UX.q.length - 400);
   if (['click', 'dead', 'view', 'dialog', 'fail'].includes(e.k)) { UX.trail.push(`${e.k === 'view' ? 'Ansicht' : e.k === 'dead' ? 'tot' : e.k === 'fail' ? 'Fehler' : e.k === 'dialog' ? 'Dialog' : 'Klick'} ${e.t || ''}`.slice(0, 80)); if (UX.trail.length > 8) UX.trail.shift(); }
 }
-const UX_ACT = '.wsrepo > summary,[data-wsgo],button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],.rcard.score,.aipace,#fbar,dialog';
+const UX_ACT = '.wsrepo > summary,[data-wsgo],button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],[data-copy],#fx code,#fx .picn,#fx .chip[title],#fx .fxitem .nm b,.rcard.score,.aipace,#fbar,dialog';
 function uxDesc(el) {
   if (!el || el === document.body || el === document.documentElement) return 'body';
   const tag = el.tagName.toLowerCase();
@@ -73,8 +73,9 @@ document.addEventListener('pointermove', ev => {
 }, { passive: true });
 window.addEventListener('error', ev => { if (uxOn()) uxPush({ k: 'error', t: String(ev.message || 'Fehler').slice(0, 100) + (ev.lineno ? ' (Zeile ' + ev.lineno + ')' : '') }); });
 (() => {      // Dialoge auf/zu
-  const so = HTMLDialogElement.prototype.showModal, cl = HTMLDialogElement.prototype.close;
+  const so = HTMLDialogElement.prototype.showModal, sh = HTMLDialogElement.prototype.show, cl = HTMLDialogElement.prototype.close;
   HTMLDialogElement.prototype.showModal = function () { if (!this.open) uxPush({ k: 'dialog', t: this.id || 'dialog', e: { s: 'open' } }); return so.apply(this, arguments); };
+  HTMLDialogElement.prototype.show = function () { if (!this.open) uxPush({ k: 'dialog', t: this.id || 'dialog', e: { s: 'open' } }); return sh.apply(this, arguments); };   // 0.39: Seitenpanel
   HTMLDialogElement.prototype.close = function () { if (this.open) uxPush({ k: 'dialog', t: this.id || 'dialog', e: { s: 'close' } }); return cl.apply(this, arguments); };
   document.addEventListener('cancel', ev => { if (ev.target.tagName === 'DIALOG') uxPush({ k: 'dialog', t: ev.target.id || 'dialog', e: { s: 'close' } }); }, true);
 })();
