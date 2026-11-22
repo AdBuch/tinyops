@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bcs  # noqa: E402
@@ -193,7 +194,7 @@ class Demo(unittest.TestCase):
 
 class Ui(unittest.TestCase):
     def test_static(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ("function renderBcs()", "function bcsPreview()", "function bcsMap(", "/api/bcs/commit", "/api/bcs/reconcile", "id=\"bc-on\"", "data-ttext", "Mit BCS abgleichen"):
             self.assertIn(needle, html, needle)
         src = (ROOT / "bcs.py").read_text(encoding="utf-8")

@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agents  # noqa: E402
@@ -184,7 +185,7 @@ class Cycle(unittest.TestCase):
 
 class Ui(unittest.TestCase):
     def test_static(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ("function mdHtml(", "function promptBoxHtml(", "function agCycleHtml(", "function agGateHtml(", "function agManualHtml(",
                        'data-pcopy=', "/api/agents/gate", "/api/agents/manual", "Als Nächstes testen", 'id="qRest"', "ag-gf", "agent_guards"):
             self.assertIn(needle, html, needle)
@@ -199,7 +200,7 @@ class Ui(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node fehlt")
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         start = html.index("function mdHtml(")
         end = html.index("\n}\n", start) + 3
         js = ("const esc = s => String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n" + html[start:end] +

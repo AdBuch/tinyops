@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 
 import server  # noqa: E402
 import settings  # noqa: E402
@@ -133,7 +134,7 @@ class AppUx(unittest.TestCase):
         self.assertIn("ux.days", err)
 
     def test_ui_never_reads_field_values(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         block = html[html.index("// ------------------------------------------------ UI-Nutzung (0.22)"):]
         block = block[:block.index("</script>")]
         self.assertNotIn(".value", block)                 # der Tracker liest nie, was in Feldern steht

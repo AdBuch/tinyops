@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import groups  # noqa: E402
@@ -88,7 +89,7 @@ class App(unittest.TestCase):
 
 class Ui(unittest.TestCase):
     def test_static(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ("function openGroup(", "function compList(", "'Tasks in Arbeit'", "data-grp=", "id=\"grpHead\"", "ji-grp"):
             self.assertIn(needle, html, needle)
 
@@ -150,6 +151,6 @@ class Usage(unittest.TestCase):
             a.ux_wish({"text": ""})
 
     def test_ui(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ('id="ideaWish"', "/api/ux/wish", "WISH_RE", "k: 'fail'", "k: 'slow'", "k: 'help'", "ver: state && state.version", "UX.trail"):
             self.assertIn(needle, html, needle)

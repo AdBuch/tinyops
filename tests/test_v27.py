@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agents  # noqa: E402
@@ -298,7 +299,10 @@ class FocusAuto(unittest.TestCase):
         return a
 
     def start(self, a, minutes=25):
-        st = a.focus_action("start", {"area": "bb", "minutes": minutes})
+        # fester Start um 10 Uhr: kurz vor Mitternacht fiel das Sitzungsende sonst auf den nächsten Tag (0.39)
+        t = time.localtime()
+        ten = int(time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 10, 0, 0, 0, 0, -1)))
+        st = a.focus_action("start", {"area": "bb", "minutes": minutes}, now=ten)
         return st["session"]["start"]
 
     def test_session_is_lifesign_then_expires_after_grace(self):
@@ -341,7 +345,7 @@ class FocusAuto(unittest.TestCase):
 
 class Ui(unittest.TestCase):
     def test_static(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ("const HELP = {", 'data-help="${id}"', "ssh-keygen -t ed25519", "data-fbext", "data-fmext", 'id="agRepo"', "/api/agents/clone", "/api/agents/access",
                        "function secretList(", 'id="agNext"', 'data-f="provider"', 'data-f="clone_via"', "FOCUS_AUTO"):
             self.assertIn(needle, html, needle)

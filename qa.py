@@ -124,12 +124,12 @@ def report_md(sections, version):
 # ------------------------------------------------------------------ Selbsttest: statische Teile
 def check_static(base, version, checklist_text, helpers, step):
     base = Path(base)
-    ui = base / "static" / "index.html"
     try:
-        size = ui.stat().st_size
-        step("ui", "Oberfläche", "ok" if size > 20000 else "fail", "%s, %d KB" % (ui.name, size // 1024))
-    except OSError:
-        step("ui", "Oberfläche", "fail", "static/index.html fehlt")
+        import ui
+        size = len(ui.page(base).encode("utf-8"))
+        step("ui", "Oberfläche", "ok" if size > 20000 else "fail", "index.html, app.css und %d Skriptteile, %d KB" % (len(ui.PARTS), size // 1024))
+    except (OSError, ValueError) as e:
+        step("ui", "Oberfläche", "fail", "Oberfläche unvollständig: %s" % e)
 
     class D(dict):
         def __missing__(self, k):

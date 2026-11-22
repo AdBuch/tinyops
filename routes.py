@@ -9,6 +9,7 @@ from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler
 
 import devices
+import ui
 import secretstore as store
 import settings
 import timesheet
@@ -220,7 +221,7 @@ def make_handler(app, base, version, load_config):
     """Baut die Handler-Klasse für eine App. base, version und load_config kommen aus server.py (dort bleibt die Config)."""
     BASE, VERSION = base, version
     cfg = _Cfg(app)
-    html = (BASE / "static" / "index.html").read_bytes()
+    html = ui.page(BASE).encode("utf-8")   # 0.39: aus index.html, app.css und static/js zusammengesetzt
     token = app.access_token
     session = hashlib.sha256(("tinyops-session:" + token).encode("utf-8")).hexdigest() if token else ""
 

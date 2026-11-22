@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agents  # noqa: E402
@@ -258,7 +259,7 @@ class Streaming(unittest.TestCase):
 
 class Ui(unittest.TestCase):
     def test_static(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ("function m365Rail()", "/api/m365/login", "/api/m365/device", "data-mbook", 'id="fsCal"', "function meetSoon()", "https://admin.mistral.ai/subscription",
                        "LOGO_MISS", 'data-goto="m365"', "data-copyfile", "--auto-approve"):
             self.assertIn(needle, html, needle)

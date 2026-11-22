@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 
 import helpdesk  # noqa: E402
 import links  # noqa: E402
@@ -153,7 +154,7 @@ class Small(unittest.TestCase):
         self.assertIn("span in focus / rcard.score: 3×", md)
 
     def test_ui_contract(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for needle in ('id="fbar"', "function renderFbar()", "data-hdseen", "/api/helpdesk/ticket?key=", ".hero[data-fid]", 'data-jqlfor="hd-wjql"'):
             self.assertIn(needle, html)
         self.assertNotIn('id="fPill"', html)

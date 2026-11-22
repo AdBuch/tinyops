@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import ui  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import server  # noqa: E402
@@ -99,7 +100,7 @@ class Terms(unittest.TestCase):
         self.assertTrue(server.DEFAULTS["features"]["score"])
         new, errors = settings.build_config({}, {"features": {"ideas": True, "ai": False, "score": False}})
         self.assertEqual(new["features"]["score"], False)
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         self.assertIn('id="ft-score"', html)
         self.assertIn("F().score === false", html)
         self.assertNotIn(">Fokus-Modus<", html)                                   # E4: ein Begriff weniger
@@ -107,7 +108,7 @@ class Terms(unittest.TestCase):
         self.assertNotIn("Level ${s.level}", html)                                # E3: ein Zähler, kein Level mehr
 
     def test_ui_fixes_present(self):
-        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        html = ui.source(ROOT)
         for n in ("function setOffline(", "data-qtxt=", "QPEND", 'data-wsf="wt"', "data-wtrm", 'data-fsess="area:'):
             self.assertIn(n, html, n)
 
