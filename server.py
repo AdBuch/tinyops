@@ -62,7 +62,7 @@ from httpclient import Http  # noqa: F401
 from ideas import Ideas, similar  # noqa: F401
 from jira_client import JiraClient, jira_auth_header  # noqa: F401
 
-VERSION = "0.41.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.41.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
