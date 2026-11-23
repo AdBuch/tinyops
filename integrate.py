@@ -185,7 +185,11 @@ class Integrator:
             self._drop(repo, wt)
             if files:
                 return {"ok": False, "conflict": files, "text": "Konflikt in %d Datei(en). Nichts geändert." % len(files)}
-            raise IntegrateError("git %s ging nicht: %s" % (op, (err or out).splitlines()[-1:] or [""]))
+            msg = (err or out).strip()
+            if "ident" in msg or "tell me who you are" in msg:
+                raise IntegrateError("git kennt deinen Namen für Commits nicht. Einmal im Terminal: git config --global user.name \"Vorname Name\" "
+                                     "und git config --global user.email \"du@example.org\".")
+            raise IntegrateError("git %s ging nicht: %s" % (op, msg.splitlines()[-1] if msg else rc))
         new = _rev(wt, "HEAD")
         n = int(_git(repo, "rev-list", "--count", "%s..%s" % (base, new))[1] or 0)
         self._drop(repo, wt)

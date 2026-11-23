@@ -17,6 +17,7 @@ Auf deinen Wunsch vom 23.11.: den Branch eines Agenten in den Feature-Branch des
   - **Konflikt:** Entweder wird alles zurückgenommen, oder der Worktree bleibt stehen und öffnet sich in IntelliJ. Nach dem Lösen «Abschliessen», oder «Abbrechen».
   - **Push:** macht tinyops nie. Das Ergebnis nennt, wie weit dein Branch vor GitLab ist, mit dem Push-Befehl zum Kopieren.
   - Jede Übernahme steht im Verlauf. Gekoppelte Geräte können das nicht.
+  - Merge, Rebase und Cherry-Pick schreiben Commits unter deinem git-Namen. Kennt git ihn nicht, sagt tinyops, wie du ihn einmal einträgst.
 
 ### Behoben
 - Auf Handy-Breite liess sich die Seite Einstellungen um ein paar Pixel seitlich schieben, wenn der Pfad zur Dienst-Datei lang ist (unter «Update und Dienst»). Er bricht jetzt um. Der Test dafür nennt bei einem Fehler, was übersteht.

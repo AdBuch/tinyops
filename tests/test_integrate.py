@@ -50,6 +50,8 @@ class Base(unittest.TestCase):
         self.seed = seed
         self.repo = self.d / "work"
         git(self.d, "clone", "-q", str(self.d / "origin.git"), str(self.repo))
+        git(self.repo, "config", "user.name", "Du")            # wie bei dir: dein Checkout kennt deinen Namen (CI hat keinen)
+        git(self.repo, "config", "user.email", "du@example.org")
         self.i = integrate.Integrator(wt_base=self.d / "wt")
         self.origin_heads = self.heads()
 
@@ -173,6 +175,20 @@ class Run(Base):
         self.assertEqual(out["checked_out"], str(user))
         self.assertEqual((user / "c.txt").read_text(), "agent 2\n")     # der Checkout wurde nachgezogen
         git(self.repo, "worktree", "remove", str(user))
+
+    def test_missing_identity_is_explained(self):
+        self.feature_moves_on()
+        git(self.repo, "config", "--unset", "user.name")
+        env = dict(os.environ)
+        try:
+            os.environ.update(HOME=str(self.d), GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="", GIT_COMMITTER_NAME="")   # wie auf GitHub: kein Name
+            with self.assertRaises(integrate.IntegrateError) as e:
+                self.i.run(self.repo, "agent/x-1", "feature/X", "merge")
+        finally:
+            os.environ.clear()
+            os.environ.update(env)
+        self.assertIn("git config --global user.name", str(e.exception))
+        self.assertEqual(git(self.repo, "worktree", "list").count("\n"), 0, "kein Worktree bleibt liegen")
 
     def test_diverged_local_is_refused(self):
         git(self.repo, "branch", "feature/X", "origin/feature/X")
