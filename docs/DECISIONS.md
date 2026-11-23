@@ -37,6 +37,8 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 | 2026-11-20 | Plan verschiebt sich ab 0.41 um zwei Versionen | «Testen von Hand» (0.41) und «Reviews in GitLab» (0.42) bekommen je ein Release, damit 0.40 beim Thema Agenten bleibt |
 | 2026-11-20 | **Schwerpunkte:** schneller zum Testen von Hand, Agenten-Gefühl (vier Rollen, Kreislauf zurück zum Entwickeln), Reviews. Leitlinie: weniger Kopieren, weniger Wechseln, mehr Fokus | Microsoft 365 ist kein Schwerpunkt mehr und wird beim Härten nur gemacht, wenn du es dann brauchst. Gemessen an Kopier-Klicks und Wechseln im Nutzungsbericht |
 | 2026-11-20 | **Offenlegen:** Jeder Aufruf, den tinyops nach aussen macht, steht in den Einstellungen (Methode, Pfad, lesend/schreibend, wann, Token, wie oft) | Eine Tabelle im Code, durch die jeder Aufruf muss; ein Test verhindert Aufrufe daran vorbei (0.42) |
+| 2026-11-23 | **Update aus dem Panel und Dienst** (Wunsch vom 23.11.) | tinyops fragt höchstens alle 6 Stunden nur lesend nach neuen Release-Tags. Aktualisiert wird nur auf deinen Klick und nur am Rechner (nicht vom gekoppelten Gerät), über denselben Weg wie beim Start (Selbsttest, Rückfall). Dienst nur als Benutzer-Dienst (`systemctl --user`), nie mit sudo (0.40) |
+| 2026-11-23 | «Umsetzen» heisst «Entwickeln», wie die Rolle (E5 bleibt: Standard Entwickeln → Review) | Rollen und Kreislauf in 0.40 |
 
 ## Offen
 
