@@ -5,7 +5,7 @@ const ACT = {
   rebase: ['MR öffnen', 'ext'], pipeline: ['Pipeline öffnen', 'ext'], sonar: ['Report kopieren', 'copy'], ci: ['Pipeline', 'ext'],
   threads: ['Offene Punkte', 'chat'], agent_question: ['Antworten', 'chat'], review: ['MR öffnen', 'ext'], test: ['Getestet', 'check'], merge: ['MR öffnen', 'merge'],
   close: ['Fertig', 'check'], check: ['Erledigt', 'check'], agent: ['Log ansehen', 'eye'], agent_failed: ['Lauf ansehen', 'eye'],
-  agent_result: ['Prüfen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'], agent_back: ['Nachbessern', 'chat'], agent_next: ['Weiter', 'play'],
+  agent_result: ['Prüfen', 'eye'], agent_start: ['Starten', 'play'], plan: ['Einplanen', 'list'], agent_back: ['Zurück ans Entwickeln', 'chat'], agent_next: ['Weiter', 'play'],
   retest: ['Getestet', 'check'], check_approval: ['MR öffnen', 'ext'], hd_work: ['Ticket ansehen', 'chevron2'],
   do_review: ['Review öffnen', 'ext'], assigned: ['MR öffnen', 'ext'], reviewer: ['Reviewer setzen', 'users'], ticket: ['tiny-Ticket anlegen', 'ticket'],
 };

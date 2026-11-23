@@ -223,6 +223,47 @@ def followup(run, note="", answers=None):
     return "\n".join(parts).strip() + "\n"
 
 
+def resume(run, note="", answers=None):
+    """0.40: Nachricht für die Fortsetzung in derselben Sitzung. Entwickeln: wie Nachbessern (offene Kriterien, Fehlschläge),
+    Review, Test und Plan: nur deine Nachricht und Entscheidungen (eine Nachfrage, kein neuer Auftrag)."""
+    if (run.get("phase") or "develop") == "develop":
+        text = followup(run, note, answers)
+        first, _, rest = text.partition("\n")
+        return ("Fortsetzung von tinyops-Lauf %s." % run.get("id")) + ("\n" + rest if rest else "\n")
+    parts = []
+    note = "\n".join(" ".join(ln.split()) for ln in str(note or "").splitlines()).strip()[:4000]
+    if note:
+        parts += ["## Nachricht des Menschen", "", note]
+    ans = [(d, str((answers or {}).get(str(d["n"])) or "").strip()[:600]) for d in open_decisions(report_sections(run.get("summary") or "").get("decide"))]
+    ans = [(d, a) for d, a in ans if a]
+    if ans:
+        parts += ["", "## Entscheidungen des Menschen zu deinen offenen Fragen", ""] + ["%d. %s → %s" % (d["n"], d["q"], a) for d, a in ans]
+    return "\n".join(parts).strip() + "\n"
+
+
+def back_to_dev(run, note=""):
+    """0.40: Befund aus Review oder Test für den Entwickler, damit er in seiner Sitzung nachbessert. Nur Text, kein Code."""
+    sec = report_sections(run.get("summary") or "")
+    who = "%s von %s (Lauf %s)" % (run.get("phase_label") or "Review", run.get("agent_name") or "Agent", run.get("id"))
+    parts = ["Zurück ans Entwickeln nach dem %s." % who]
+    note = "\n".join(" ".join(ln.split()) for ln in str(note or "").splitlines()).strip()[:2000]
+    if note:
+        parts += ["", "## Was der Mensch dazu sagt", "", note]
+    body = run.get("summary") or ""
+    if body.strip():
+        parts += ["", "## Befund (Angaben des anderen Agenten, prüfe sie selbst)", "", body.strip()[:8000]]
+    elif sec:
+        parts += ["", "## Befund", "", "\n".join(sec.values())[:8000]]
+    rows = [r for r in run.get("criteria") or [] if r.get("state") in ("open", "unclear")]
+    if rows:
+        parts += ["", "Kriterien, die dort als offen oder unklar gemeldet sind:"] + ["- %s (%s)" % (r["text"], r.get("note") or STATE_LABEL.get(r["state"], r["state"])) for r in rows]
+    bad = [c for c in run.get("checks") or [] if c.get("exit") != 0]
+    if bad:
+        parts += ["", "Fehlgeschlagene Belege dort:"] + ["- Exit %s: %s" % (c["exit"], c["cmd"]) for c in bad[:10]]
+    parts += ["", "Bessere nach, was zutrifft. Was du anders siehst, begründe im Bericht unter «Bewusst nicht gemacht»."]
+    return "\n".join(parts).strip() + "\n"
+
+
 def prereview(run):
     """Abschnitt für die Vorprüfung durch einen zweiten Agenten: was der erste Lauf geliefert hat und woran es gemessen wird."""
     res = run.get("result") or {}
@@ -257,7 +298,7 @@ def test_brief(run):
     """Abschnitt für die Test-Phase: was geliefert wurde, welche Kriterien gelten, welche Tests schon belegt sind."""
     res = run.get("result") or {}
     parts = ["Test des Ergebnisses von Lauf %s (%s, Phase %s). Der Stand liegt auf deinem Ausgangs-Branch." % (
-        run.get("id"), run.get("agent_name") or "Agent", run.get("phase_label") or "Umsetzen")]
+        run.get("id"), run.get("agent_name") or "Agent", run.get("phase_label") or "Entwickeln")]
     commits = res.get("commits") or []
     if commits:
         parts += ["", "**Commits** (ältester zuletzt):"] + ["- %s %s" % (c["sha"], c["subject"]) for c in commits[:30]]

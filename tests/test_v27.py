@@ -263,8 +263,8 @@ class ServerAccess(unittest.TestCase):
         rid = a.agent_action("assign", body)["id"]
         a.agent_action("start", {"run": rid, "prompt": info["prompt"], "project_id": 1})
         self.assertTrue(wait_for(lambda: (a.agents.poll(force=True), a.store.agent_run(rid)["status"] != "läuft")[1]))
-        pre = a.agent_action("prompt", {"agent": "a1", "prereview": rid})
-        self.assertEqual((pre["prereview"], pre["branch"], pre["repo"]["state"]), (rid, "agent/dlp-101-%d" % rid, "git"))
+        pre = a.agent_action("prompt", {"agent": "a1", "phase": "review", "parent": rid})          # 0.40: statt «prereview»
+        self.assertEqual((pre["review_of"], pre["branch"], pre["repo"]["state"]), (rid, "agent/dlp-101-%d" % rid, "git"))
         self.assertIn("Review: DLP-101 ", pre["prompt"])
         self.assertEqual(len(briefing.parse_prompt(pre["prompt"])), 3)
 

@@ -63,14 +63,14 @@ async function openAgentDlg(o) {
   let pid = o.review ? o.review.project_id : o.pid ?? (ctx.items[0] ? ctx.items[0].project_id : (ag.projects[0] ? ag.projects[0].id : null));
   const branch = o.review ? o.review.branch : (ctx.items.find(x => x.project_id === pid) || ctx.items[0] || {}).branch || '';
   const box = $('agBody');
-  let bopt = null, dirty = false, phase = o.phase || (o.review || o.followup || o.prereview ? '' : LS.get('agphase', 'develop'));
+  let bopt = null, dirty = false, phase = o.phase || (o.review || o.followup || o.review_of ? '' : LS.get('agphase', 'develop'));
   async function draw() {
     let info;
     try { info = await api('POST', '/api/agents/prompt', { agent: a.id, ticket: o.ticket, project_id: pid, branch, title: ctx.title, key: ctx.key, url: ctx.url, review: o.review || undefined,
       brief: bopt || undefined, followup: o.followup || undefined, note: o.note || undefined, answers: o.answers || undefined, prereview: o.prereview || undefined, phase: phase || undefined, parent: o.parent || undefined }); }
     catch (e) { toast(e.message); return; }
     dirty = false;
-    if (info.followup || info.prereview) pid = info.project_id;
+    if (info.followup || info.review_of) pid = info.project_id;
     clearTimeout(agCloneT);
     const repoBox = rp => { const cl = rp && rp.clone || {};
       return !rp || !pid ? '' : rp.error ? `<div class="small quiet">Ob das Projekt beim Agenten liegt, liess sich nicht prüfen: ${esc(rp.error)}</div>`
@@ -102,7 +102,7 @@ async function openAgentDlg(o) {
         : `<div class="small quiet">${bf.source === 'lokal' ? 'Keine offenen Teilschritte: Lege Teilschritte an, dann werden sie zu Kriterien.' : 'Im Ticket steht kein Abschnitt «Akzeptanzkriterien». Der Agent bekommt gesagt, dass er nachfragen soll.'}</div>`}
       ${bf.masked ? `<div class="small quiet">${bf.masked} mögliche${bf.masked === 1 ? 's Geheimnis' : ' Geheimnisse'} (Passwort, Token) geschwärzt. Lies den Prompt trotzdem durch.</div>` : ''}`}</div>`;
     const projSel = ag.projects.length > 1 && !o.review ? `<label class="sm">Projekt<select id="agProj">${ag.projects.map(p => { const st = (info.access || {})[p.id]; return `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}${st === 'missing' ? ' · fehlt beim Agenten' : st === 'dir' ? ' · kein Git-Repo' : ''}</option>`; }).join('')}</select></label>` : '';
-    const canPick = !o.review && !info.followup && !info.prereview && !o.parent;
+    const canPick = !o.review && !info.followup && !info.review_of && !o.parent;
     const phaseSel = canPick ? `<div class="row small" style="margin:0 0 8px"><span class="quiet">Phase:</span><span class="seg" role="group" aria-label="Phase">${['plan', 'develop'].map(p => `<button type="button" data-aph="${p}" class="${(info.phase || 'develop') === p ? 'on' : ''}" title="${p === 'plan' ? 'Der Agent liest nur und schreibt einen Plan. Du gibst ihn frei, dann wird umgesetzt.' : 'Der Agent ändert Code auf einem eigenen Branch.'}">${PH_L[p]}</button>`).join('')}</span>
       <span class="quiet">${(info.phase || 'develop') === 'plan' ? 'Erst planen: kleiner Plan, den du in fünf Minuten prüfst.' : 'Direkt umsetzen. Bei grösseren Aufgaben lieber zuerst planen.'}</span></div>` : '';
     const plab = o.review ? `Prompt: ${o.review.count} offene Review-Punkte auf <code>${esc(branch)}</code>` : info.followup ? `Prompt: Nachbessern von Lauf ${info.followup} auf <code>${esc(info.branch || 'Hauptbranch')}</code>`
@@ -140,7 +140,7 @@ async function openAgentDlg(o) {
     const go = async start => {
       try {
         let run = o.run;
-        const br = info.followup || info.prereview || info.phase === 'review' || info.phase === 'test' ? info.branch : branch;
+        const br = info.followup || info.review_of || info.phase === 'review' || info.phase === 'test' ? info.branch : branch;
         if (!run) run = (await post('/api/agents/assign', { agent: a.id, ticket: o.ticket, project_id: pid, branch: br, title: ctx.title })).id;
         if (start) await post('/api/agents/start', { run, prompt: $('agPrompt').value, project_id: pid, branch: br, phase: info.phase || 'develop', parent: info.parent || undefined });
         agClose(); toast(start ? 'Gestartet' : 'Zugewiesen'); await load();
@@ -152,17 +152,29 @@ async function openAgentDlg(o) {
   await draw();
   agShow();
 }
-const PH_ORDER = ['plan', 'develop', 'review', 'test'], PH_L = { plan: 'Planen', develop: 'Umsetzen', review: 'Review', test: 'Test' };
+const PH_ORDER = ['plan', 'develop', 'review', 'test'], PH_L = { plan: 'Planen', develop: 'Entwickeln', review: 'Review', test: 'Test' };
 const NEXT_PH = { plan: 'develop', develop: 'review', review: 'test' };
-// Zyklus eines Tickets: je Phase der jüngste Lauf und wo er steht
+// Zyklus eines Tickets (0.40: die vier Rollen klar): je Rolle der Agent, der jüngste Lauf und wo er steht, dazu die Runde.
+// Review und Test schicken Befunde mit einem Klick zurück ans Entwickeln (↺), in die Sitzung des Entwicklers.
 function agCycleHtml(ticket, curId) {
   const runs = AG().runs.filter(x => x.ticket === ticket);
-  return `<div class="cycle" aria-label="Agenten-Zyklus">${PH_ORDER.map(p => {
+  const dev = runs.find(x => (x.phase || 'develop') === 'develop');
+  const round = dev && dev.round > 1 ? `<span class="cyround" title="So oft hat der Entwickler in dieser Sitzung gearbeitet">Runde ${dev.round}</span>` : '';
+  return `<div class="cycle" aria-label="Rollen und Kreislauf">${PH_ORDER.map(p => {
     const r = runs.find(x => (x.phase || 'develop') === p);
     const [cls, txt] = !r ? ['', 'noch nicht'] : r.active ? ['wait', 'läuft'] : r.status === 'zugewiesen' ? ['', 'zugewiesen']
-      : r.gate === 'ok' ? ['ok', 'freigegeben'] : r.gate === 'back' ? ['back', 'zurückgegeben'] : ['wait', r.status === 'fertig' ? 'wartet auf dich' : r.status];
-    return `<div class="ph ${cls} ${r && r.id === curId ? 'cur' : ''}" title="${esc(PH_L[p])}: ${esc(txt)}${r ? ' (Lauf ' + r.id + ')' : ''}"><b>${PH_L[p]}</b><span>${esc(txt)}</span></div>`;
-  }).join('')}</div>`;
+      : r.gate === 'ok' ? ['ok', 'freigegeben'] : r.gate === 'back' ? ['back', p === 'develop' ? 'zurückgegeben' : '↺ ans Entwickeln'] : ['wait', r.status === 'fertig' ? 'wartet auf dich' : r.status];
+    const ag = r ? r.agent_name : ((AG().agents.find(a => a.id === agBest(p)) || {}).name || '');
+    return `<div class="ph ph-${p} ${cls} ${r && r.id === curId ? 'cur' : ''}" title="${esc(PH_L[p])}: ${esc(txt)}${r ? ' (Lauf ' + r.id + ')' : ''}"><b>${PH_L[p]}</b><span>${esc(txt)}</span><span class="cyag">${esc(ag)}</span></div>`;
+  }).join('')}</div>${round}`;
+}
+// 0.40: Gespräch eines Laufs: dein Auftrag, deine Nachrichten, Rückfragen, was der Agent jeweils geantwortet hat
+function agThreadHtml(r) {
+  const t = r.thread || [];
+  if (t.length <= 2) return '';
+  return `<div class="agthread" aria-label="Gespräch mit ${esc(r.agent_name)}"><div class="small"><b>${ic('chat')} Gespräch</b> <span class="quiet">${t.filter(m => m.who === 'du').length} Nachrichten von dir, Runde ${r.round || 1}</span></div>
+    ${t.map(m => `<div class="msg ${m.who === 'du' ? 'me' : 'ag'}${m.busy ? ' busy' : ''}">${m.fresh ? '<div class="quiet small">neue Sitzung</div>' : ''}<div class="mdv">${m.who === 'du' ? esc(m.text).replace(/\n/g, '<br>') : mdHtml(m.text)}</div>
+      <div class="meta">${m.who === 'du' ? 'du' : esc(r.agent_name)} · Lauf ${m.run}${m.run !== r.id && !m.busy ? ` <button type="button" class="linkish" data-arun="${m.run}">öffnen</button>` : ''}</div></div>`).join('')}</div>`;
 }
 function agManualHtml(r) {
   const m = r.manual || [];
@@ -175,23 +187,24 @@ function agManualHtml(r) {
 }
 function agGateHtml(r) {
   if (r.active || r.status === 'zugewiesen') return '';
-  const lab = r.phase_label || 'Umsetzen', m = r.manual || [], left = m.length - (r.manual_done || 0);
+  const lab = r.phase_label || 'Entwickeln', m = r.manual || [], left = m.length - (r.manual_done || 0);
   const warn = (r.guard_warnings || []).length ? `<ul class="gwarn">${r.guard_warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
   const agentSel = (id, ph) => { const best = agBest(ph, r.agent); return `<select id="${id}" aria-label="Agent für die nächste Phase">${AG().agents.map(a => `<option value="${esc(a.id)}" ${a.id === best ? 'selected' : ''}>${esc(agOptLabel(a, ph))}${a.cloud ? '' : ' · lokal'}</option>`).join('')}</select>`; };
   if (r.gate === 'ok') {
     const nx = NEXT_PH[r.phase];
     return `<div class="gatebox ok"><h3>${esc(lab)} freigegeben</h3>${r.gate_note ? `<div class="small">${esc(r.gate_note)}</div>` : ''}
-      <div class="row" style="margin-top:6px">${nx ? `<span class="small">Weiter mit <b>${PH_L[nx]}</b> durch</span>${agentSel('agNxA', nx)}<button class="primary" id="agNext" data-ph="${nx}">${PH_L[nx]} vorbereiten …</button>` : '<span class="small">Der Zyklus ist durch. Jetzt MR, Review im Team und Merge wie gewohnt.</span>'}
+      <div class="row" style="margin-top:6px">${nx === 'review' && r.round > 1 ? '<button class="primary" id="agAgain" title="Derselbe Reviewer prüft den nachgebesserten Stand in seiner Sitzung">Erneut prüfen lassen</button><span class="small">oder</span>' : ''}${nx ? `<span class="small">Weiter mit <b>${PH_L[nx]}</b> durch</span>${agentSel('agNxA', nx)}<button class="${nx === 'review' && r.round > 1 ? '' : 'primary'}" id="agNext" data-ph="${nx}">${PH_L[nx]} vorbereiten …</button>` : '<span class="small">Der Zyklus ist durch. Jetzt MR, Review im Team und Merge wie gewohnt.</span>'}
       <button class="quiet-btn" id="agGateReset" title="Freigabe zurücknehmen">Zurücknehmen</button></div></div>`;
   }
   if (r.gate === 'back') return `<div class="gatebox back"><h3>${esc(lab)} zurückgegeben</h3><div class="small">${esc(r.gate_note)}</div>
-      <div class="row" style="margin-top:6px"><button class="primary" id="agBackGo" title="Neuer Lauf desselben Agenten mit deiner Notiz, auf dem Branch dieses Laufs">Nachbessern lassen …</button><button class="quiet-btn" id="agGateReset">Zurücknehmen</button></div></div>`;
-  const what = r.phase === 'plan' ? 'Ist der Plan klein, klar und richtig? Erst dann wird umgesetzt.' : r.phase === 'review' ? 'Teilst du den Befund? Dann folgt der Test.'
-    : r.phase === 'test' ? 'Ist es im laufenden System wirklich erfüllt?' : 'Hast du den Code gelesen und verstanden? Dann prüft ein Review.';
+      <div class="row" style="margin-top:6px">${r.next_run ? `<span class="small">Ging an den Entwickler: <button type="button" class="linkish" data-arun="${esc(r.next_run)}">Lauf ${esc(r.next_run)}</button></span>` : '<button class="primary" id="agBackGo" title="Deine Notiz (bei Review und Test mit dem Befund) geht in die Sitzung des Entwicklers">Zurück ans Entwickeln</button>'}<button class="quiet-btn" id="agGateReset">Zurücknehmen</button></div></div>`;
+  const what = r.phase === 'plan' ? 'Ist der Plan klein, klar und richtig? Erst dann wird entwickelt.' : r.phase === 'review' ? 'Gibt es etwas zu verbessern? Dann geht der Befund zurück ans Entwickeln. Sonst freigeben, dann folgt der Test.'
+    : r.phase === 'test' ? 'Ist es im laufenden System wirklich erfüllt? Wenn nicht: zurück ans Entwickeln.' : 'Hast du den Code gelesen und verstanden? Dann prüft ein Review. Sonst zurück ans Entwickeln, in derselben Sitzung.';
+  const toDev = r.phase === 'review' || r.phase === 'test';
   return `<div class="gatebox"><h3>${esc(lab)}: deine Freigabe</h3><div class="small">${what}</div>${warn}
-    <textarea id="agGateNote" maxlength="1000" placeholder="Notiz. Bei «Zurückgeben» Pflicht: was soll anders werden?" aria-label="Notiz zur Freigabe"></textarea>
+    <textarea id="agGateNote" maxlength="1000" placeholder="${toDev ? 'Notiz an den Entwickler (optional, der Befund geht ohnehin mit)' : r.phase === 'plan' ? 'Notiz. Bei «Zurückgeben» Pflicht: was soll anders werden?' : 'Notiz. Für «Zurück ans Entwickeln» Pflicht: was soll anders werden?'}" aria-label="Notiz zur Freigabe"></textarea>
     <div class="row"><button class="primary" id="agGateOk" ${left > 0 || r.status !== 'fertig' ? 'disabled' : ''} title="${r.status !== 'fertig' ? 'Nur ein fertiger Lauf lässt sich freigeben' : left > 0 ? 'Erst alle Prüfpunkte abhaken' : 'Phase freigeben'}">${ic('check')} Freigeben${left > 0 ? ` (noch ${left} Prüfpunkt${left === 1 ? '' : 'e'})` : ''}</button>
-      <button id="agGateBack">Zurückgeben</button></div></div>`;
+      ${r.phase === 'plan' ? '<button id="agGateBack">Zurückgeben</button>' : `<button id="agToDev" title="${toDev ? 'Befund und deine Notiz gehen in die Sitzung des Entwicklers' : 'Deine Notiz geht in die Sitzung des Entwicklers'}">↺ Zurück ans Entwickeln</button>`}</div></div>`;
 }
 // «Ausprobieren …» für einen MR (0.34, E2): direkt ausführen über die Review-Umgebung, alles auch zum Kopieren,
 // falls kein Agent da ist oder du es lieber selbst machst.
@@ -295,9 +308,10 @@ function agContinueHtml(r) {
     ${od.map(d => `<div class="agdec"><div>${d.n}. ${esc(d.q)}</div>${d.options.length ? `<div class="opts">${d.options.map(o => `<button type="button" data-decopt="${d.n}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>` : ''}
       <input type="text" data-dec="${d.n}" maxlength="600" placeholder="Deine Entscheidung" aria-label="Entscheidung ${d.n}"></div>`).join('')}</div>` : '';
   return `<div class="agcont">${dec}
-    <label class="small" for="agCont"><b>Weiterführen</b> <span class="quiet">${esc(r.agent_name)} arbeitet auf dem Branch dieses Laufs weiter. Offene Kriterien und fehlgeschlagene Belege gehen automatisch mit.</span></label>
-    <textarea id="agCont" maxlength="4000" placeholder="Was soll als Nächstes passieren? (Ctrl+Enter startet)" spellcheck="true"></textarea>
-    <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="primary" id="agContGo">Weiterführen</button></div></div>`;
+    <label class="small" for="agCont"><b>Nachricht an ${esc(r.agent_name)}</b> ${r.same_session ? '<span class="chip sq-ok" title="Der Agent setzt seine Sitzung fort: gleicher Ordner, gleicher Branch, er erinnert sich an alles">gleiche Sitzung</span>' : `<span class="chip warn" title="${esc(r.session_why || '')}">neue Sitzung</span>`}
+      <span class="quiet">${r.same_session ? 'Frag nach oder sag, wie es weitergeht.' : esc(r.session_why || '') + ' Offene Kriterien und fehlgeschlagene Belege gehen mit.'}</span></label>
+    <textarea id="agCont" maxlength="4000" placeholder="${r.phase === 'review' ? 'z. B. «Warum ist Punkt 2 ein Problem?»' : 'Was soll als Nächstes passieren? Oder frag nach.'} (Ctrl+Enter sendet)" spellcheck="true"></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="primary" id="agContGo">${ic('chat')} Senden</button></div></div>`;
 }
 function agReportHtml(r) {
   const qa = (r.qa || []).map(x => `<li><span class="quiet">Frage ${x.id}:</span> ${esc(x.q)}<br><span class="quiet">Antwort:</span> ${esc(x.a)}</li>`).join('');
@@ -410,11 +424,12 @@ async function openRunDlg(id) {
     const atBottom = !$('agLog') || $('agLog').scrollTop + $('agLog').clientHeight >= $('agLog').scrollHeight - 30;
     const gdraft = $('agGateNote') ? $('agGateNote').value : '';
     const cdraft = $('agCont') ? $('agCont').value : '', ddraft = [...document.querySelectorAll('#agBody [data-dec]')].map(x => [x.dataset.dec, x.value]);
-    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.phase_label || 'Umsetzen')} · ${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
+    box.innerHTML = `<div class="row" style="justify-content:space-between"><strong>${esc(r.phase_label || 'Entwickeln')} · ${esc(r.agent_name)} · ${esc(r.ticket)}</strong><span class="chip ${AG_ST[r.status] || ''}">${r.active ? '<span class="agspin"></span>' : ''}${esc(r.status)}${r.exit_code !== null && r.exit_code !== undefined && !r.active ? ' (Exit ' + r.exit_code + ')' : ''}</span></div>
       <div class="quiet small" style="margin:4px 0">${esc(r.title)}</div>
       ${agCycleHtml(r.ticket, r.id)}
       <div class="quiet small">Ziel: ${esc(r.where)} · ${r.mode === 'export' ? 'Export' : r.mode === 'worktree' ? 'Worktree' : 'Ordner'}: <code>${esc(r.wt || r.workdir)}</code>${r.out_branch ? ' · Ergebnis-Branch: <code>' + esc(r.out_branch) + '</code>' + (r.mode === 'export' && !r.taken ? ' (nach «Übernehmen»)' : '') : ''} · Dauer: ${esc(fmtSecs(r.secs))}</div>
       ${r.note ? `<div class="banner warn">${esc(r.note)}</div>` : ''}
+      ${agThreadHtml(r)}
       ${r.question ? agQuestionHtml(r) : ''}
       ${agReportHtml(r)}
       <pre class="log" id="agLog">${esc(text)}</pre>
@@ -450,7 +465,24 @@ async function openRunDlg(id) {
     if ($('agGateBack')) $('agGateBack').onclick = () => { if (!$('agGateNote').value.trim()) { toast('Schreib kurz, was anders werden soll.'); $('agGateNote').focus(); return; } gate('back', $('agGateNote').value); };
     if ($('agGateReset')) $('agGateReset').onclick = () => gate('', '');
     if ($('agNext')) $('agNext').onclick = () => { const nx = $('agNext').dataset.ph, aid = $('agNxA').value; agClose(); openAgentDlg({ ticket: r.ticket, agent: aid, phase: nx, parent: r.id, pid: r.project_id }); };
-    if ($('agBackGo')) $('agBackGo').onclick = () => { agClose(); openAgentDlg({ ticket: r.ticket, agent: r.agent, followup: r.id, note: r.gate_note, pid: r.project_id }); };
+    const toDev = async (btn, note) => busy(btn, 'Sende …', async () => {
+      try { const x = await post('/api/agents/back', { run: id, note }); toast(x.session ? `Zurück ans Entwickeln: Lauf ${x.id}, gleiche Sitzung` : `Zurück ans Entwickeln: Lauf ${x.id}, neue Sitzung`); await load(); openRunDlg(x.id); }
+      catch (e) { toast(e.message); }
+    });
+    if ($('agBackGo')) $('agBackGo').onclick = () => toDev($('agBackGo'), r.gate_note);
+    if ($('agToDev')) $('agToDev').onclick = () => {
+      const note = $('agGateNote').value;
+      if (r.phase === 'develop' && !note.trim()) { toast('Schreib kurz, was anders werden soll.'); $('agGateNote').focus(); return; }
+      toDev($('agToDev'), note);
+    };
+    if ($('agAgain')) $('agAgain').onclick = () => busy($('agAgain'), 'Starte …', async () => {
+      try {
+        const x = await post('/api/agents/again', { run: id });
+        if (x.fallback) { toast(x.why || 'Ein neues Review braucht den Dialog.'); agClose(); openAgentDlg({ ticket: r.ticket, agent: agBest('review', r.agent), phase: 'review', parent: r.id, pid: r.project_id }); return; }
+        toast('Derselbe Reviewer prüft erneut: Lauf ' + x.id); await load(); openRunDlg(x.id);
+      } catch (e) { toast(e.message); }
+    });
+    box.querySelectorAll('[data-arun]').forEach(b => b.onclick = () => openRunDlg(+b.dataset.arun));
     if ($('agRep')) $('agRep').onclick = async () => { try { await post('/api/agents/report', { run: id }); await load(); await draw(); } catch (e) { toast(e.message); } };
     $('agReload').onclick = async () => { try { await post('/api/agents/refresh', {}); await load(); await draw(); } catch (e) { toast(e.message); } };
     if ($('agAttach')) $('agAttach').onclick = () => copyText(r.attach, 'Befehl zum Mitlesen');
@@ -463,7 +495,7 @@ async function openRunDlg(id) {
       const text = $('agCont').value.trim(), answers = contAnswers();
       if (!text && !Object.keys(answers).length) { toast('Schreib, wie es weitergehen soll, oder beantworte eine Entscheidung.'); $('agCont').focus(); return; }
       await busy($('agContGo'), 'Starte …', async () => {
-        try { const x = await post('/api/agents/continue', { run: id, text, answers }); toast('Weitergeführt als Lauf ' + x.id); await load(); openRunDlg(x.id); }
+        try { const x = await post('/api/agents/continue', { run: id, text, answers }); toast(x.session ? 'Gesendet: gleiche Sitzung, Lauf ' + x.id : 'Neue Sitzung, Lauf ' + x.id); await load(); openRunDlg(x.id); }
         catch (e) { toast(e.message); }
       });
     };

@@ -68,8 +68,8 @@ class AgentArea:
                     raise UserError("Unbekannte Phase.")
                 if phase in ("review", "test") and b.get("parent") not in (None, ""):
                     return self._phase_prompt(svc, aid, phase, b)
-                if phase == "review" and b.get("prereview") in (None, ""):
-                    raise UserError("Review braucht einen beendeten Umsetzen-Lauf mit eigenem Branch.")
+                if phase == "review":
+                    raise UserError("Review braucht einen beendeten Entwickeln-Lauf mit eigenem Branch.")
                 if phase == "test" and b.get("parent") in (None, ""):
                     raise UserError("Test braucht einen beendeten Lauf, dessen Ergebnis getestet wird.")
                 if b.get("followup") not in (None, ""):     # Nachbesserung: offene Kriterien des alten Laufs, Ausgang ist sein Branch
@@ -81,19 +81,6 @@ class AgentArea:
                     info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
                                            template="agent-followup", extra={"brief": briefing.followup(ov, b.get("note"), b.get("answers"))})
                     info.update(branch=base, project_id=ov["project_id"], followup=ov["id"], parent=ov["id"], phase="develop",      # Nachbessern ändert Code: immer Umsetzen
-                                repo=self._repo_access(svc, aid, ov["project_id"]))
-                    return info
-                if b.get("prereview") not in (None, ""):    # Vorprüfung: ein zweiter Agent liest das Ergebnis, ändert nichts, meldet je Kriterium sein Urteil
-                    old = svc.store.agent_run(self._rid({"run": b.get("prereview")}))
-                    if not old or old["status"] in ("zugewiesen", "läuft"):
-                        raise UserError("Vorprüfen geht erst, wenn der Lauf beendet ist.")
-                    ov = svc.run_view(old)
-                    base = ov.get("taken") or (ov.get("out_branch") if ov.get("mode") == "worktree" else "")
-                    if not base:
-                        raise UserError("Dieser Lauf hat keinen eigenen Branch, den ein zweiter Agent prüfen könnte.")
-                    info = svc.prompt_info(aid, ov["ticket"], ov["project_id"], base, ov.get("title") or "", b.get("key") or ov["ticket"], b.get("url") or "",
-                                           template="agent-prereview", extra={"brief": briefing.prereview(ov)})
-                    info.update(branch=base, project_id=ov["project_id"], prereview=ov["id"], parent=ov["id"], phase="review",
                                 repo=self._repo_access(svc, aid, ov["project_id"]))
                     return info
                 key = str(b.get("key") or "")
@@ -137,8 +124,12 @@ class AgentArea:
                 parent = self._rid({"run": b.get("parent")}) if b.get("parent") not in (None, "") else None
                 rid = svc.start(self._rid(b), b.get("prompt"), self._pid(b.get("project_id")), b.get("branch"), phase=phase, parent=parent)
                 return {"id": rid}
-            if action == "continue":         # 0.36: Lauf direkt weiterführen: dein Text (und Antworten auf offene Entscheidungen) als neuer Lauf auf seinem Branch
+            if action == "continue":         # 0.36: weiterführen; seit 0.40 in derselben Sitzung des Agenten, wenn er das kann
                 return self._agent_continue(svc, b)
+            if action == "back":             # 0.40: Befund aus Review/Test (oder deine Notiz) zurück in die Sitzung des Entwicklers
+                return self._agent_back(svc, b)
+            if action == "again":            # 0.40: derselbe Reviewer prüft den nachgebesserten Stand in seiner Sitzung
+                return self._agent_again(svc, b)
             if action == "gate":             # deine Freigabe am Ende einer Phase
                 g = str(b.get("gate") or "")
                 return svc.gate(self._rid(b), g, b.get("note") or "")
@@ -196,7 +187,9 @@ class AgentArea:
             raise UserError(str(e))
         raise UserError("Unbekannte Aktion.")
 
-    def _agent_continue(self, svc, b):
+    def _agent_continue(self, svc, b, sync=""):
+        """Weiterführen mit deiner Nachricht. Kann der Agent seine Sitzung fortsetzen (0.40), geht es dort weiter: gleicher Ordner,
+        gleicher Branch, ganzer Kontext. Sonst wie bis 0.39: neuer Lauf auf dem Branch des alten, mit Zusammenfassung."""
         old = svc.store.agent_run(self._rid(b))
         if not old:
             raise UserError("Diesen Lauf gibt es nicht (mehr).")
@@ -207,15 +200,90 @@ class AgentArea:
         if not text and not answers:
             raise UserError("Schreib, wie es weitergehen soll, oder beantworte eine offene Entscheidung.")
         aid = str(b.get("agent") or old["agent"])
+        same, why = svc.can_continue(old, aid)
+        if same:
+            ov = svc.run_view(old)
+            prompt = svc.resume_prompt(ov, briefing.resume(ov, text, answers))
+            rid = svc.assign(aid, old["ticket"], old["project_id"], old["branch"], old.get("title") or "")
+            try:
+                svc.start(rid, prompt, old["project_id"], old["branch"], phase=old.get("phase") or "develop", parent=old.get("parent") or None,
+                          resume=old, ask=text, sync=sync)
+            except agents.AgentError:
+                svc.remove(rid, force=True)
+                raise
+            self.audit("agent.continue", old["ticket"], run=old["id"], new_run=rid, agent=aid, answers=len(answers), chars=len(text), session="gleich")
+            return {"id": rid, "session": True}
+        if sync:
+            raise UserError(why)
         info = self.agent_action("prompt", {"agent": aid, "followup": old["id"], "note": text, "answers": answers, "key": old["ticket"]})
         rid = svc.assign(aid, old["ticket"], info["project_id"], info["branch"], old.get("title") or "")
         try:
-            svc.start(rid, info["prompt"], info["project_id"], info["branch"], phase="develop", parent=old["id"])
+            svc.start(rid, info["prompt"], info["project_id"], info["branch"], phase="develop", parent=old["id"], ask=text)
         except agents.AgentError:
             svc.remove(rid, force=True)
             raise
-        self.audit("agent.continue", old["ticket"], run=old["id"], new_run=rid, agent=aid, answers=len(answers), chars=len(text))
-        return {"id": rid}
+        svc.store.agent_run_update(rid, resume_of=str(old["id"]), fresh="1")       # gehört zum Gespräch, aber neue Sitzung
+        svc.store.agent_run_update(old["id"], next_run=str(rid))
+        self.audit("agent.continue", old["ticket"], run=old["id"], new_run=rid, agent=aid, answers=len(answers), chars=len(text), session="neu")
+        return {"id": rid, "session": False, "why": why}
+
+    def _dev_of(self, svc, r):
+        """Der jüngste Entwickeln-Lauf zu einem Lauf: über parent zurück bis Entwickeln, dann in dessen Gespräch nach vorne."""
+        seen = set()
+        while r and (r.get("phase") or "develop") != "develop" and r.get("parent") and r["id"] not in seen:
+            seen.add(r["id"])
+            r = svc.store.agent_run(self._rid({"run": r["parent"]}))
+        if not r or (r.get("phase") or "develop") != "develop":
+            raise UserError("Zu diesem Lauf gibt es keinen Entwickeln-Lauf mehr.")
+        return svc.chain(r)[-1]
+
+    def _agent_back(self, svc, b):
+        """Zurück ans Entwickeln: aus einem Review- oder Test-Lauf geht der Befund (mit deiner Notiz) an den Entwickler,
+        aus einem Entwickeln-Lauf deine Notiz. Wenn möglich in seiner Sitzung, ohne Kopieren und ohne Dialog."""
+        r = svc.store.agent_run(self._rid(b))
+        if not r or r["status"] in ("zugewiesen", "läuft"):
+            raise UserError("Zurückgeben geht erst, wenn der Lauf beendet ist.")
+        note = str(b.get("note") or "").strip()
+        dev = self._dev_of(svc, r)
+        if dev["status"] in ("zugewiesen", "läuft"):
+            raise UserError("Der Entwickler arbeitet gerade (Lauf %d). Erst wenn er fertig ist." % dev["id"])
+        if (r.get("phase") or "develop") == "develop":
+            if not note:
+                raise UserError("Was soll anders werden? Ein Satz reicht.")
+            text = note
+        else:
+            text = briefing.back_to_dev(svc.run_view(r), note)
+        try:
+            svc.gate(r["id"], "back", note or "Befund ans Entwickeln")
+        except agents.AgentError:
+            pass
+        out = self._agent_continue(svc, {"run": dev["id"], "text": text})
+        self.audit("agent.back", r["ticket"], run=r["id"], dev=dev["id"], new_run=out["id"], phase=r.get("phase") or "develop")
+        return dict(out, dev=dev["id"])
+
+    def _agent_again(self, svc, b):
+        """Nach dem Nachbessern: der Reviewer der letzten Runde prüft erneut, in seiner Sitzung, auf dem neuen Stand des Entwicklers.
+        Geht das nicht (kein Review, andere Isolation, Sitzung weg), sagt die Antwort «fallback» und die Oberfläche öffnet den Dialog."""
+        dev = svc.store.agent_run(self._rid(b))
+        if not dev or (dev.get("phase") or "develop") != "develop":
+            raise UserError("Erneut prüfen geht von einem Entwickeln-Lauf aus.")
+        ids = {str(x["id"]) for x in svc.chain(dev)}
+        reviews = [x for x in svc.store.agent_runs(ticket=dev["ticket"]) if (x.get("phase") == "review") and str(x.get("parent") or "") in ids]
+        reviews = [svc.chain(x)[-1] for x in reviews]
+        rv = max(reviews, key=lambda x: x["id"]) if reviews else None
+        if not rv or rv.get("mode") != "worktree" or not dev.get("out_branch"):
+            return {"fallback": True, "why": "Kein Review in einem eigenen Worktree, das weitergehen könnte."}
+        ok, why = svc.can_continue(rv)
+        if not ok:
+            return {"fallback": True, "why": why}
+        text = ("Der Entwickler hat nachgebessert (Lauf %d). Dein Ordner steht jetzt auf seinem neuen Stand. Prüfe erneut: was aus deinem Befund erledigt ist, "
+                "was offen bleibt, was neu dazukam. Schreib den Befund mit tinyops-report neu." % dev["id"])
+        try:
+            out = self._agent_continue(svc, {"run": rv["id"], "text": text}, sync=dev["out_branch"])
+        except (UserError, agents.AgentError) as e:     # z. B. Review auf einem anderen Rechner: dann ein neues Review über den Dialog
+            return {"fallback": True, "why": str(e)}
+        self.audit("agent.again", dev["ticket"], dev=dev["id"], review=rv["id"], new_run=out["id"])
+        return out
 
     def _phase_prompt(self, svc, aid, phase, b):
         """Review oder Test auf dem Ergebnis eines beendeten Laufs: derselbe Branch, Kriterien und Bericht als Grundlage."""
@@ -237,7 +305,7 @@ class AgentArea:
                                template=agents.PHASE_TEMPLATE[phase], extra={"brief": brief})
         info.update(branch=base, project_id=ov["project_id"], parent=ov["id"], phase=phase, repo=self._repo_access(svc, aid, ov["project_id"]))
         if phase == "review":
-            info["prereview"] = ov["id"]
+            info["review_of"] = ov["id"]        # 0.40: hiess «prereview»
         return info
 
     def clone_url(self, pid, via="ssh"):

@@ -38,6 +38,8 @@ CALLS = [
     ("PATCH", "/api/ideas/999", {"status": "x"}), ("DELETE", "/api/ideas/999", None), ("POST", "/api/ideas/999/assess", {}),
     ("POST", "/api/settings/save", {}), ("POST", "/api/settings/identity", {}), ("POST", "/api/settings/nichts", {}), ("PATCH", "/api/settings", {}),
     ("POST", "/api/settings/test/agent", {}), ("POST", "/api/settings/test/sonar", {}),
+    ("GET", "/api/update/check", None), ("POST", "/api/update/run", {}), ("POST", "/api/update/service", {"do": "install"}),      # 0.40
+    ("POST", "/api/agents/back", {}), ("POST", "/api/agents/again", {}),
 ]
 # bei diesen Routen hängt die Form an Zeit oder Zufall: nur Status und Typ festhalten
 LOOSE = {"/api/overview", "/api/log?n=5", "/api/audit/export", "/api/settings/test/agent"}

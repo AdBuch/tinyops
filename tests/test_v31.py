@@ -155,7 +155,7 @@ class Cycle(unittest.TestCase):
         self.assertEqual(len(rows), 4)
 
         rv_info = a.agent_action("prompt", dict(self.body, phase="review", parent=dev["id"]))
-        self.assertEqual((rv_info["phase"], rv_info["branch"], rv_info["prereview"]), ("review", dev["out_branch"], dev["id"]))
+        self.assertEqual((rv_info["phase"], rv_info["branch"], rv_info["review_of"]), ("review", dev["out_branch"], dev["id"]))
         self.assertTrue(rv_info["prompt"].startswith("# Review: DLP-101"))
         rv = self.run_phase(rv_info, "review")
         self.assertEqual([m["step"] for m in rv["manual"]][:3], ["Diff ganz gelesen", "Umfang passt", "Tests passen zur Änderung"])

@@ -28,925 +28,36 @@ import secretstore as store
 import tlog
 import audit as _audit
 
+from agent_rules import (  # noqa: F401  (0.40: aus agents.py gelöst, hier weiter erreichbar)
+    AgentError, CLASSES, CLASS_LABEL, CLONE_URL_RE, CLOUD_MODEL_RE, CODE_EXT,
+    COMMENT_WARN, DEFAULT_MAX_MINUTES, DIR_RE, EXTRA_RE, GATES, GUARD_DEFAULTS,
+    HOST_RE, ID_RE, ISOLATION, MAX_PROMPT, MODEL_RE, PATH_RE,
+    PHASES, PHASE_LABEL, PHASE_TEMPLATE, PROVIDERS, PROVIDER_RE, QUOTAS,
+    QUOTA_DEFAULT, ROLE_CMD_RE, ROLE_DEFAULTS, ROLE_PHASES, STATUS_ACTIVE, STATUS_ALL,
+    USER_RE, _COMMENT, agent_roles, clean_agents, clean_connections, clean_paths,
+    clone_hint, data_class, diff_counts, guard_warnings, guards_cfg, guards_text,
+    looks_cloud, parse_manual, parse_roles, path_allowed, review_items, slug,
+    valid_agent_dir)
+from agent_cmd import (  # noqa: F401  (0.40: aus agents.py gelöst, hier weiter erreichbar)
+    ANSI, KINDS, MODEL, PROMPT, PROMPT_FILE, PROVIDER,
+    _extra, _first, _sh_path, _short, _sub_model, _tool_line,
+    agent_args, agent_env, local_spec, provider_of, remote_cmdline, render_stream,
+    stream_line, clean_text)
+from agent_cmd import SESSIONS, can_resume, find_session, last_reply, new_session  # noqa: F401  (0.40)
+from agent_scripts import SESSION_GREP, resume_prep_script  # noqa: F401  (0.40)
+from agent_talk import ConversationMixin
+from agent_ssh import TOKEN_RE, _friendly, probe, run_remote, ssh_args  # noqa: F401  (0.40: Verbindung in eigenem Modul)
+from agent_scripts import (  # noqa: F401  (0.40: aus agents.py gelöst, hier weiter erreichbar)
+    HELPERS, ISO_ERR, RUNNER, _HELPER_HEAD, _delim, _resolve_base,
+    answer_script, apply_script, changes_script, cleanup_script, helpers_script, parse_checks,
+    parse_question, parse_result, prepare_script, remote_kill_script, remote_report_script, remote_start_script,
+    remote_status_script, result_script, write_helpers)
+
 log = tlog.get("agents")
-
-ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,30}$")
-HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,251}$")
-USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
-EXTRA_RE = re.compile(r"^[A-Za-z0-9_@%+=:,./ \-]{0,200}$")      # keine Anführungszeichen, kein ; | & $ ` < > und kein Zeilenumbruch
-DIR_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,198}$")
-PROMPT = "\0PROMPT\0"
-PROMPT_FILE = "\0PROMPT_FILE\0"
-MODEL = "\0MODEL\0"
-PROVIDER = "\0PROVIDER\0"
-PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
-PROVIDERS = ("ollama", "openai", "litellm", "openrouter")      # Vorschläge; Goose kennt weitere
-# Modellnamen, die nach einem Cloud-Modell aussehen. Offene Gewichte wie gpt-oss laufen lokal und zählen nicht.
-CLOUD_MODEL_RE = re.compile(r"(?i)(?:^|[/:._-])(?:claude|sonnet|opus|haiku|gpt(?!-oss)|chatgpt|o[134](?:-|$)|gemini|grok)")
-
-
-def looks_cloud(model):
-    return bool(model and CLOUD_MODEL_RE.search(model))
-MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$")
-CLASSES = ("restricted", "internal", "public")
-CLASS_LABEL = {"restricted": "restricted (nur lokale Agenten)", "internal": "internal (Cloud mit Freigabe)", "public": "public"}
-PATH_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,199}$")
-ISOLATION = ("worktree", "shared")
-# 0.36: Rollen je Phase als Befehl, mit dem der Prompt beginnt (z. B. eigene Slash-Befehle /planner auf dem Agenten-Rechner)
-ROLE_PHASES = ("plan", "develop", "review", "test")
-ROLE_DEFAULTS = {"plan": "/planner", "develop": "/developer", "review": "/reviewer", "test": "/tester"}
-ROLE_CMD_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9:_-]{0,39}$")
-QUOTAS = ("claude", "codex", "mistral")
-QUOTA_DEFAULT = {"claude": "claude", "codex": "codex", "vibe": "mistral"}
-
-
-def parse_roles(raw):
-    """«plan=/planner, develop=/developer» oder {"plan": "/planner"} → ({phase: befehl}, fehler)."""
-    if isinstance(raw, dict):
-        items = list(raw.items())
-    else:
-        items = [x.split("=", 1) if "=" in x else (x, "") for x in re.split(r"[,\s]+", str(raw or "").strip()) if x]
-    out = {}
-    for k, v in items:
-        k, v = str(k).strip().lower(), str(v).strip()
-        k = {"planner": "plan", "developer": "develop", "reviewer": "review", "tester": "test"}.get(k, k)
-        if k not in ROLE_PHASES:
-            return {}, "Rollen: plan, develop, review, test (z. B. plan=/planner)."
-        v = v or ROLE_DEFAULTS[k]
-        if not ROLE_CMD_RE.fullmatch(v):
-            return {}, "Befehl je Rolle wie /planner: Schrägstrich, dann Buchstaben, Ziffern, - _ :"
-        out[k] = v
-    return out, ""
-
-
-def agent_roles(a):
-    """Für welche Phasen ein Agent da ist. Ohne Angabe: alle."""
-    return [p for p in ROLE_PHASES if p in (a.get("roles") or {})] or list(ROLE_PHASES)
-STATUS_ACTIVE = ("läuft",)
-STATUS_ALL = ("zugewiesen", "läuft", "fertig", "fehlgeschlagen", "abgebrochen", "verloren", "abgelaufen")
-DEFAULT_MAX_MINUTES = 60
-MAX_PROMPT = 20000
-KINDS = {
-    # stream_args: damit man im Lauf sieht, was passiert. Im Druckmodus geben Claude Code und Vibe sonst erst am Ende etwas aus (0.28).
-    "claude": {"label": "Claude Code", "bin": "claude", "argv": ["claude", "-p", PROMPT], "provider": "Anthropic",
-               "stream_args": ["--output-format", "stream-json", "--verbose"], "stream_flags": ("--output-format",),
-               "write_flags": ("--permission-mode", "--dangerously-skip-permissions", "--allowedTools", "--allowed-tools"), "write_hint": "--permission-mode acceptEdits"},
-    "codex": {"label": "Codex", "bin": "codex", "argv": ["codex", "exec", PROMPT], "provider": "OpenAI",
-              "write_flags": ("--full-auto", "--sandbox", "-s", "--dangerously-bypass-approvals-and-sandbox"), "write_hint": "--full-auto"},
-    "vibe": {"label": "Mistral Vibe", "bin": "vibe", "argv": ["vibe", "-p", PROMPT], "provider": "Mistral",
-             "stream_args": ["--output", "streaming"], "stream_flags": ("--output",),
-             "write_flags": ("--auto-approve", "--yolo"), "write_hint": "--auto-approve"},
-    # Lokale Agenten: Aufrufe aus der Dokumentation der CLIs abgeleitet, nicht gegen die echten Programme getestet.
-    # Anbieter und Modell je Agent (0.27): Laufen alle Modelle über denselben Proxy, sagt nur der Agent-Eintrag, ob ein Modell lokal ist.
-    "goose": {"label": "Goose", "bin": "goose", "argv": ["goose", "run", "-i", PROMPT_FILE], "provider": "dem in Goose eingestellten Anbieter",
-              "env": {"GOOSE_PROVIDER": PROVIDER, "GOOSE_MODEL": MODEL}, "local": True},
-    "opencode": {"label": "opencode", "bin": "opencode", "argv": ["opencode", "run", "--model", PROVIDER + "/" + MODEL, PROMPT],
-                 "provider": "dem in opencode eingestellten Anbieter", "local": True},
-    "custom": {"label": "Eigener Befehl", "bin": "", "argv": None, "provider": "dem Anbieter des Befehls", "local": True},
-}
-ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
-
-RUNNER = '''R="$HOME/.tinyops/runs"
-ID="$1"
-export R ID
-{ "${SHELL:-/bin/sh}" -l -c 'PATH="$R/bin:$PATH"; TINYOPS_RUN_DIR="$R"; TINYOPS_RUN_ID="$ID"; PYTHONUNBUFFERED=1; export PATH TINYOPS_RUN_DIR TINYOPS_RUN_ID PYTHONUNBUFFERED; exec sh "$R/$ID.cmd"'; echo $? > "$R/$ID.exit.tmp"; mv "$R/$ID.exit.tmp" "$R/$ID.exit"; } 2>&1 | tee "$R/$ID.log"
-'''
-
-# ------------------------------------------------------------------ Hilfsskripte für den Agenten (0.18): fragen, belegen, berichten
-# Sie liegen in $R/bin und stehen im PATH des Laufs. Reines POSIX-sh, ohne Python, damit sie auf jedem Zielhost laufen.
-_HELPER_HEAD = r'''#!/bin/sh
-R="${TINYOPS_RUN_DIR:-$HOME/.tinyops/runs}"; N="${TINYOPS_RUN_ID:-}"
-case "$N" in ""|*[!0-9]*) echo "tinyops: TINYOPS_RUN_ID fehlt, das geht nur in einem Lauf aus tinyops." >&2; exit 2;; esac
-j() { printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-'''
-HELPERS = {
-    "tinyops-ask": _HELPER_HEAD + r'''# tinyops-ask [-n] [-d] [-t SEK] "Frage" ["Option" ...]   fragt den Menschen in tinyops und gibt die Antwort aus
-# -d: eine Entscheidung (wird im Bericht und im Review als Entscheidung festgehalten)
-# tinyops-ask --wait NR [-t SEK]                     wartet weiter auf die Antwort zu Frage NR
-# Exit 3: noch keine Antwort nach SEK Sekunden (Standard 100). Dann mit --wait NR weiter warten, nicht neu fragen.
-wait=1; to="${TINYOPS_ASK_TIMEOUT:-100}"; K=""; dec=false
-while [ $# -gt 0 ]; do case "$1" in -n) wait=0; shift;; -d) dec=true; shift;; -t) to="$2"; shift 2;; --wait) K="$2"; shift 2;; *) break;; esac; done
-case "$to" in ""|*[!0-9]*) to=100;; esac
-if [ -z "$K" ]; then
-  [ -n "$1" ] || { echo 'Aufruf: tinyops-ask [-n] [-t SEK] "Frage" ["Option" ...]' >&2; exit 2; }
-  K=$(( $(cat "$R/$N.qn" 2>/dev/null || echo 0) + 1 )); echo "$K" > "$R/$N.qn"
-  Q=$(j "$1"); shift; O=""
-  for o in "$@"; do O="$O${O:+, }\"$(j "$o")\""; done
-  b=true; [ "$wait" = 1 ] || b=false
-  printf '{"id": %d, "question": "%s", "options": [%s], "blocking": %s, "decision": %s, "ts": %s}\n' "$K" "$Q" "$O" "$b" "$dec" "$(date +%s)" > "$R/$N.question.tmp" && mv "$R/$N.question.tmp" "$R/$N.question.json"
-  [ "$wait" = 1 ] || { echo "$K"; exit 0; }
-  echo "[tinyops] Frage $K gestellt. Warte auf die Antwort in tinyops ..." >&2
-fi
-case "$K" in ""|*[!0-9]*) echo "tinyops-ask: Fragenummer fehlt" >&2; exit 2;; esac
-t=0
-while [ ! -f "$R/$N.answer.$K" ]; do
-  if [ "$to" -gt 0 ] && [ "$t" -ge "$to" ]; then echo "[tinyops] Noch keine Antwort auf Frage $K. Weiter warten mit: tinyops-ask --wait $K" >&2; exit 3; fi
-  sleep 2; t=$((t + 2))
-done
-cat "$R/$N.answer.$K"
-''',
-    "tinyops-check": _HELPER_HEAD + r'''# tinyops-check BEFEHL [ARG ...]   führt den Befehl aus und hält Befehl, Exit-Code und Dauer als Beleg fest
-[ $# -gt 0 ] || { echo "Aufruf: tinyops-check BEFEHL [ARG ...]" >&2; exit 2; }
-t0=$(date +%s); "$@"; rc=$?; t1=$(date +%s)
-printf '{"cmd": "%s", "exit": %d, "secs": %d, "ts": %d}\n' "$(j "$*")" "$rc" $((t1 - t0)) "$t1" >> "$R/$N.checks"
-echo "[tinyops-check] Exit $rc nach $((t1 - t0)) s: $*" >&2
-exit $rc
-''',
-    "tinyops-ak": _HELPER_HEAD + r'''# tinyops-ak NR erfüllt|offen|unklar ["Beleg oder Grund"]   meldet den Stand eines Akzeptanzkriteriums (AK1, AK2 …) an tinyops
-# Auch: ok, erfuellt, done | offen, open, fail | unklar, unclear. Die letzte Meldung je Kriterium gilt.
-k=$(printf '%s' "$1" | sed 's/^[Aa][Kk]//')
-case "$k" in ""|*[!0-9]*) echo 'Aufruf: tinyops-ak NR erfüllt|offen|unklar ["Beleg oder Grund"]' >&2; exit 2;; esac
-case "$2" in ok|OK|erf*|done|ja|pass*) s=ok;; offen|open|fail*|nein|nicht*) s=open;; unklar|unclear|block*|"?") s=unclear;;
-  *) echo 'tinyops-ak: Stand fehlt. Erlaubt: erfüllt, offen, unklar' >&2; exit 2;; esac
-printf '{"n": %d, "state": "%s", "note": "%s", "ts": %s}\n' "$k" "$s" "$(j "$3" | cut -c1-400)" "$(date +%s)" >> "$R/$N.ak"
-echo "[tinyops] AK$k: $s" >&2
-''',
-    "tinyops-manual": _HELPER_HEAD + r'''# tinyops-manual "Schritt" "Erwartet"   beschreibt einen Testschritt, den der Mensch von Hand ausführt (Oberfläche, Ablauf, Daten)
-[ -n "$1" ] || { echo 'Aufruf: tinyops-manual "Was tun" "Was soll passieren"' >&2; exit 2; }
-printf '{"step": "%s", "expect": "%s", "ts": %s}\n' "$(j "$1" | cut -c1-300)" "$(j "$2" | cut -c1-300)" "$(date +%s)" >> "$R/$N.manual"
-echo "[tinyops] manueller Testschritt notiert" >&2
-''',
-    "tinyops-report": _HELPER_HEAD + r'''# tinyops-report < bericht.md   oder   tinyops-report "Text"   speichert den Ergebnisbericht (Markdown, höchstens 20 KB)
-if [ $# -gt 0 ]; then printf '%s\n' "$*"; else cat; fi | head -c 20000 > "$R/$N.summary.md.tmp" && mv "$R/$N.summary.md.tmp" "$R/$N.summary.md"
-echo "[tinyops] Bericht gespeichert." >&2
-''',
-}
-
-
-def helpers_script():
-    """Shell, die die Hilfsskripte nach $R/bin schreibt (Teil des Startskripts auf dem Zielhost)."""
-    out = ['mkdir -p "$R/bin"']
-    for name, body in HELPERS.items():
-        d = _delim(body)
-        out.append("cat > \"$R/bin/%s\" <<'%s'\n%s%s\nchmod 755 \"$R/bin/%s\"" % (name, d, body, d, name))
-    return "\n".join(out) + "\n"
-
-
-def write_helpers(run_dir):
-    b = Path(run_dir) / "bin"
-    b.mkdir(parents=True, exist_ok=True)
-    for name, body in HELPERS.items():
-        f = b / name
-        f.write_text(body, encoding="utf-8", newline="\n")
-        try:
-            f.chmod(0o755)
-        except OSError:
-            pass
-    return b
-
-
-def parse_question(text):
-    """Frage aus <nr>.question.json. Ungültiges JSON zählt als Frage im Klartext (Nr 0 wird nie beantwortet erwartet)."""
-    text = (text or "").strip()
-    if not text:
-        return None
-    try:
-        q = json.loads(text)
-        if not isinstance(q, dict):
-            raise ValueError
-    except ValueError:
-        return {"id": 1, "question": clean_text(text, 1000), "options": [], "blocking": True, "raw": True}
-    try:
-        qid = int(q.get("id") or 1)
-    except (TypeError, ValueError):
-        qid = 1
-    opts = [clean_text(str(o), 200).strip() for o in (q.get("options") or []) if str(o).strip()][:8] if isinstance(q.get("options"), list) else []
-    return {"id": qid, "question": clean_text(str(q.get("question") or ""), 1000).strip() or "(leere Frage)", "options": opts,
-            "blocking": q.get("blocking") is not False, "decision": q.get("decision") is True}
-
-
-def parse_checks(text):
-    out = []
-    for line in (text or "").splitlines()[-50:]:
-        try:
-            c = json.loads(line)
-            out.append({"cmd": clean_text(str(c.get("cmd") or ""), 300).strip(), "exit": int(c.get("exit")), "secs": int(c.get("secs") or 0),
-                        "ts": int(c.get("ts") or 0)})
-        except (ValueError, TypeError, AttributeError):
-            continue
-    return out
-
-
-class AgentError(Exception):
-    pass
-
-
-def slug(s):
-    return re.sub(r"[^a-z0-9_-]+", "-", str(s or "").strip().lower()).strip("-")[:31]
-
-
-# ------------------------------------------------------------------ Konfiguration prüfen
-def clean_connections(raw, errors):
-    out, seen = [], set()
-    for i, c in enumerate(raw or []):
-        if not isinstance(c, dict):
-            continue
-        k = "connections.%d." % i
-        cid = slug(c.get("id") or c.get("name"))
-        if not ID_RE.fullmatch(cid) or cid == "local":
-            errors[k + "name"] = "Name fehlt oder ist ungültig (Buchstaben, Ziffern, - und _; «local» ist reserviert)."
-            continue
-        if cid in seen:
-            errors[k + "name"] = "Diesen Namen gibt es schon."
-            continue
-        seen.add(cid)
-        host = str(c.get("host") or "").strip()
-        if not HOST_RE.fullmatch(host):
-            errors[k + "host"] = "Rechnername oder Adresse fehlt oder ist ungültig."
-        user = str(c.get("user") or "").strip()
-        if user and not USER_RE.fullmatch(user):
-            errors[k + "user"] = "Ungültiger Benutzername."
-        try:
-            port = int(c.get("port") or 22)
-            if not 1 <= port <= 65535:
-                raise ValueError
-        except (TypeError, ValueError):
-            port = 22
-            errors[k + "port"] = "Port zwischen 1 und 65535."
-        ident = str(c.get("identity_file") or "").strip()
-        if ident and (len(ident) > 300 or "\n" in ident or "\0" in ident or ident.startswith("-")):
-            errors[k + "identity_file"] = "Ungültiger Pfad."
-        hk = c.get("host_key") if c.get("host_key") in ("strict", "accept-new") else "strict"
-        out.append({"id": cid, "name": str(c.get("name") or cid).strip()[:40] or cid, "host": host, "user": user, "port": port,
-                    "identity_file": ident, "host_key": hk})
-    return out
-
-
-def clean_agents(raw, conn_ids, existing, errors):
-    """`existing`: bisherige Agenten aus der config.json. Den Befehl von «custom» übernimmt nur sie, nie die Oberfläche."""
-    old = {a.get("id"): a for a in existing or []}
-    out, seen = [], set()
-    for i, a in enumerate(raw or []):
-        if not isinstance(a, dict):
-            continue
-        k = "agents.%d." % i
-        aid = slug(a.get("id") or a.get("name"))
-        if not ID_RE.fullmatch(aid):
-            errors[k + "name"] = "Name fehlt oder ist ungültig."
-            continue
-        if aid in seen:
-            errors[k + "name"] = "Diesen Namen gibt es schon."
-            continue
-        seen.add(aid)
-        kind = a.get("kind") if a.get("kind") in KINDS else "claude"
-        conn = a.get("connection") or "local"
-        if conn != "local" and conn not in conn_ids:
-            errors[k + "connection"] = "Diese Verbindung gibt es nicht."
-        root = str(a.get("workspace_root") or "").strip()
-        if not root or len(root) > 300 or "\n" in root or "\0" in root or root.startswith("-"):
-            errors[k + "workspace_root"] = "Arbeitsordner fehlt oder ist ungültig."
-        elif conn != "local" and not (root.startswith("/") or root == "~" or root.startswith("~/")):
-            errors[k + "workspace_root"] = "Auf dem Zielhost: absoluter Pfad (/home/… oder ~/…)."
-        extra = str(a.get("extra_args") or "").strip()
-        if not EXTRA_RE.fullmatch(extra):
-            errors[k + "extra_args"] = "Nur Buchstaben, Ziffern und - _ . / : , = @ + %. Keine Anführungszeichen, kein ; | & $ ` < >."
-        try:
-            mx = int(a.get("max_minutes") if a.get("max_minutes") not in (None, "") else DEFAULT_MAX_MINUTES)
-            if not 0 <= mx <= 1440:
-                raise ValueError
-        except (TypeError, ValueError):
-            mx = DEFAULT_MAX_MINUTES
-            errors[k + "max_minutes"] = "Zeitlimit in Minuten zwischen 0 (aus) und 1440."
-        model = str(a.get("model") or "").strip()
-        if KINDS[kind].get("local") and kind != "custom":
-            if not MODEL_RE.fullmatch(model or "x"):
-                errors[k + "model"] = "Modellname: Buchstaben, Ziffern und . _ : / -"
-            elif not model and (kind == "opencode" or str(a.get("provider", "ollama") or "")):
-                errors[k + "model"] = "Welches Modell (z. B. qwen2.5-coder:32b)? Bei Goose ohne Anbieter darf es leer bleiben."
-        iso = a.get("isolation") if a.get("isolation") in ISOLATION else "worktree"
-        # Cloud: Claude, Codex, Vibe immer; lokale Arten nur, wenn du es so einstellst (Standard: lokal)
-        cloud = True if not KINDS[kind].get("local") else bool(a.get("cloud", False))
-        entry = {"id": aid, "name": str(a.get("name") or aid).strip()[:40] or aid, "kind": kind, "connection": conn, "workspace_root": root, "max_minutes": mx,
-                 "extra_args": extra, "cloud": cloud, "isolation": iso}
-        if KINDS[kind].get("local") and kind != "custom":
-            if model:
-                entry["model"] = model
-            prov = str(a.get("provider", "ollama") or "").strip().lower()
-            if prov and not PROVIDER_RE.fullmatch(prov):
-                errors[k + "provider"] = "Anbieter: Kleinbuchstaben, Ziffern, - und _ (z. B. ollama, openai, litellm)."
-            elif not prov and kind == "opencode":
-                errors[k + "provider"] = "opencode braucht einen Anbieter (z. B. ollama)."
-            else:
-                entry["provider"] = prov
-        via = a.get("clone_via")
-        entry["clone_via"] = via if via in ("ssh", "https") else "ssh"
-        roles, err = parse_roles(a.get("roles"))
-        if err:
-            errors[k + "roles"] = err
-        if roles:
-            entry["roles"] = roles
-        if a.get("push"):
-            entry["push"] = True            # 0.36: pusht am Ende seinen Lauf-Branch (sonst nie)
-        q = str(a.get("quota") if a.get("quota") is not None else QUOTA_DEFAULT.get(kind, "")).strip().lower()
-        if q and q not in QUOTAS + ("none",):
-            errors[k + "quota"] = "Kontingent: claude, codex, mistral oder leer."
-        entry["quota"] = q if q in QUOTAS else ""
-        cmd = (old.get(aid) or {}).get("command")
-        if kind == "custom" and cmd:
-            entry["command"] = str(cmd)
-        out.append(entry)
-    return out
-
-
-CLONE_URL_RE = re.compile(r"^(?:https://[A-Za-z0-9.-]+(?::\d+)?/|ssh://(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+(?::\d+)?/|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:)[A-Za-z0-9._~/+-]+$")
-
-
-# -- Zyklus (0.31): Planen → Umsetzen → Review → Test, jede Phase endet mit deiner Freigabe
-PHASES = ("plan", "develop", "review", "test")
-PHASE_LABEL = {"plan": "Planen", "develop": "Umsetzen", "review": "Review", "test": "Test"}
-PHASE_TEMPLATE = {"plan": "agent-plan", "develop": "agent-task", "review": "agent-prereview", "test": "agent-test"}
-GATES = ("ok", "back")
-GUARD_DEFAULTS = {"max_files": 8, "max_lines": 300, "extra": ""}
-
-
-def guards_cfg(cfg):
-    g = dict(GUARD_DEFAULTS)
-    g.update(cfg.get("agent_guards") or {})
-    return g
-
-
-def guards_text(g, phase="develop"):
-    """Leitplanken für jeden Prompt: eine gute, aber einfache Änderung, die sich leicht reviewen lässt."""
-    lines = ["## Leitplanken",
-             "- **Klein halten:** höchstens %d Dateien und etwa %d geänderte Zeilen. Wird es mehr, hör auf und schlag mit `tinyops-ask` eine Aufteilung vor." % (g["max_files"], g["max_lines"]),
-             "- **Nur, was die Aufgabe verlangt:** kein Umbau nebenbei, keine Formatierung fremder Zeilen, keine neuen Abhängigkeiten ohne Rückfrage.",
-             "- **Einfach vor clever:** bestehende Muster und den Stil des Projekts übernehmen; Namen, die erklären, was passiert.",
-             "- **Jede Verhaltensänderung bekommt einen Test**, ausgeführt mit `tinyops-check`.",
-             "- **Kleine Commits** mit einer Absicht je Commit und einer Nachricht, die sie nennt.",
-             "- **Begründen im Bericht, nicht im Code:** Jede geänderte Datei bekommt im Bericht eine Zeile «Datei – was – warum». Keine Kommentare, die nur dem Review dienen, keine auskommentierten Zeilen, keine TODOs ohne Ticket. Kommentare im Code nur, wo sie auch in einem Jahr noch helfen.",
-             "- **Für das Review schreiben:** Im Bericht zuerst, was ein Reviewer ansehen soll, und was du bewusst nicht gemacht hast."]
-    if phase in ("plan", "review"):
-        lines[1:3] = ["- **Nichts ändern:** In dieser Phase liest du nur. Keine Dateien bearbeiten, nichts committen.",
-                      "- **Am Ziel messen:** Eine gute Änderung bleibt unter %d Dateien und etwa %d Zeilen. Ist mehr nötig, schlag eine Aufteilung vor." % (g["max_files"], g["max_lines"])]
-    extra = " ".join(str(g.get("extra") or "").split())[:600]
-    if extra:
-        lines.append("- **Im Team vereinbart:** " + extra)
-    return "\n".join(lines) + "\n"
-
-
-def guard_warnings(result, g):
-    """Was am Ergebnis über die Leitplanken geht. Nur Hinweise: entscheiden tust du."""
-    if not result:
-        return []
-    out = []
-    files = len(result.get("files") or [])
-    m = re.search(r"(\d+) insertion", result.get("stat") or "")
-    d = re.search(r"(\d+) deletion", result.get("stat") or "")
-    lines = (int(m.group(1)) if m else 0) + (int(d.group(1)) if d else 0)
-    if files > g["max_files"]:
-        out.append("%d Datei%s geändert, Ziel höchstens %d. Lässt es sich aufteilen?" % (files, "" if files == 1 else "en", g["max_files"]))
-    if lines > g["max_lines"]:
-        out.append("%d Zeilen geändert, Ziel etwa %d. Gross für ein gründliches Review." % (lines, g["max_lines"]))
-    if result.get("dirty"):
-        out.append("%d Datei%s nicht committet." % (result["dirty"], "" if result["dirty"] == 1 else "en"))
-    nc = sum(f.get("comments") or 0 for f in result.get("files") or [] if isinstance(f, dict))
-    if nc >= COMMENT_WARN:
-        out.append("%d neue Kommentarzeilen im Code. Begründungen gehören in den Bericht. Bleiben sollten nur Kommentare, die in einem Jahr noch helfen." % nc)
-    return out
-
-
-COMMENT_WARN = 5
-CODE_EXT = {"py", "java", "kt", "kts", "js", "mjs", "ts", "tsx", "jsx", "go", "rb", "sh", "bash", "c", "h", "cc", "cpp", "hpp", "cs", "php", "scala",
-            "rs", "sql", "yml", "yaml", "xml", "html", "vue", "svelte", "groovy", "gradle", "swift", "tf", "properties", "toml", "ini", "dockerfile"}
-_COMMENT = re.compile(r"^\s*(//|/\*|\*(\s|/|$)|#(?![!\[{]|include|define|if|endif|region|pragma)|<!--|--\s|;\s)")
-
-
-def diff_counts(diff_lines):
-    """Je Datei: hinzugefügte und entfernte Zeilen, dazu neue Kommentarzeilen (nur in Code-Dateien). Aus `git diff -U0`."""
-    out, cur = {}, None
-    for ln in diff_lines:
-        if ln.startswith("+++ "):
-            p = ln[4:].strip()
-            cur = out.setdefault(p[2:] if p.startswith("b/") else p, {"add": 0, "del": 0, "comments": 0}) if p != "/dev/null" else None
-            continue
-        if ln.startswith("--- ") or ln.startswith("diff --git") or cur is None:
-            if ln.startswith("diff --git"):
-                m = re.search(r" b/(.+)$", ln)
-                cur = out.setdefault(m.group(1), {"add": 0, "del": 0, "comments": 0}) if m else None
-            continue
-        if ln.startswith("+"):
-            cur["add"] += 1
-            path = next((k for k, v in out.items() if v is cur), "")
-            ext = path.rsplit("/", 1)[-1].lower()
-            ext = "dockerfile" if ext.startswith("dockerfile") else ext.rsplit(".", 1)[-1] if "." in ext else ""
-            if ext in CODE_EXT and _COMMENT.match(ln[1:]):
-                cur["comments"] += 1
-        elif ln.startswith("-"):
-            cur["del"] += 1
-    return out
-
-
-def parse_manual(text):
-    out = []
-    for line in (text or "").splitlines()[-30:]:
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        st = " ".join(str(d.get("step") or "").split())[:300]
-        if st:
-            out.append({"step": st, "expect": " ".join(str(d.get("expect") or "").split())[:300]})
-    return out[:20]
-
-
-def review_items(v):
-    """Deine Prüfpunkte für ein manuelles Review des Ergebnisses: fest, plus je Akzeptanzkriterium."""
-    items = [{"kind": "review", "step": "Diff ganz gelesen", "expect": "Jede geänderte Zeile verstanden; nichts ausserhalb der Aufgabe"},
-             {"kind": "review", "step": "Umfang passt", "expect": "Klein genug, sonst aufteilen lassen (Nachbessern)"},
-             {"kind": "review", "step": "Tests passen zur Änderung", "expect": "Neue oder geänderte Logik ist durch Tests abgedeckt, Belege grün"}]
-    items += [{"kind": "review", "step": "AK%d: %s" % (c["n"], c["text"]), "expect": "im Code erfüllt"} for c in v.get("criteria") or []]
-    return items
-
-
-def clone_hint(msg, url):
-    """Fehlermeldung von git clone, mit dem nächsten Schritt in einfachen Worten."""
-    low = msg.lower()
-    host = (re.search(r"@([A-Za-z0-9.-]+)", url) or re.search(r"//([A-Za-z0-9.-]+)", url) or [None, "dem Git-Server"])[1]
-    if "host key verification failed" in low:
-        return msg + "\nDer Zielrechner kennt %s noch nicht. Einmal dort von Hand: ssh -T git@%s" % (host, host)
-    if "permission denied" in low or "could not read from remote" in low:
-        return msg + "\nDer Benutzer auf dem Zielrechner hat keinen Schlüssel, den %s für dieses Projekt akzeptiert (Deploy-Key oder SSH-Schlüssel des Benutzers hinterlegen)." % host
-    if "could not read username" in low or "authentication failed" in low or "terminal prompts disabled" in low:
-        return msg + "\nFür HTTPS fehlen auf dem Zielrechner gespeicherte Zugangsdaten (git credential helper). Einfacher: beim Agenten «Klonen über SSH»."
-    if "not found" in low and "repository" in low:
-        return msg + "\nDas Repository gibt es unter dieser Adresse nicht, oder der Benutzer darf es nicht sehen."
-    return msg
-
-
-def data_class(p):
-    """Datenklasse eines Projekts/Repos. Ohne Angabe: aus der alten Freigabe «Cloud-Agent erlaubt» (0.12–0.15), sonst restricted."""
-    c = (p or {}).get("data_class")
-    if c in CLASSES:
-        return c
-    return "internal" if (p or {}).get("allow_cloud_agents") else "restricted"
-
-
-def clean_paths(raw):
-    """Freigegebene Pfade für Cloud-Agenten: relativ, ohne «..». Gibt (Liste, Fehler) zurück."""
-    items = raw if isinstance(raw, list) else re.split(r"[\s,]+", str(raw or ""))
-    out = []
-    for x in items:
-        x = str(x or "").strip().strip("/")
-        if not x:
-            continue
-        if not PATH_RE.fullmatch(x) or ".." in x.split("/"):
-            return out, "Pfad «%s» ist ungültig (relativ, ohne «..», nur Buchstaben, Ziffern und . _ - /)." % x[:60]
-        if x not in out:
-            out.append(x)
-    if len(out) > 30:
-        return out[:30], "Höchstens 30 freigegebene Pfade."
-    return out, ""
-
-
-def path_allowed(f, paths):
-    f = f.strip("/")
-    return any(f == p or f.startswith(p + "/") for p in paths)
-
-
-def valid_agent_dir(d):
-    d = str(d or "").strip()
-    return (not d) or (DIR_RE.fullmatch(d) is not None and ".." not in d.split("/") and not d.endswith("/"))
-
-
-# ------------------------------------------------------------------ Befehle bauen
-def _sh_path(p):
-    if p == "~":
-        return '"$HOME"'
-    if p.startswith("~/"):
-        return '"$HOME"/' + shlex.quote(p[2:])
-    return shlex.quote(p)
-
-
-def _extra(agent):
-    return shlex.split(agent.get("extra_args") or "")
-
-
-def _sub_model(a, model, provider="ollama"):
-    return a.replace(MODEL, model or "").replace(PROVIDER, provider or "")
-
-
-def provider_of(agent):
-    """Anbieter für Goose/opencode. Alte Einträge ohne Angabe: ollama. Leer: Goose nimmt, was in seiner eigenen Konfiguration steht."""
-    return agent.get("provider", "ollama") or ""
-
-
-def agent_env(agent):
-    """Umgebungsvariablen der Art, ohne leere Werte (leerer Anbieter oder leeres Modell: die eigene Konfiguration der CLI gilt)."""
-    out = {}
-    for k, v in (KINDS[agent["kind"]].get("env") or {}).items():
-        v = _sub_model(v, agent.get("model", ""), provider_of(agent))
-        if v:
-            out[k] = v
-    return out
-
-
-def agent_args(agent):
-    """Feste Argumente der Art mit Anbieter/Modell. opencode ohne Anbieter: nur der Modellname. Dazu die Streaming-Argumente,
-    ausser du setzt das Ausgabeformat selbst in den zusätzlichen Argumenten."""
-    spec = KINDS[agent["kind"]]
-    out = []
-    for a in spec["argv"]:
-        if a in (PROMPT, PROMPT_FILE):
-            out.append(a)
-        else:
-            out.append(_sub_model(a, agent.get("model", ""), provider_of(agent)).lstrip("/"))
-    if spec.get("stream_args") and not any(x.split("=")[0] in spec["stream_flags"] for x in _extra(agent)):
-        out += spec["stream_args"]
-    return out
-
-
-def _short(v, n=140):
-    v = " ".join(str(v if not isinstance(v, (dict, list)) else json.dumps(v, ensure_ascii=False)).split())
-    return v if len(v) <= n else v[:n - 1] + "…"
-
-
-def _tool_line(name, inp):
-    inp = inp if isinstance(inp, dict) else {"args": inp}
-    for k in ("command", "file_path", "path", "pattern", "url", "query", "description", "prompt"):
-        if inp.get(k):
-            return "▸ %s: %s" % (name, _short(inp[k], 160))
-    if isinstance(inp.get("todos"), list):
-        done = sum(1 for t in inp["todos"] if isinstance(t, dict) and t.get("status") == "completed")
-        return "▸ %s: %d von %d Punkten erledigt" % (name, done, len(inp["todos"]))
-    return "▸ %s %s" % (name, _short(inp, 120) if inp else "")
-
-
-def _first(v):
-    if isinstance(v, list):
-        v = " ".join(x.get("text", "") if isinstance(x, dict) else str(x) for x in v)
-    lines = [x for x in str(v or "").splitlines() if x.strip()]
-    return (_short(lines[0], 120) + (" (+%d Zeilen)" % (len(lines) - 1) if len(lines) > 1 else "")) if lines else ""
-
-
-def stream_line(obj):
-    """Eine JSON-Zeile aus dem Stream von Claude Code oder Vibe in lesbaren Text. None = nicht zeigen."""
-    t = obj.get("type")
-    if t == "system":
-        if obj.get("subtype") == "init":
-            return "● gestartet%s" % (" (%s)" % obj["model"] if obj.get("model") else "")
-        return ("● %s" % _short(obj.get("subtype") or "")) if obj.get("subtype") in ("api_retry", "compact_boundary") else None
-    if t in ("assistant", "user"):
-        out = []
-        for c in ((obj.get("message") or {}).get("content") or []):
-            if not isinstance(c, dict):
-                continue
-            if c.get("type") == "text" and c.get("text", "").strip():
-                out.append(c["text"].strip())
-            elif c.get("type") == "tool_use":
-                out.append(_tool_line(c.get("name") or "Werkzeug", c.get("input")))
-            elif c.get("type") == "tool_result":
-                f = _first(c.get("content"))
-                if c.get("is_error"):
-                    out.append("  ✗ %s" % (f or "Fehler"))
-                elif f:
-                    out.append("  → %s" % f)
-        return "\n".join(out) or None
-    if t == "result":
-        head = "■ %s nach %s Schritten%s" % ("fertig" if obj.get("subtype") == "success" and not obj.get("is_error") else "abgebrochen (%s)" % obj.get("subtype"),
-                                           obj.get("num_turns", "?"), ", %d s" % (obj["duration_ms"] // 1000) if isinstance(obj.get("duration_ms"), int) else "")
-        return head + ("\n" + str(obj["result"]).strip() if obj.get("result") else "")
-    if t == "stream_event":
-        return None
-    role = obj.get("role")                      # Vibe (--output streaming): eine Nachricht je Zeile, OpenAI-ähnlich
-    if role:
-        out = []
-        content = obj.get("content")
-        if role == "assistant":
-            if isinstance(content, str) and content.strip():
-                out.append(content.strip())
-            for tc in obj.get("tool_calls") or []:
-                fn = (tc or {}).get("function") or {}
-                args = fn.get("arguments")
-                try:
-                    args = json.loads(args) if isinstance(args, str) else args
-                except ValueError:
-                    pass
-                out.append(_tool_line(fn.get("name") or "Werkzeug", args))
-        elif role == "tool":
-            f = _first(content)
-            out.append("  → %s" % f if f else "")
-        elif role in ("user", "system"):
-            return None
-        return "\n".join(x for x in out if x) or None
-    return _short(obj, 200)
-
-
-def render_stream(text):
-    """Log eines Laufs für die Anzeige: JSON-Zeilen der Agenten lesbar machen, alles andere bleibt."""
-    out = []
-    for line in (text or "").splitlines():
-        s_ = line.strip()
-        if s_.startswith("{") and s_.endswith("}"):
-            try:
-                obj = json.loads(s_)
-            except ValueError:
-                out.append(line)
-                continue
-            r = stream_line(obj) if isinstance(obj, dict) else None
-            if r:
-                out.extend(r.splitlines())
-        else:
-            out.append(line)
-    return "\n".join(out)
-
-
-def remote_cmdline(agent):
-    """Zeile für `<Nr>.cmd` auf dem Zielhost. Der Prompt wird dort aus der Datei gelesen, nicht eingebettet."""
-    if agent["kind"] == "custom":
-        cmd = agent.get("command")
-        if not cmd:
-            raise AgentError("Für diesen eigenen Agenten steht kein «command» in der config.json (die Oberfläche kann ihn nicht setzen).")
-        return cmd.replace("{prompt_file}", '"$R/$ID.prompt"')
-    parts = ["%s=%s" % (k, shlex.quote(v)) for k, v in agent_env(agent).items()]
-    for a in agent_args(agent) + _extra(agent):
-        parts.append('"$(cat "$R/$ID.prompt")"' if a == PROMPT else '"$R/$ID.prompt"' if a == PROMPT_FILE else shlex.quote(a))
-    return " ".join(parts)
-
-
-def local_spec(agent, prompt, prompt_file, workdir):
-    if agent["kind"] == "custom":
-        cmd = agent.get("command")
-        if not cmd:
-            raise AgentError("Für diesen eigenen Agenten steht kein «command» in der config.json (die Oberfläche kann ihn nicht setzen).")
-        pf = subprocess.list2cmdline([str(prompt_file)]) if os.name == "nt" else shlex.quote(str(prompt_file))
-        return {"shell": cmd.replace("{prompt_file}", pf), "cwd": workdir}
-    spec = KINDS[agent["kind"]]
-    exe = shutil.which(spec["bin"])
-    if not exe:
-        raise AgentError("«%s» wurde im PATH dieses Rechners nicht gefunden." % spec["bin"])
-    argv = [exe] + [prompt if a == PROMPT else str(prompt_file) if a == PROMPT_FILE else a for a in agent_args(agent)[1:] + _extra(agent)]
-    out = {"argv": argv, "cwd": workdir}
-    if agent_env(agent):
-        out["env"] = agent_env(agent)
-    return out
-
-
-def _delim(*texts):
-    n = 0
-    while True:
-        d = "TINYOPS_EOF_%d" % n
-        if not any(d in t for t in texts):
-            return d
-        n += 1
-
-
-# ------------------------------------------------------------------ Isolation (Worktree oder Export) als Shell, lokal und remote gleich
-def _resolve_base(base):
-    b = shlex.quote(base or "")
-    return ('BASE=%s; '
-            'if [ -n "$BASE" ] && git -C "$REPO" rev-parse -q --verify "$BASE^{commit}" >/dev/null 2>&1; then :; '
-            'elif [ -n "$BASE" ] && git -C "$REPO" rev-parse -q --verify "origin/$BASE^{commit}" >/dev/null 2>&1; then BASE="origin/$BASE"; '
-            'else BASE=HEAD; fi\n') % b
-
-
-def prepare_script(mode, repo_sh, root_sh, rid, branch, base, paths=()):
-    """Setzt WD (Arbeitsordner des Agenten). Exit 41 Ordner fehlt, 43 kein Git, 44 Worktree, 45 Export. Erwartet R und ID."""
-    rid = int(rid)
-    s = "REPO=%s\n[ -d \"$REPO\" ] || { echo \"Arbeitsverzeichnis fehlt\" >&2; exit 41; }\n" % repo_sh
-    if mode == "shared":
-        return s + 'WD="$REPO"\n'
-    s += 'command -v git >/dev/null 2>&1 || { echo "git fehlt" >&2; exit 43; }\n'
-    s += 'git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || { echo "kein Git-Repository" >&2; exit 43; }\n'
-    s += "WD=%s/.tinyops-wt/%d\n" % (root_sh, rid)
-    s += _resolve_base(base)
-    s += 'mkdir -p "$(dirname "$WD")"\nrm -rf "$WD"\n'
-    if mode == "worktree":
-        s += ('git -C "$REPO" worktree add -q -b %s "$WD" "$BASE" >&2 || { echo "Worktree konnte nicht angelegt werden" >&2; exit 44; }\n'
-              'git -C "$WD" rev-parse HEAD > "$R/$ID.base"\n') % shlex.quote(branch)
-        return s
-    q = " ".join(shlex.quote(p) for p in paths)
-    s += ('mkdir -p "$WD"\n'
-          'git -C "$REPO" archive --format=tar "$BASE" -- %s | tar -x -C "$WD" || { echo "Export der freigegebenen Pfade fehlgeschlagen (gibt es sie im Branch?)" >&2; exit 45; }\n'
-          'git -C "$REPO" rev-parse "$BASE^{commit}" > "$R/$ID.base"\n'
-          '( cd "$WD" && git init -q && git add -A && git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: freigegebene Pfade" '
-          '&& git rev-parse HEAD > "$R/$ID.init" ) >&2 || { echo "Export-Repository konnte nicht angelegt werden" >&2; exit 45; }\n') % q
-    return s
-
-
-def cleanup_script(mode, repo_sh, wt, rid):
-    """Worktree: offene Änderungen als Commit auf dem Agenten-Branch sichern, dann Worktree entfernen (Branch bleibt). Export: Ordner löschen."""
-    w = shlex.quote(wt)
-    if mode == "worktree":
-        return ('REPO=%s; WD=%s; if [ -d "$WD" ]; then cd "$WD" && git add -A && '
-                '(git diff --cached --quiet || git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: offener Stand von Lauf %d gesichert" --no-verify); '
-                'cd / && git -C "$REPO" worktree remove --force "$WD"; fi; git -C "$REPO" worktree prune; true') % (repo_sh, w, int(rid))
-    if mode == "export":
-        return 'rm -rf %s; true' % w
-    return "true"
-
-
-def changes_script(wt):
-    """Export: offene Änderungen committen und alle geänderten Dateien seit dem Export auflisten."""
-    return ('cd %s && git add -A && (git diff --cached --quiet || git -c user.name=tinyops -c user.email=tinyops@localhost commit -qm "tinyops: Stand des Agenten" --no-verify) >/dev/null '
-            '&& INIT=$(cat "$R/$ID.init") && git diff --name-only "$INIT" HEAD && git diff --binary "$INIT" HEAD > "$R/$ID.patch"') % shlex.quote(wt)
-
-
-def apply_script(repo_sh, root_sh, rid, branch, message):
-    """Export: Patch auf einem neuen Branch im echten Repo anwenden (eigener, kurzlebiger Worktree), dann den Worktree entfernen."""
-    return ('REPO=%s; AW=%s/.tinyops-wt/%d-apply; BASE=$(cat "$R/$ID.base"); rm -rf "$AW"; '
-            'git -C "$REPO" worktree add -q -b %s "$AW" "$BASE" >&2 || exit 44; '
-            'if git -C "$AW" apply --index "$R/$ID.patch" >&2 && git -C "$AW" -c user.name=tinyops -c user.email=tinyops@localhost commit -qm %s --no-verify >&2; '
-            'then git -C "$REPO" worktree remove --force "$AW"; echo applied; else git -C "$REPO" worktree remove --force "$AW"; git -C "$REPO" branch -D %s >/dev/null 2>&1; exit 46; fi'
-            ) % (repo_sh, root_sh, int(rid), shlex.quote(branch), shlex.quote(message), shlex.quote(branch))
-
-
-ISO_ERR = {41: "Das Arbeitsverzeichnis %s gibt es nicht. Repository dort klonen oder den Ordner beim Projekt/Agenten anpassen.",
-           43: "%s ist kein Git-Repository (oder git fehlt). Für die Isolation braucht der Agent ein geklontes Repository.",
-           44: "Der Worktree unter %s konnte nicht angelegt werden (Branch schon vorhanden? Repository gesperrt?).",
-           45: "Der Export der freigegebenen Pfade aus %s ist fehlgeschlagen. Gibt es die Pfade im Ausgangs-Branch?",
-           46: "Die Änderungen liessen sich nicht auf den Ausgangsstand von %s anwenden."}
-
-
-def remote_start_script(agent, rid, workdir, prompt, prep=None):
-    cmdline = remote_cmdline(agent)
-    d1, d2 = _delim(prompt), _delim(cmdline)
-    wd = _sh_path(workdir)
-    return """set +e
-R="$HOME/.tinyops/runs"
-mkdir -p "$R"
-chmod 700 "$R" 2>/dev/null || true
-rm -f "$R/{rid}.exit" "$R/{rid}.log"
-cat > "$R/{rid}.prompt" <<'{d1}'
-{prompt}
-{d1}
-cat > "$R/{rid}.cmd" <<'{d2}'
-{cmdline}
-{d2}
-cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
-{runner}TINYOPS_RUNNER_EOF
-command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.manual" "$R/{rid}.summary.md" "$R/{rid}.answer."*
-{helpers}ID={rid}
-{prep}echo "$WD" > "$R/{rid}.wd"
-tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
-echo "started $WD"
-""".format(rid=int(rid), d1=d1, d2=d2, prompt=prompt, cmdline=cmdline, runner=RUNNER, helpers=helpers_script(), prep=prep if prep is not None else 'REPO=%s\n[ -d "$REPO" ] || {{ echo "Arbeitsverzeichnis fehlt" >&2; exit 41; }}\nWD="$REPO"\n'.replace("{{", "{").replace("}}", "}") % wd)
-
-
-def remote_kill_script(rid):
-    """Beendet die Sitzung samt Prozessen: erst TERM an die Prozessgruppe jedes Fensters, dann die Sitzung selbst."""
-    return ('S=tinyops-%d; for p in $(tmux list-panes -s -t "$S" -F "#{pane_pid}" 2>/dev/null); do '
-            'g=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d " "); [ -n "$g" ] && kill -TERM -- "-$g" 2>/dev/null; pkill -TERM -P "$p" 2>/dev/null; done; '
-            'sleep 1; tmux kill-session -t "$S" 2>/dev/null; true') % int(rid)
-
-
-def remote_status_script(ids):
-    return ('R="$HOME/.tinyops/runs"; for i in %s; do '
-            'if [ -f "$R/$i.exit" ]; then echo "$i exit $(cat "$R/$i.exit")"; '
-            'elif tmux has-session -t tinyops-$i 2>/dev/null; then echo "$i running"; '
-            'elif [ -f "$R/$i.exit" ]; then echo "$i exit $(cat "$R/$i.exit")"; '
-            'else echo "$i gone"; fi; '
-            'if [ -f "$R/$i.question.json" ]; then printf "%%s q " "$i"; head -c 4000 "$R/$i.question.json" | tr "\\n\\r" "  "; echo; fi; done') % " ".join(str(int(i)) for i in ids)
-
-
-def remote_report_script(rid):
-    return ('R="$HOME/.tinyops/runs"; echo "@@SUMMARY"; head -c 20000 "$R/%d.summary.md" 2>/dev/null; echo; echo "@@CHECKS"; '
-            'tail -n 50 "$R/%d.checks" 2>/dev/null; echo "@@AK"; tail -n 200 "$R/%d.ak" 2>/dev/null; echo "@@MANUAL"; tail -n 30 "$R/%d.manual" 2>/dev/null; true') % (int(rid), int(rid), int(rid), int(rid))
-
-
-def result_script(wt, mode):
-    """Was der Lauf am Code geändert hat, gegen den Ausgangsstand: Commits, Dateien, Umfang, offene Änderungen. Nur lesend. Erwartet R und ID."""
-    base = "init" if mode == "export" else "base"
-    return ('cd %s 2>/dev/null || exit 0; B=$(cat "$R/$ID.%s" 2>/dev/null); [ -n "$B" ] || exit 0; export GIT_OPTIONAL_LOCKS=0; '
-            'echo "@@COMMITS"; git log --format="%%h %%s" "$B..HEAD" 2>/dev/null | head -n 30; '
-            'echo "@@STAT"; git diff --shortstat "$B" 2>/dev/null; '
-            'echo "@@FILES"; git diff --name-status "$B" 2>/dev/null | head -n 80; '
-            'echo "@@DIRTY"; git status --porcelain 2>/dev/null | wc -l; '
-            'echo "@@DIFF"; git diff -U0 --no-color "$B" 2>/dev/null | head -c 400000; true') % (shlex.quote(wt), base)
-
-
-def parse_result(out):
-    """Ausgabe von result_script lesen."""
-    head, _, diff = (out or "").partition("@@DIFF")      # im Diff beginnen Hunk-Köpfe mit @@: er steht deshalb am Ende und wird vorher abgetrennt
-    sec, cur = {"DIFF": diff.splitlines()}, None
-    for line in head.splitlines():
-        if line.startswith("@@"):
-            cur = line[2:].strip()
-            sec[cur] = []
-        elif cur:
-            sec[cur].append(line)
-    if "COMMITS" not in sec:
-        return None
-    commits = [{"sha": x.split(" ", 1)[0], "subject": clean_text(x.split(" ", 1)[1] if " " in x else "", 200).strip()} for x in sec["COMMITS"] if x.strip()]
-    files = []
-    for x in sec.get("FILES") or []:
-        p = x.split("\t")
-        if len(p) >= 2:
-            files.append({"st": p[0][:1], "path": clean_text(p[-1], 300).strip()})
-    stat = " ".join(" ".join(sec.get("STAT") or []).split())
-    try:
-        dirty = int("".join(sec.get("DIRTY") or ["0"]).strip() or 0)
-    except ValueError:
-        dirty = 0
-    secrets = secretscan.scan_diff("\n".join(sec.get("DIFF") or []), "Ergebnis des Laufs")[:20]
-    counts = diff_counts(sec.get("DIFF") or [])
-    for f in files:
-        f.update(counts.get(f["path"]) or {})
-    return {"commits": commits, "files": files, "stat": clean_text(stat, 200), "dirty": dirty, "secrets": secrets}
-
-
-def answer_script(rid, qid, text):
-    d = _delim(text)
-    return ('R="$HOME/.tinyops/runs"; [ -d "$R" ] || exit 4\n'
-            'cat > "$R/{rid}.answer.{q}.tmp" <<\'{d}\'\n{text}\n{d}\n'
-            'mv "$R/{rid}.answer.{q}.tmp" "$R/{rid}.answer.{q}"\n'
-            'grep -q \'"id": {q},\' "$R/{rid}.question.json" 2>/dev/null && rm -f "$R/{rid}.question.json"\necho ok\n').format(rid=int(rid), q=int(qid), d=d, text=text)
-
-
-# ------------------------------------------------------------------ SSH
-def ssh_args(conn):
-    a = [os.environ.get("TINYOPS_SSH") or "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=10",
-         "-o", "StrictHostKeyChecking=%s" % ("accept-new" if conn.get("host_key") == "accept-new" else "yes"), "-p", str(conn.get("port") or 22)]
-    if conn.get("identity_file"):
-        a += ["-o", "IdentitiesOnly=yes", "-i", os.path.expanduser(conn["identity_file"])]
-    target = ("%s@%s" % (conn["user"], conn["host"])) if conn.get("user") else conn["host"]
-    return a + ["--", target]
-
-
-def _friendly(err, conn):
-    e = (err or "").strip()
-    low = e.lower()
-    where = conn.get("host", "?")
-    if "host key verification failed" in low or "no matching host key" in low:
-        return ("Der Host-Schlüssel von %s ist nicht bekannt oder hat sich geändert. Einmal im Terminal «ssh %s» ausführen und den Schlüssel prüfen und bestätigen, "
-                "oder bei der Verbindung «accept-new» wählen (vertraut beim ersten Mal, warnt bei Änderungen)." % (where, where))
-    if "permission denied" in low:
-        return ("Anmeldung an %s abgelehnt. Benutzer und Schlüsseldatei prüfen. tinyops fragt nie nach Passwörtern; ein Schlüssel mit Passphrase "
-                "braucht einen laufenden ssh-agent." % where)
-    if "could not resolve" in low or "name or service not known" in low:
-        return "Der Name %s lässt sich nicht auflösen (VPN verbunden? Tippfehler?)." % where
-    if "timed out" in low or "no route" in low or "connection refused" in low:
-        return "%s ist nicht erreichbar (%s). VPN, Port und Firewall prüfen." % (where, e.splitlines()[-1][:120] if e else "Zeitüberschreitung")
-    return "SSH zu %s fehlgeschlagen: %s" % (where, (e.splitlines()[-1] if e else "unbekannter Fehler")[:200])
-
-
-def run_remote(conn, script, timeout=25):
-    args = ssh_args(conn) + ["sh -c " + shlex.quote(script)]
-    try:
-        r = subprocess.run(args, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
-    except FileNotFoundError:
-        raise AgentError("Der SSH-Client «ssh» wurde nicht gefunden. Windows: «OpenSSH-Client» als optionales Feature installieren; Container: openssh-client im Image.")
-    except subprocess.TimeoutExpired:
-        raise AgentError("SSH zu %s: keine Antwort innerhalb von %d s." % (conn.get("host"), timeout))
-    out = r.stdout.decode("utf-8", "replace")[:300000]
-    err = r.stderr.decode("utf-8", "replace")[:20000]
-    if r.returncode == 255:
-        raise AgentError(_friendly(err, conn))
-    return r.returncode, out, err
-
-
-TOKEN_RE = store.TOKEN_RE
-
-
-def clean_text(s, limit=20000):
-    s = ANSI.sub("", s or "").replace("\r\n", "\n").replace("\r", "\n")
-    s = TOKEN_RE.sub("***", store.scrub(s))
-    return s[-limit:]
-
-
-# ------------------------------------------------------------------ Prüfen (für die Einstellungen)
-def probe(agent, conn, workdir_hint=""):
-    """Fakten über Ziel und Agent. Schreibt nichts außer dem Ordner ~/.tinyops/runs. Gibt ein Dict zurück oder wirft AgentError."""
-    if conn is None:
-        spec = KINDS[agent["kind"]]
-        root = os.path.expanduser(agent["workspace_root"])
-        d = Path(os.environ.get("TINYOPS_RUNS_PROBE") or Path.home() / ".tinyops" / "probe")
-        try:
-            d.mkdir(parents=True, exist_ok=True)
-            writable = os.access(d, os.W_OK)
-        except OSError:
-            writable = False
-        return {"os": os.name, "tmux": None, "workspace": os.path.isdir(root), "bin": (shutil.which(spec["bin"]) or "") if spec["bin"] else None, "writable": writable,
-                "git": bool(shutil.which("git")), "sh": bool(shutil.which("sh")), "user": None, "root": None, "sudo": None, "docker": None}
-    wd = _sh_path(agent["workspace_root"])
-    binpart = ""
-    if KINDS[agent["kind"]]["bin"]:
-        binpart = 'echo "bin:$("${SHELL:-/bin/sh}" -l -c \'command -v %s\' 2>/dev/null)"; ' % shlex.quote(KINDS[agent["kind"]]["bin"])[1:-1] if False else \
-                  'echo "bin:$("${SHELL:-/bin/sh}" -l -c %s 2>/dev/null)"; ' % shlex.quote("command -v " + KINDS[agent["kind"]]["bin"])
-    script = ('echo "TINYOPS_OK"; echo "os:$(uname -s)"; '
-              '(command -v tmux >/dev/null 2>&1 && echo "tmux:yes") || echo "tmux:no"; '
-              '([ -d %s ] && echo "ws:yes") || echo "ws:no"; '
-              '(mkdir -p "$HOME/.tinyops/runs" 2>/dev/null && [ -w "$HOME/.tinyops/runs" ] && echo "runs:yes") || echo "runs:no"; '
-              '(command -v git >/dev/null 2>&1 && echo "git:yes") || echo "git:no"; '
-              'echo "user:$(id -un 2>/dev/null)"; echo "uid:$(id -u 2>/dev/null)"; '
-              '(command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1 && echo "sudo:yes") || echo "sudo:no"; '
-              '([ -w /var/run/docker.sock ] && echo "docker:yes") || echo "docker:no"; ' % wd) + binpart
-    rc, out, err = run_remote(conn, script, timeout=25)
-    facts = {}
-    for line in out.splitlines():
-        if ":" in line:
-            k, v = line.split(":", 1)
-            facts[k.strip()] = v.strip()
-    if "os" not in facts and "tmux" not in facts:
-        raise AgentError("Unerwartete Antwort vom Zielhost (Login-Banner oder Shell, die nichts ausgibt?).")
-    return {"os": facts.get("os", "?"), "tmux": facts.get("tmux") == "yes", "workspace": facts.get("ws") == "yes",
-            "bin": facts.get("bin", "") if KINDS[agent["kind"]]["bin"] else None, "writable": facts.get("runs") == "yes",
-            "git": facts.get("git") == "yes", "sh": True, "user": facts.get("user", "?"), "root": facts.get("uid") == "0",
-            "sudo": facts.get("sudo") == "yes", "docker": facts.get("docker") == "yes"}
 
 
 # ------------------------------------------------------------------ Dienst: Läufe an Tickets
-class Service:
+class Service(ConversationMixin):
     def __init__(self, cfg, store_, run_dir, base_dir):
         self.cfg, self.store = cfg, store_
         self.run_dir, self.base = Path(run_dir), Path(base_dir)
@@ -1252,6 +363,10 @@ class Service:
         v["review_brief"] = briefing.review_brief(v) if v["phase"] != "plan" and v.get("result") and r["status"] not in ("zugewiesen", "läuft") else None
         v["checks_ok"] = all(c["exit"] == 0 for c in v["checks"]) if v["checks"] else None
         v["decisions"] = briefing.decisions(v)                                                       # 0.36: mit tinyops-ask -d entschieden
+        th = self.thread(r)                                                                            # 0.40: Gespräch und Sitzung
+        v["thread"], v["round"] = th["messages"], th["round"]
+        ok, why = self.can_continue(r) if r["status"] not in ("zugewiesen",) + STATUS_ACTIVE else (False, "")
+        v["same_session"], v["session_why"] = ok, why
         v["open_decisions"] = briefing.open_decisions(briefing.report_sections(r.get("summary") or "").get("decide")) if r["status"] not in STATUS_ACTIVE else []
         v.update(agent_name=a["name"] if a else r["agent"] + " (entfernt)", kind=a["kind"] if a else "custom",
                  where=("lokal" if a and a["connection"] == "local" else conn["name"] if conn else "?"),
@@ -1286,7 +401,8 @@ class Service:
         self._ev("agent.assign", self.store.agent_run(rid), branch=str(branch or "")[:200])
         return rid
 
-    def start(self, run_id, prompt, pid=None, branch=None, phase="develop", parent=None):
+    def start(self, run_id, prompt, pid=None, branch=None, phase="develop", parent=None, resume=None, ask="", sync=""):
+        """resume: alter Lauf, dessen Sitzung weitergeht (0.40): derselbe Arbeitsordner, derselbe Branch, der Agent behält den Kontext."""
         with self.lock:
             r = self.store.agent_run(run_id)
             if not r:
@@ -1304,25 +420,39 @@ class Service:
             if not prompt or len(prompt) > MAX_PROMPT or "\0" in prompt:
                 raise AgentError("Der Prompt fehlt oder ist länger als %d Zeichen." % MAX_PROMPT)
             wd = self.workdir(a, pid)
-            mode = self.mode(a, pid)
-            if mode == "shared":
+            mode = self.mode(a, pid) if not resume else (resume.get("mode") or "shared")
+            if mode == "shared" and not resume:
                 for o in self.store.agent_runs(status="läuft"):
                     if o["agent"] == a["id"] and o["workdir"] == wd and (o.get("mode") or "shared") == "shared":
                         raise AgentError("Auf diesem Agenten läuft in %s schon eine Aufgabe (%s). Erst beenden." % (wd, o["ticket"]))
             branch = str(branch if branch is not None else r["branch"])[:200]
             outb = self.out_branch(r["ticket"], run_id) if mode != "shared" else ""
             repo, root = self._paths(a, pid)
-            prep = prepare_script(mode, self._q(a, repo), self._q(a, root), run_id, outb, branch, (self.project(pid) or {}).get("cloud_paths") or [])
+            if resume:
+                outb = resume.get("out_branch") or ""
+                prep = resume_prep_script(self._q(a, resume.get("wt") or resume.get("workdir") or wd), resume["id"], sync)
+                sid = resume.get("session") or ""
+                sess = {"id": sid, "resume": True}
+            else:
+                prep = prepare_script(mode, self._q(a, repo), self._q(a, root), run_id, outb, branch, (self.project(pid) or {}).get("cloud_paths") or [])
+                sid = new_session(a, run_id) if can_resume(a) else ""
+                sess = {"id": sid, "resume": False} if sid else None
             crit = briefing.parse_prompt(prompt)
+            if not crit and resume:                 # eine Nachfrage hat keine Kriterien: die des alten Laufs gelten weiter
+                try:
+                    crit = json.loads(resume.get("criteria") or "[]")
+                except ValueError:
+                    crit = []
             self.store.agent_run_update(run_id, project_id=pid, branch=branch, workdir=wd, prompt=prompt, mode=mode, out_branch=outb,
                                         criteria=json.dumps(crit, ensure_ascii=False), ak="", result="", msteps="", mchecks="", gate="", gate_note="",
-                                        phase=phase if phase in PHASES else "develop", parent=str(parent or ""))
+                                        phase=phase if phase in PHASES else "develop", parent=str(parent or ""),
+                                        session=sid, resume_of=str(resume["id"]) if resume else "", ask=str(ask or "")[:4000], reply="", next_run="")
             try:
                 if conn is None:
-                    run_wd = self._local_prepare(a, run_id, prep) if mode != "shared" else wd
-                    self._local_start(a, run_id, run_wd, prompt)
+                    run_wd = self._local_prepare(a, run_id, prep) if (mode != "shared" or resume) else wd
+                    self._local_start(a, run_id, run_wd, prompt, sess)
                 else:
-                    rc, out, err = run_remote(conn, remote_start_script(a, run_id, wd, prompt, prep), timeout=60)
+                    rc, out, err = run_remote(conn, remote_start_script(a, run_id, wd, prompt, prep, sess), timeout=60)
                     if rc in ISO_ERR:
                         raise AgentError(ISO_ERR[rc] % wd)
                     if rc == 42:
@@ -1331,13 +461,15 @@ class Service:
                         raise AgentError("Start fehlgeschlagen (Exit %d): %s" % (rc, clean_text(err or out, 300).strip()))
                     run_wd = out.split("started", 1)[1].strip().splitlines()[0] if "started" in out else wd
                 self.store.agent_run_update(run_id, wt=run_wd if mode != "shared" else "")
+                if resume:                         # der Arbeitsordner gehört jetzt dem neuen Lauf: Entfernen des alten lässt ihn stehen
+                    self.store.agent_run_update(resume["id"], wt="", next_run=str(run_id))
             except AgentError as e:
                 self.store.agent_run_update(run_id, status="fehlgeschlagen", note=str(e)[:300], finished=time.time())
                 log.warning("Start von Lauf %d (%s) fehlgeschlagen: %s", run_id, a["id"], e)
                 self._ev("agent.start", self.store.agent_run(run_id), ok=False, error=str(e)[:300], prompt_hash=_audit.prompt_hash(prompt))
                 raise
             self.store.agent_run_update(run_id, status="läuft", started=time.time(), note="")
-            self._ev("agent.start", self.store.agent_run(run_id), prompt_hash=_audit.prompt_hash(prompt), prompt_chars=len(prompt),
+            self._ev("agent.start", self.store.agent_run(run_id), prompt_hash=_audit.prompt_hash(prompt), prompt_chars=len(prompt), session=bool(resume),
                      workdir=wd, branch=branch, out_branch=outb, criteria=len(crit), max_minutes=int(a.get("max_minutes", DEFAULT_MAX_MINUTES) or 0))
             log.info("Lauf %d gestartet: Agent %s, Ticket %s, %s", run_id, a["id"], r["ticket"], wd)
             return run_id
@@ -1351,7 +483,7 @@ class Service:
         line = [x for x in out.splitlines() if x.startswith("WD=")]
         return line[-1][3:] if line else ""
 
-    def _local_start(self, a, rid, wd, prompt):
+    def _local_start(self, a, rid, wd, prompt, sess=None):
         if not os.path.isdir(wd):
             raise AgentError("Das Arbeitsverzeichnis %s gibt es auf diesem Rechner nicht." % wd)
         d = self.run_dir
@@ -1368,7 +500,7 @@ class Service:
                 pass
         pf = d / ("%d.prompt" % rid)
         pf.write_text(prompt, encoding="utf-8")
-        spec = local_spec(a, prompt, pf, wd)
+        spec = local_spec(a, prompt, pf, wd, sess)
         hb = write_helpers(d)
         spec["env"] = dict(spec.get("env") or {}, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID=str(rid), PYTHONUNBUFFERED="1",
                            PATH=str(hb) + os.pathsep + os.environ.get("PATH", ""))
@@ -1466,6 +598,8 @@ class Service:
                 d = self.run_dir
                 rd = lambda ext: (d / ("%d.%s" % (r["id"], ext))).read_text(encoding="utf-8", errors="replace") if (d / ("%d.%s" % (r["id"], ext))).exists() else ""
                 summary, checks, ak, manual = rd("summary.md")[:20000], rd("checks"), rd("ak"), rd("manual")
+                logt = rd("log")
+                sess_line, tail = logt[:400000], logt[-48000:]
             else:
                 rc, out, _ = run_remote(conn, remote_report_script(r["id"]), timeout=20)
                 if rc != 0 or "@@CHECKS" not in out:
@@ -1473,10 +607,14 @@ class Service:
                 head, _, checks = out.partition("@@CHECKS")
                 checks, _, ak = checks.partition("@@AK")
                 ak, _, manual = ak.partition("@@MANUAL")
+                manual, _, sess_line = manual.partition("@@SESSION")
+                sess_line, _, tail = sess_line.partition("@@TAIL")
                 summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
             self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False),
                                         ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False),
-                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False))
+                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False), reply=last_reply(tail))
+            if not r.get("session") and find_session(a, sess_line):      # 0.40: Codex und Vibe vergeben die Kennung selbst
+                self.store.agent_run_update(r["id"], session=find_session(a, sess_line))
             cur = self.store.agent_run(r["id"]) or r
             if cur.get("wt") and cur.get("mode") in ("worktree", "export"):      # was am Code geändert wurde; fehlt der Ordner schon, bleibt der alte Stand
                 rc, out, _ = self._sh(a, conn, result_script(cur["wt"], cur["mode"]), r["id"], timeout=25)

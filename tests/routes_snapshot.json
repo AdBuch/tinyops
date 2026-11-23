@@ -180,6 +180,21 @@
   "status": 200,
   "type": "application/json"
  },
+ "GET /api/update/check": {
+  "keys": [
+   "available",
+   "busy",
+   "can_update",
+   "checked",
+   "current",
+   "latest",
+   "service",
+   "url",
+   "why"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
  "GET /api/update/news": {
   "keys": [
    "text"
@@ -282,6 +297,16 @@
  "PATCH /api/settings": {
   "error": "Nicht gefunden.",
   "status": 404,
+  "type": "application/json"
+ },
+ "POST /api/agents/again": {
+  "error": "Lauf-Nummer fehlt.",
+  "status": 400,
+  "type": "application/json"
+ },
+ "POST /api/agents/back": {
+  "error": "Lauf-Nummer fehlt.",
+  "status": 400,
   "type": "application/json"
  },
  "POST /api/agents/x": {
@@ -450,11 +475,21 @@
   "status": 400,
   "type": "application/json"
  },
+ "POST /api/update/run": {
+  "error": "Im Demo-Modus aus.",
+  "status": 400,
+  "type": "application/json"
+ },
  "POST /api/update/seen": {
   "keys": [
    "ok"
   ],
   "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/update/service": {
+  "error": "Im Demo-Modus aus.",
+  "status": 400,
   "type": "application/json"
  },
  "POST /api/usage/push": {

@@ -23,7 +23,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="update">Update und Dienst</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -273,6 +273,9 @@ async function loadSettings() {
     <div id="app-codebox"></div>
     <div id="app-devs" style="margin-top:12px"></div>`)}
 
+  ${sect('update', 'Update und Dienst', 'Neue Versionen erkennt tinyops selbst und holt sie auf deinen Klick. Unter Linux läuft es auf Wunsch als Dienst.', `
+    <div id="upd-box"><div class="small quiet">Sehe nach …</div></div>`)}
+
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
@@ -293,7 +296,7 @@ async function loadSettings() {
   $('gh-test').onclick = testGithub; $('gh-search').onclick = searchGithub; $('gh-q').onkeydown = ev => { if (ev.key === 'Enter') searchGithub(); };
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false); renderM3Status();
-  renderLlmKey(); wireApp();
+  renderLlmKey(); wireApp(); if (UPD) renderUpdBox(); else checkUpdate(false);
   FA = S.focus.areas.map(a => ({ ...a, pools: (a.pools || []).join(', '), activities: (a.activities || []).join(', ') })); renderFocusAreas();
   $('fa-add').onclick = () => { FA.push({ id: '', name: '', target_pct: 0, ticket: '', pools: '', activities: '', blocks_text: '' }); renderFocusAreas(); };
   renderHdSecret(); $('hd-auth').onchange = renderHdSecret;
@@ -704,6 +707,8 @@ function renderAgentCfg() {
       <label class="sm" title="Für welche Phasen der Agent da ist, und mit welchem Befehl sein Prompt beginnt (z. B. eigene Slash-Befehle auf dem Agenten-Rechner). Leer: alle Phasen, ohne Befehl.">Rollen<input type="text" data-ag="${i}" data-f="roles" value="${esc(rolesText(a.roles))}" placeholder="plan=/planner, develop=/developer, review=/reviewer, test=/tester"></label>
       <label class="sm" title="Welches Abo dieser Agent verbraucht. Die Auswahl beim Zuweisen zeigt dann, wie viel davon noch frei ist.">Kontingent<select data-ag="${i}" data-f="quota">${[['claude', 'Claude'], ['codex', 'Codex (ChatGPT)'], ['mistral', 'Mistral'], ['none', 'keins']].map(([v, l]) => `<option value="${v}" ${(a.quota || QUOTA_DEF[a.kind] || 'none') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="sm check" style="align-self:end" title="Der Agent pusht am Ende genau seinen Lauf-Branch (git push -u origin HEAD), nie main, master, develop oder release/*. tinyops selbst pusht nie."><input type="checkbox" data-ag="${i}" data-f="push" ${a.push ? 'checked' : ''}><span>pusht seinen Branch</span></label>
+      <label class="sm" title="Name für die Commits dieses Agenten (git user.name). Leer: das Konto auf dem Agenten-Rechner.">Git-Name<input type="text" data-ag="${i}" data-f="git_name" value="${esc(a.git_name || '')}" placeholder="z. B. Claude (devvm)" maxlength="80"></label>
+      <label class="sm" title="E-Mail für die Commits dieses Agenten (git user.email). Leer: wie auf dem Agenten-Rechner eingestellt.">Git-E-Mail<input type="email" data-ag="${i}" data-f="git_email" value="${esc(a.git_email || '')}" placeholder="agent@example.org" maxlength="120"></label>
       <div class="sm" style="align-self:end"><button type="button" data-agroles="${i}" title="Rollen mit /planner, /developer, /reviewer, /tester füllen">Rollen-Vorschlag</button></div>
     </div>
     ${['goose', 'opencode'].includes(a.kind) ? `<div class="quiet small"><label><input type="checkbox" data-ag="${i}" data-f="cloud" ${a.cloud ? 'checked' : ''}> sendet Daten an einen Cloud-Anbieter</label> · Aus lassen nur, wenn dieses Modell wirklich im eigenen Netz läuft. Nur dann darf der Agent an restricted-Projekte. Läuft alles über denselben Proxy, sieht tinyops den Unterschied nicht: Du sagst es hier je Agent.</div><datalist id="agProviders"><option value="ollama"><option value="openai"><option value="litellm"><option value="openrouter"></datalist>` : ''}

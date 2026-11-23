@@ -1,6 +1,6 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-22. Ab hier gilt der Plan 0.33–0.48. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-23. Ab hier gilt der Plan 0.33–0.48. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
 ## Plan 0.33 – 0.48: aufräumen, entscheiden, dann wenig Neues
 
@@ -34,7 +34,7 @@ Dafür kamen zwei Releases dazu (0.41 und 0.42). Alles ab «Einstellungen und Da
 | **0.37.0** ✓ | Server zerlegen I: Routentabelle in `routes.py`, Clients und Demo in eigene Module, `server.py` 5'301 → 3'794 Zeilen (geliefert 2026-11-18) | Refactoring | – |
 | **0.38.0** ✓ | Server zerlegen II: App in neun Bereiche (`area_*.py`) mit geprüften Querzugriffen, `config.py`, `server.py` 3'794 → 743 Zeilen (geliefert 2026-11-20) | Refactoring | – |
 | **0.39.0** ✓ | Oberfläche zerlegen: `index.html` 5'155 Zeilen → HTML, `app.css` und 16 Skriptteile (grösster 808 Zeilen), zusammengesetzt von `ui.py` ohne Build; dazu QR-Code beim Koppeln, Klickbares im Detail-Panel, Agentenfenster als Seitenpanel (geliefert 2026-11-22) | Refactoring + Korrekturen | E6 ✓ |
-| 0.40.0 | Agenten: vier Rollen und der Kreislauf. Planen → Entwickeln → Review → Test, Befunde gehen mit einem Klick zurück ans Entwickeln, in derselben Sitzung; `agents.py` aufgeteilt, Git-User je Agent | Refactoring + Wünsche | E5 ✓ |
+| **0.40.0** ✓ | Agenten: Gespräch in derselben Sitzung (Claude Code, Codex, Vibe, Goose, opencode), vier Rollen mit «Zurück ans Entwickeln» und «Erneut prüfen», Git-User je Agent, `agents.py` 1'787 → 925 Zeilen in sechs Module; dazu Update aus dem Panel und Dienst unter Linux (geliefert 2026-11-23) | Refactoring + Wünsche | E5 ✓ |
 | 0.41.0 | Schneller zum Testen von Hand: «Jetzt testen» öffnet den Stand in IntelliJ, startet die Review-Umgebung und zeigt die Prüfliste je Ticket; ein Fehler geht mit Notiz zurück ans Entwickeln | Neu | – |
 | 0.42.0 | Reviews in GitLab: «Review starten» legt die Punkte eines Agenten als Entwurf in GitLab an, abschicken machst du dort. Dazu «Was tinyops nach aussen tut»: jeder Aufruf je Anbindung in den Einstellungen | Neu | E14 ✓ |
 | 0.43.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
@@ -127,7 +127,7 @@ Dafür kamen zwei Releases dazu (0.41 und 0.42). Alles ab «Einstellungen und Da
   - **Agentenfenster als Seitenpanel** statt Dialog (182 Klicks, 24 Wutklicks im Dialog).
 - **Fertig, wenn:** Keine Datei hat mehr als 1'200 Zeilen, die UI-Tests aus 0.33 sind grün, und es gibt sichtbar keinen Unterschied.
 
-**0.40.0 – Agenten: vier Rollen und der Kreislauf**
+**0.40.0 – Agenten: vier Rollen und der Kreislauf** ✓ (dazu auf Wunsch vom 23.11.: Update aus dem Panel, Dienst unter Linux. Offen: Fortsetzen gegen die echten Programme prüfen, `r40-01`)
 - **Die vier Rollen klar** (Schwerpunkt 2 vom 20.11.): Planen, Entwickeln, Review, Test. Jede Rolle hat einen Namen, eine Farbe, ihren Agenten und ihren Befehl (`/planner`, `/developer`, `/reviewer`, `/tester`). Die Leiste im Lauf zeigt den Kreislauf und wo das Ticket gerade steht.
 - **Der Kreislauf zurück zum Entwickeln:** Review-Punkte, fehlgeschlagene Tests und deine Notizen gehen mit einem Klick «Zurück ans Entwickeln» an den Entwickler, in **seine** Sitzung (siehe unten). Kein Kopieren. Danach geht es mit einem Klick wieder ins Review. Jede Runde ist sichtbar: «Runde 2: 3 Review-Punkte erledigt, 1 offen».
 - Standard bleibt E5: Entwickeln → Review; Planen und Test schaltest du je Ticket zu. Alle vier stehen trotzdem immer in der Leiste.

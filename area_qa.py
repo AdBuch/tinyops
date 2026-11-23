@@ -9,6 +9,7 @@ import time
 
 import qa
 import secretstore as store
+import updater
 import ux
 from common import UserError
 from config import DEFAULTS
@@ -63,6 +64,42 @@ class QaArea:
         if n.get("seen") or time.time() - float(n.get("ts") or 0) > 7 * 86400:
             return None
         return {k: n.get(k) for k in ("from", "to", "ok", "qa_new", "message")}
+
+    # -- 0.40: Update aus dem Panel und Dienst
+    @property
+    def updater(self):
+        if getattr(self, "_updater", None) is None:
+            self._updater = updater.Updater(self.base, self.version)
+        return self._updater
+
+    def update_check(self, force=False):
+        if self.demo:                 # keine Anfrage nach draussen, nichts zu aktualisieren
+            return {"current": "v" + self.version, "latest": "", "available": False, "can_update": False, "why": "Im Demo-Modus aus.",
+                    "url": "", "checked": 0, "busy": False, "service": dict(self.updater.service(), demo=True)}
+        return dict(self.updater.status(force=force), service=self.updater.service())
+
+    def update_run(self):
+        if self.demo:
+            raise UserError("Im Demo-Modus aus.")
+        out = self.updater.run()
+        self.audit("update.run", out.get("version") or "", ok=bool(out.get("ok")), changed=bool(out.get("changed")))
+        return out
+
+    def update_service(self, b):
+        if self.demo:
+            raise UserError("Im Demo-Modus aus.")
+        do = b.get("do")
+        try:
+            if do == "install":
+                out = self.updater.install_service(now=bool(b.get("now")))
+            elif do == "remove":
+                out = self.updater.remove_service()
+            else:
+                raise UserError("Einrichten oder entfernen?")
+        except RuntimeError as e:
+            raise UserError(str(e))
+        self.audit("update.service", do, now=bool(b.get("now")))
+        return out
 
     def update_seen(self):
         f = store.home_dir() / "last-update.json"

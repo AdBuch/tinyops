@@ -48,6 +48,7 @@ import net
 import secretstore as store
 import settings
 import tlog
+import updater
 from net import NoRedirect  # noqa: F401  (Wiederverwendung in Tests)
 from secretstore import scrub
 # 0.37: aus server.py gelöst; die Namen bleiben hier erreichbar (Tests, Werkzeuge)
@@ -61,7 +62,7 @@ from httpclient import Http  # noqa: F401
 from ideas import Ideas, similar  # noqa: F401
 from jira_client import JiraClient, jira_auth_header  # noqa: F401
 
-VERSION = "0.39.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.40.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -662,6 +663,8 @@ def main():
     ap.add_argument("--selftest", action="store_true", help="prüft die eigenen Teile und spielt die Kernfunktionen mit Demo-Daten durch (Exit-Code 1 bei Fehlern)")
     ap.add_argument("--verify-audit", action="store_true", help="prüft die Hash-Kette des Verlaufs (Exit-Code 1, wenn sie gebrochen ist)")
     ap.add_argument("--export-audit", metavar="DATEI", help="Verlauf als JSON in DATEI schreiben (- = Standardausgabe)")
+    ap.add_argument("--install-service", action="store_true", help="Linux: tinyops als Benutzer-Dienst (systemd --user) einrichten und einschalten")
+    ap.add_argument("--remove-service", action="store_true", help="Linux: den Dienst wieder ausschalten und entfernen")
     args = ap.parse_args()
     migrated = migrate_legacy(args.config) if args.config == str(default_config_path()) else []
     path = args.config if Path(args.config).exists() else None
@@ -674,6 +677,20 @@ def main():
         print("\n".join(lines) if lines else "(noch leer)")
         return
 
+    if args.install_service or args.remove_service:          # 0.40: tinyops als Dienst unter Linux
+        up = updater.Updater(BASE, VERSION)
+        try:
+            st = up.install_service() if args.install_service else up.remove_service()
+        except RuntimeError as e:
+            print(e)
+            raise SystemExit(1)
+        if args.install_service:
+            print("Dienst eingerichtet: %s\nStarten: systemctl --user start tinyops   Log: journalctl --user -u tinyops -f" % st["unit"])
+            if not st.get("linger"):
+                print("Damit tinyops auch ohne Anmeldung läuft (z. B. nach einem Neustart): loginctl enable-linger $USER")
+        else:
+            print("Dienst entfernt.")
+        raise SystemExit(0)
     if args.selftest:
         cfg0 = load_config(path)
         tlog.setup(cfg0, level, console=False)

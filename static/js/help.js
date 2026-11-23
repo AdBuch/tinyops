@@ -12,6 +12,10 @@ const HELP = {
   github: `<ol><li>Auf github.com unter Settings → Developer settings ein «Fine-grained token» anlegen, nur lesend: Contents, Pull requests, Metadata.</li><li>Token eintragen, Repos wählen.</li></ol>
     <p>Für GitHub Enterprise die API-Adresse anpassen (<code>https://github.firma.ch/api/v3</code>).</p>`,
   sonar: `<p>Adresse und ein Benutzer-Token eintragen. Den Sonar-Schlüssel je Projekt trägst du bei den Projekten ein. tinyops fragt nur das Quality Gate ab.</p>`,
+  update: `<p><b>Update:</b> tinyops sieht höchstens alle 6 Stunden nach, ob es ein neueres Release gibt (nur lesend, <code>git ls-remote</code>). Ist eines da, steht oben ein Hinweis mit «Jetzt aktualisieren».</p>
+    <p>Aktualisieren geht wie beim Start über <code>start.py</code>: neue Version holen, Selbsttest, bei Fehlern zurück auf die alte. Danach startet tinyops neu und die Seite lädt von selbst. Deine Einstellungen, Zugangsdaten und Daten liegen ausserhalb des Programmordners und bleiben, wie sie sind.</p>
+    <p>Nicht aktualisiert wird, wenn im Programmordner Dateien geändert sind oder er auf einem Branch steht (Entwicklung). Der Grund steht dann hier.</p>
+    <p><b>Als Dienst (Linux):</b> tinyops startet dann bei der Anmeldung und nach einem Absturz von selbst, ohne Terminal. Es ist ein Benutzer-Dienst (<code>systemctl --user</code>), kein sudo nötig. Log: <code>journalctl --user -u tinyops -f</code>. Ohne Anmeldung (nach einem Neustart) läuft er erst nach einmal <code>loginctl enable-linger $USER</code>. Im Terminal geht dasselbe mit <code>python3 server.py --install-service</code>.</p>`,
   app: `<p><b>Als App am Rechner:</b> «Als App installieren» legt tinyops als eigenes Fenster ab. Es ist dieselbe Seite, nur ohne Browser-Leisten.</p>
     <p><b>Aufs Handy, Schritt für Schritt:</b></p>
     <ol><li>Den Rechner fürs Handy erreichbar machen, ohne tinyops ins Netz zu stellen. Am einfachsten mit <a href="https://tailscale.com/kb/1312/serve" target="_blank" rel="noopener">Tailscale Serve</a>: <code>tailscale serve --bg 8765</code>. Das gibt eine https-Adresse nur in deinem Tailnet; tinyops bleibt auf 127.0.0.1.</li>
@@ -22,7 +26,7 @@ const HELP = {
   more: `<p>Hier schaltest du Funktionen ein, die nicht jeder braucht. Ausgeschaltet verschwinden sie aus der Oberfläche, ihre Daten bleiben erhalten.</p>
     <p><b>Ideenbox:</b> Einfälle festhalten (Taste <code>i</code>), bewerten lassen und als Ticket ausformulieren. <b>Testumgebungen:</b> die ältere Testumgebung je MR über Helm. Ab 0.34 geht sie in der Review-Umgebung auf (Einstellungen → IntelliJ und Review-Umgebung). <b>KI-Konten:</b> von Hand gepflegte Übersicht.</p>
     <p><b>UI-Nutzung erfassen:</b> Zählt Klicks, Mausweg, gewechselte Ansichten, Tasten ausserhalb von Feldern, Fehlermeldungen und langsame Antworten. Nie Eingaben, Titel oder Inhalte. Alles bleibt auf diesem Rechner. Den Bericht kopierst du unter «Prüfen» und gibst ihn weiter, wenn du willst.</p>`,
-  agents: `<p><b>Der Zyklus: Planen → Umsetzen → Review → Test</b></p>
+  agents: `<p><b>Der Zyklus: Planen → Entwickeln → Review → Test</b></p>
     <p>Jede Phase ist ein eigener Lauf und endet mit deiner Freigabe. <b>Planen</b>: Der Agent liest nur und schreibt einen Plan. <b>Umsetzen</b>: Code auf eigenem Branch, nach dem freigegebenen Plan. <b>Review</b>: Ein zweiter Agent (gern ein lokales Modell) liest das Ergebnis und ändert nichts. <b>Test</b>: Tests laufen lassen, fehlende ergänzen und Schritte für deinen Test von Hand beschreiben.</p>
     <p>Freigeben geht erst, wenn du die Prüfpunkte abgehakt hast: fürs Review den Diff gelesen, den Umfang geprüft und jedes Kriterium; für den Test die Schritte, die der Agent mit <code>tinyops-manual</code> beschrieben hat. «Zurückgeben» braucht einen Satz, was anders werden soll. Er geht in den Nachbessern-Auftrag. Kleine Aufgaben kannst du direkt umsetzen lassen, ohne Plan.</p>
     <p><b>Einfach reviewen</b></p>

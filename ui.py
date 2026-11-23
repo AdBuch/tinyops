@@ -3,10 +3,10 @@ static/app.css und die Dateien aus static/js in fester Reihenfolge ein. Das Erge
 genau wie bis 0.38. So bleibt das Verhalten gleich (Funktionen sind im ganzen Skript bekannt), und die Quelle ist trotzdem
 nach Ansichten getrennt.
 
-Reihenfolge: Bausteine zuerst, «boot» als letztes. Eine neue Datei in static/js muss hier stehen (tests/test_ui_parts.py)."""
+Reihenfolge: Bausteine zuerst, «boot» als letztes. Eine neue Datei in static/js muss hier stehen (tests/test_v39.py)."""
 from pathlib import Path
 
-PARTS = ("core", "help", "lists", "board", "agents", "time", "qa", "shell", "settings", "pair",
+PARTS = ("core", "help", "lists", "board", "agents", "time", "qa", "shell", "settings", "update", "pair",
          "focus", "detail", "session", "workspaces", "ux", "boot")
 CSS_MARK, JS_MARK = "<!-- tinyops:css -->", "<!-- tinyops:js -->"
 

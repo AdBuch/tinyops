@@ -103,6 +103,18 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.40.0
+
+Agenten: Weiterführen in derselben Sitzung, Gespräch im Lauf, vier Rollen mit Kreislauf zurück ans Entwickeln; dazu Update aus dem Panel und Dienst unter Linux.
+Abgelöst: `r36-01` (Weiterführen) durch `r40-01`, `r28-12` (Ausgabe während des Laufs) geht in `r40-01` auf, `r36-02` (Rollen, Push) in `r40-02`. `r27-12` prüft jetzt ein Test.
+
+- [ ] `r40-01` Claude Code oder Codex auf dem Agenten-Rechner: Lauf fertig → unten «Nachricht an …» mit «gleiche Sitzung», eine Nachfrage zum Ergebnis senden → derselbe Ordner und Branch, die Antwort bezieht sich auf das, was der Agent vorher getan hat; «Gespräch» zeigt beide Runden; während des Laufs kommen Zeilen wie «▸ Bash: …»
+- [ ] `r40-02` Agenten mit Rollen (`/developer`, `/reviewer`), Entwickler pusht seinen Branch: oben stehen die vier Rollen mit Agent; Review-Lauf fertig → «↺ Zurück ans Entwickeln» → der Entwickler bessert in seiner Sitzung nach (Runde 2), danach «Erneut prüfen lassen» → derselbe Reviewer prüft den neuen Stand
+- [ ] `r40-03` Einstellungen → Update und Dienst → «Jetzt nachsehen» zeigt das neueste Release; ist eines neuer, steht oben «tinyops … ist da» → «Jetzt aktualisieren» → kurz «startet neu», Seite lädt von selbst, oben rechts die neue Version. Geht erst ab dem Update auf 0.41
+- [ ] `r40-04` Ubuntu: «Als Dienst einrichten und neu starten» → tinyops ist nach ein paar Sekunden wieder da, `systemctl --user status tinyops` zeigt «active»; nach Ab- und Anmelden startet es von selbst
+- [ ] `r40-05` Weiterführen in derselben Sitzung, zurück ans Entwickeln, erneut prüfen, Git-Benutzer je Agent, neue Sitzung wenn der Ordner fehlt [auto: test_v40.Conversation]
+- [ ] `r40-06` Update holen, Selbsttest, zurück bei Fehlern, kein Update auf Branch oder mit geänderten Dateien; Dienst anlegen und entfernen [auto: test_updater.Updates]
+
 ## 0.39.0
 
 Oberfläche zerlegt (sichtbar gleich), dazu QR-Code, Agentenfenster als Seitenpanel und Klicks im Detail-Panel. Abgelöst: `r37-01` und `r38-01` (Arbeitstag nach dem Umbau) durch `r39-01`, `r36-05` (Koppeln) durch `r39-02`.
@@ -133,8 +145,6 @@ Reines Refactoring. Von Hand nur ein Rundgang, ob sich wirklich nichts geändert
 
 Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32-04` und `r34-02` (IntelliJ), `r24-01` und `r24-02` durch `r34-01` (Helpdesk anheften), `r21-01` durch `r211-03` (Launcher).
 
-- [ ] `r36-01` Agent-Lauf fertig → im Lauf unten unter «Weiterführen» einen Satz schreiben, «Weiterführen» → neuer Lauf auf demselben Branch startet sofort; stellt der Agent eine Entscheidung (`tinyops-ask -d` oder «Offene Entscheidungen» im Bericht), steht sie mit Antwortfeldern da und geht mit
-- [ ] `r36-02` Einstellungen → Agenten: beim Remote-Agenten «Rollen-Vorschlag» und «pusht seinen Branch», speichern → Prompt beim Zuweisen beginnt mit `/developer`, nach dem Lauf liegt der Branch in GitLab; die Auswahl zeigt «… % frei» des Kontingents; Agent aus der Seitenleiste auf eine Aufgabe ziehen → Zuweisen-Dialog
 - [ ] `r36-03` Bei einem MR, in dem du Reviewer bist, in GitLab «Änderungen anfordern» → nach dem Abgleich steht er unter «Wartet» statt bei deinen Reviews; fordert der Autor das Review neu an, ist er wieder da
 - [ ] `r36-04` Helpdesk-Ticket im Fokus oder Panel → «Jira-Ticket daraus anlegen» → Entwurf mit Link und Problem prüfen, anlegen → Ticket in Jira, im Helpdesk-Panel steht der neue Key; das Helpdesk-Ticket ist unverändert
 - [ ] `r36-06` Fokus: die oberste Aufgabe zeigt «Worum es geht», «Fertig, wenn» und Teilschritte direkt im Hero [auto: test_ui.Views]
@@ -223,7 +233,6 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 - [ ] `r28-08` «Fokuszeit im Kalender eintragen dürfen» an, neu anmelden, Sitzung mit Haken starten → Termin «Fokus: …» im Outlook-Kalender
 - [ ] `r28-09` Tags darauf ohne neue Anmeldung kommen die Daten weiter; «Abmelden» → «Nicht angemeldet», das gespeicherte Token ist weg
 - [ ] `r28-11` MR in der Review-Liste freigeben → nach dem nächsten Auffrischen +20 XP, nur einmal [auto: test_v28.ReviewXp]
-- [ ] `r28-12` Claude Code oder Vibe starten → im Lauf-Dialog erscheinen während des Laufs Zeilen wie «▸ Bash: …», nicht erst am Ende
 - [ ] `r28-13` Vibe ohne `--auto-approve` → Warnung im Zuweisen-Dialog [auto: test_v28.Streaming]
 - [ ] `r28-14` KI-Kontingent: «Mistral-Abo öffnen» öffnet admin.mistral.ai/subscription [auto: test_v28.Ui]
 - [ ] `r28-15` Log: keine wiederholten «GET /logo/… → 404» mehr [auto: test_v28.Ui]
@@ -240,7 +249,7 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 - [ ] `r27-08` In einem lokalen Repo ein Passwort committen (nicht pushen) → Workspaces zeigt «1 Geheimnis?» mit Datei und Zeile, ohne den Wert; nach dem Entfernen des Commits ist der Hinweis weg [auto: test_v27.WsSecrets]
 - [ ] `r27-10` Ohne Fokus-Sitzung ist oben keine Leiste. Sitzung starten → Leiste mit Uhr; Fokus-Modus schliessen → Leiste bleibt [auto: test_v27.FocusAuto]
 - [ ] `r27-11` Zeitbox ablaufen lassen → Leiste zeigt «vorbei», «+15 min» und «Abschliessen»; ohne Klick endet die Sitzung nach zehn Minuten mit einer Meldung, die Zeit auf der Aufgabe läuft weiter [auto: test_v27.FocusAuto]
-- [ ] `r27-12` «+15 min» → die Uhr läuft wieder rückwärts
+- [ ] `r27-12` «+15 min» → die Uhr läuft wieder rückwärts [auto: test_v27.FocusAuto]
 - [ ] `r27-13` Während einer Sitzung 20 Minuten im Editor arbeiten, Panel im Hintergrund → die Zeit zählt durch, keine Lücke [auto: test_v27.FocusAuto]
 - [ ] `r27-14` Einstellungen: Jeder Abschnitt hat «Hilfe: so richtest du das ein»; bei den Agenten steht die SSH-Anleitung [auto: test_ui.Views]
 

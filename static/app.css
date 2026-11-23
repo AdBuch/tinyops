@@ -284,6 +284,19 @@
   .cycle .ph.back { border-color: var(--warn); } .cycle .ph.back span { color: var(--warn); }
   .cycle .ph.wait { border-color: var(--focus); } .cycle .ph.wait span { color: var(--focus); }
   .cycle .ph.cur b { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
+  /* 0.40: vier Rollen mit eigener Farbe, Agent darunter, Runde; Gespräch im Lauf */
+  .cycle .ph .cyag { font-size: 11.5px; color: var(--quiet); }
+  .cycle .ph-plan b::before, .cycle .ph-develop b::before, .cycle .ph-review b::before, .cycle .ph-test b::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .cycle .ph-plan b::before { background: #8b6fd6; } .cycle .ph-develop b::before { background: #2f7fd1; } .cycle .ph-review b::before { background: #d08a1e; } .cycle .ph-test b::before { background: #2e9d6b; }
+  .cyround { display: inline-block; font-size: 12px; color: var(--quiet); margin: 0 0 4px; }
+  .agthread { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 8px; max-height: 46vh; overflow: auto; }
+  .agthread .msg { max-width: 88%; padding: 7px 11px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; }
+  .agthread .msg.me { justify-self: end; background: var(--focus-bg); border: 1px solid var(--focus); border-bottom-right-radius: 4px; }
+  .agthread .msg.ag { justify-self: start; background: var(--bg); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .agthread .msg.busy { color: var(--quiet); font-style: italic; }
+  .agthread .msg .meta { font-size: 11.5px; color: var(--quiet); margin-top: 3px; }
+  .agthread .msg .mdv p:first-child { margin-top: 0; } .agthread .msg .mdv p:last-child { margin-bottom: 0; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--focus); text-decoration: underline; cursor: pointer; font: inherit; }
   .mchk { list-style: none; padding: 0; margin: 6px 0 0; }
   .mchk li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: start; }
   .mchk li:first-child { border-top: 0; }
@@ -940,3 +953,6 @@
     .frow { grid-template-columns: minmax(0, 1fr) auto; } .frow .trk { grid-column: 1 / -1; width: 136px; } .frow .fgo span { display: none; }
     .trk.big li:not(.now) span { visibility: hidden; } .trk.big li.now span { white-space: nowrap; }
   }
+  /* 0.40: Neustart nach Update oder Wechsel zum Dienst */
+  .restart { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(2px); text-align: center; }
+  .restart > div { padding: 18px 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, var(--bg)); box-shadow: 0 8px 30px rgba(0,0,0,.15); }

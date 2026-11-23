@@ -12,3 +12,4 @@ setInterval(() => {   // laufende Agenten: Stand nachfragen, aber keine offene A
   const ae = document.activeElement;
   if (state && state.agents && state.agents.runs.some(r => r.active) && !$('agDlg').open && !(ae && ae.dataset && ae.dataset.aassign)) load();
 }, 5000);
+checkUpdate(false); setInterval(() => checkUpdate(false), 6 * 3600 * 1000);   // 0.40: neue Version?

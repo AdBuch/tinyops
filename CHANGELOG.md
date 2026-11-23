@@ -5,6 +5,41 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.40.0]
+
+Agenten: weiterführen in derselben Sitzung, vier Rollen mit Kreislauf zurück ans Entwickeln. Dazu, auf deinen Wunsch vom 23.11., Update aus dem Panel und tinyops als Dienst unter Linux.
+
+### Neu
+- **Gespräch mit dem Agenten in derselben Sitzung** (Wunsch vom 18.11., Klärung zu `r36-01`): Unten im Lauf «Nachricht an …». Der Agent setzt seine Sitzung fort, im selben Ordner auf demselben Branch, mit allem, was er vorher gelesen und getan hat. Nachfragen («Warum so?») gehen genauso wie Aufträge. Über dem Ergebnis steht das «Gespräch»: dein Auftrag, deine Nachrichten, Rückfragen und die Antworten des Agenten, Runde für Runde.
+  - Claude Code startet mit `--session-id` und macht mit `--resume` weiter. Codex: `codex exec resume`. Vibe: `--resume` oder `--continue`. Goose: `--name … --resume`. opencode: `--continue`.
+  - Geht das nicht (anderer Agent, eigener Befehl, Ordner weg, Lauf vor 0.40), startet wie bisher ein neuer Lauf mit Zusammenfassung. Der Grund steht neben dem Eingabefeld («neue Sitzung»).
+- **Vier Rollen und der Kreislauf** (Schwerpunkt 2 vom 20.11.): Oben im Lauf stehen Planen, Entwickeln, Review und Test mit eigener Farbe, ihrem Agenten und dem Stand, dazu die Runde.
+  - Aus Review und Test: «↺ Zurück ans Entwickeln» schickt den Befund mit deiner Notiz in die Sitzung des Entwicklers. Ein Klick, kein Kopieren, kein Dialog.
+  - Aus Entwickeln: «Zurück ans Entwickeln» mit einem Satz geht direkt an ihn zurück (bisher: Dialog «Nachbessern lassen»).
+  - Nach dem Nachbessern: «Erneut prüfen lassen». Derselbe Reviewer prüft in seiner Sitzung, sein Ordner wird auf den neuen Stand des Entwicklers vorgespult. Geht das nicht (anderer Rechner, andere Isolation), öffnet sich der gewohnte Dialog.
+- **Git-Benutzer je Agent** (Wunsch vom 18.11.): Einstellungen → Agenten → Git-Name und Git-E-Mail. Die Commits des Agenten tragen sie, auch auf entfernten Rechnern.
+- **Update aus dem Panel** (Wunsch vom 23.11.): tinyops sieht alle 6 Stunden nach, ob es ein neueres Release gibt (nur lesend). Oben steht dann «tinyops … ist da», mit «Was ist neu?» und «Jetzt aktualisieren». Das Update läuft wie beim Start über `start.py` (holen, Selbsttest, bei Fehlern zurück). Danach startet tinyops neu und die Seite lädt von selbst. Nicht aktualisiert wird mit geänderten Dateien oder auf einem Branch, mit Grund. Gekoppelte Geräte dürfen das nicht.
+- **tinyops als Dienst unter Linux** (Wunsch vom 23.11.): Einstellungen → Update und Dienst → «Als Dienst einrichten und neu starten», oder `python3 server.py --install-service`. Ein Benutzer-Dienst (`systemctl --user`, kein sudo) startet tinyops bei der Anmeldung und nach einem Absturz. Ohne Anmeldung erst nach `loginctl enable-linger $USER`; das steht dabei.
+
+### Geändert
+- «Umsetzen» heisst jetzt «Entwickeln», wie die Rolle.
+- «Weiterführen» heisst «Nachricht an …» mit «Senden».
+- Der Freigabe-Kasten bei Review und Test fragt jetzt: Gibt es etwas zu verbessern? Dann zurück ans Entwickeln, sonst freigeben.
+
+### Entfernt
+- Der alte Anfrage-Parameter `prereview` (Vorprüfen aus 0.27). Review geht seit 0.31 über die Phase, mit `parent`. Die Antwort nennt den geprüften Lauf jetzt `review_of`.
+
+### Intern
+- **`agents.py` aufgeteilt** (1'787 → 925 Zeilen): `agent_rules.py` (Konfiguration, Rollen, Phasen, Leitplanken), `agent_cmd.py` (Aufruf der Programme, Sitzungen, Git-Benutzer), `agent_scripts.py` (Shell-Skripte eines Laufs), `agent_ssh.py` (Verbindung, Prüfen), `agent_talk.py` (Gespräch). `agents` gibt alle Namen weiter.
+- Lauf-Tabelle: neue Spalten für Sitzung, Kette und Gespräch (`session`, `resume_of`, `next_run`, `ask`, `reply`, `fresh`).
+- Tests: `test_v40` spielt Gespräch, Zurück ans Entwickeln und Erneut prüfen mit einem Ersatz für Claude Code durch, mit echtem git. `test_updater` prüft Update, Rückfall und Dienst mit einem Mini-Repo und einem Ersatz für `systemctl`.
+
+### Grenzen
+- Fortsetzen ist gegen Nachbauten der Programme geprüft, nicht gegen Claude Code, Codex oder Vibe selbst. Ob Vibe seine Sitzungskennung im Streaming nennt, ist nicht dokumentiert. Ohne Kennung nimmt tinyops `--continue`, die letzte Sitzung im Ordner.
+- «Jetzt aktualisieren» gibt es ab dieser Version. Der erste echte Durchlauf ist also das Update auf 0.41.
+- Den Dienst habe ich mit einem Ersatz für `systemctl` getestet, nicht auf einem echten Ubuntu.
+- Doppelte Stile und Dialog-Muster sind weiter nicht zusammengeführt.
+
 ## [0.39.0]
 
 Oberfläche zerlegen, dazu drei Korrekturen aus deinen Berichten vom 20.11.

@@ -449,6 +449,20 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5g. Gespräch mit dem Agenten, Kreislauf, Update und Dienst (neu in 0.40.0)
+
+**Gleiche Sitzung.** Unten im Lauf steht «Nachricht an …». Claude Code, Codex, Mistral Vibe, Goose und opencode setzen dabei ihre Sitzung fort: gleicher Ordner, gleicher Branch, der Agent weiss, was er vorher getan hat. So fragst du nach («Warum so?») oder sagst, wie es weitergeht, ohne etwas zu kopieren. Das «Gespräch» im Lauf zeigt deine Nachrichten und die Antworten des Agenten, Runde für Runde. Neue Sitzung (mit Zusammenfassung wie bis 0.39) gibt es nur, wenn es nicht anders geht: anderer Agent, eigener Befehl, Ordner weg; der Grund steht neben dem Eingabefeld.
+- Claude Code bekommt beim Start `--session-id`, weiter geht es mit `--resume`. Codex nennt seine Sitzung im Log, weiter mit `codex exec resume`. Vibe mit `--resume` oder `--continue`, Goose mit `--name … --resume`, opencode mit `--continue`.
+- Gegen die echten Programme geprüft ist das noch nicht, nur gegen Nachbauten (Prüfpunkt `r40-01`).
+
+**Vier Rollen und der Kreislauf.** Oben im Lauf stehen Planen, Entwickeln, Review und Test, je mit Agent und Stand. Aus Review oder Test schickt «↺ Zurück ans Entwickeln» den Befund (und deine Notiz) in die Sitzung des Entwicklers, mit einem Klick. Danach «Erneut prüfen lassen»: derselbe Reviewer prüft in seiner Sitzung den neuen Stand. «Umsetzen» heisst jetzt «Entwickeln», wie die Rolle.
+
+**Git-Benutzer je Agent.** Einstellungen → Agenten: Git-Name und Git-E-Mail. Die Commits des Agenten tragen sie, egal welches Konto auf dem Agenten-Rechner läuft.
+
+**Update aus dem Panel.** tinyops sieht alle 6 Stunden nach, ob es ein neueres Release gibt (`git ls-remote`, ändert nichts). Oben steht dann «tinyops … ist da» mit «Was ist neu?» und «Jetzt aktualisieren». Das läuft wie beim Start über `start.py` (holen, Selbsttest, bei Fehlern zurück), danach startet tinyops neu und die Seite lädt von selbst. Einstellungen → Update und Dienst zeigt den Stand und «Jetzt nachsehen».
+
+**Als Dienst (Linux).** Einstellungen → Update und Dienst → «Als Dienst einrichten und neu starten», oder im Terminal `python3 server.py --install-service`. Das legt einen Benutzer-Dienst an (`~/.config/systemd/user/tinyops.service`, kein sudo). tinyops startet dann bei der Anmeldung und nach einem Absturz von selbst. Log: `journalctl --user -u tinyops -f`. Ohne Anmeldung (z. B. nach einem Neustart) erst nach einmal `loginctl enable-linger $USER`. Entfernen: `--remove-service` oder der Knopf.
+
 ## 5f. Weiterführen, Rollen, App aufs Handy (neu in 0.36.0)
 
 **Lauf weiterführen.** Unten im Lauf steht «Weiterführen»: Du schreibst, wie es weitergehen soll, und derselbe Agent arbeitet auf dem Branch des Laufs weiter. Offene Kriterien und fehlgeschlagene Belege gehen von selbst mit.
@@ -507,11 +521,11 @@ Von aussen sieht tinyops nur gekoppelte Geräte. Ein gekoppeltes Gerät ändert 
 **Zyklus.** Ein Ticket durchläuft mit Agenten vier Phasen, jede mit deiner Freigabe:
 
 1. **Planen.** Im Agenten-Panel (seit 0.39 rechts neben der Liste) «Phase: Planen» wählen. Der Agent ändert nichts und liefert einen Plan. Du liest ihn und gibst frei oder gibst zurück.
-2. **Umsetzen.** Nach der Freigabe «Umsetzen vorbereiten …». Der Plan steht im Auftrag. Kleine Aufgaben kannst du ohne Plan direkt umsetzen lassen.
+2. **Entwickeln** (bis 0.39 «Umsetzen»). Nach der Freigabe «Entwickeln vorbereiten …». Der Plan steht im Auftrag. Kleine Aufgaben kannst du ohne Plan direkt umsetzen lassen.
 3. **Review.** Ein zweiter Agent, gern ein lokales Modell, liest das Ergebnis und meldet je Kriterium sein Urteil.
 4. **Test.** Tests laufen lassen und ergänzen, Schritte für deinen Test von Hand beschreiben (`tinyops-manual`).
 
-Im Lauf hakst du die **Prüfpunkte** ab. Erst dann geht «Freigeben». «Zurückgeben» mit einem Satz führt zu «Nachbessern lassen», mit deinem Satz im Auftrag.
+Im Lauf hakst du die **Prüfpunkte** ab. Erst dann geht «Freigeben». «Zurück ans Entwickeln» mit einem Satz geht seit 0.40 direkt in die Sitzung des Entwicklers.
 
 **Leitplanken** (Einstellungen → Coding-Agenten): höchstens Dateien und Zeilen je Lauf, dazu eine Team-Regel. Sie stehen in jedem Prompt. Geht ein Ergebnis darüber, zeigt der Lauf einen Hinweis.
 
@@ -814,7 +828,13 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     docs/DECISIONS.md    getroffene und offene Entscheide
     start.py, start.cmd  Starter: neueste Version holen, prüfen, starten
     launcher/            Launcher zum Herunterladen (Skript, Zipapp, PyInstaller über .github/workflows)
-    agents.py            Coding-Agenten: lokal und per SSH/tmux, Worktree, Export
+    agents.py            Coding-Agenten: Läufe an Tickets (Zuweisen, Start, Stand, Bericht, Freigabe)
+    agent_rules.py       Agenten-Regeln: Konfiguration prüfen, Rollen, Datenklassen, Phasen, Leitplanken
+    agent_cmd.py         Aufruf der Agenten-Programme: Argumente, Sitzung fortsetzen, Git-Benutzer, lesbare Ausgabe
+    agent_scripts.py     Shell-Skripte eines Laufs: Hilfsbefehle, Worktree/Export, tmux, Bericht
+    agent_ssh.py         Verbindung zu den Agenten-Rechnern (SSH) und Prüfen für die Einstellungen
+    agent_talk.py        Gespräch: Weiterführen in derselben Sitzung, Kette der Läufe
+    updater.py           Update aus dem Panel (neue Version, Neustart) und Dienst unter Linux (systemd --user)
     flow.py              Ablauf, nächster Schritt, Spielstand
     aiquota.py           Rest-Kontingent der KI-Abos (früher usage.py)
     reviewenv.py         Review-Umgebung: Befehle, Umsysteme, Compose-Datei

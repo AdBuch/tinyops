@@ -143,6 +143,9 @@ EXACT = {
     ("POST", "/api/ux/wish"): lambda app, cfg, r: app.ux_wish(r.body()),
     ("POST", "/api/ux/clear"): lambda app, cfg, r: app.ux_clear(),
     ("POST", "/api/update/seen"): lambda app, cfg, r: app.update_seen(),
+    ("GET", "/api/update/check"): lambda app, cfg, r: app.update_check(force=r.q("force") == "1"),
+    ("POST", "/api/update/run"): lambda app, cfg, r: app.update_run(),
+    ("POST", "/api/update/service"): lambda app, cfg, r: app.update_service(r.body()),
     ("GET", "/api/update/news"): lambda app, cfg, r: app.update_news(),
     ("GET", "/api/qa"): lambda app, cfg, r: app.qa_view(),
     ("GET", "/api/time/day"): lambda app, cfg, r: app.time_day(r.q("date") or None),
@@ -393,7 +396,7 @@ def make_handler(app, base, version, load_config):
                     return self._public_get(path)
                 if path.startswith("/api/pair/"):
                     return self._pair_route(method, path)
-                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/")):
+                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/") or path in ("/api/update/run", "/api/update/service")):
                     return self._err(403, "Einstellungen ändern geht nur am Rechner, nicht vom gekoppelten Gerät.")
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)

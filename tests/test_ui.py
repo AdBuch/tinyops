@@ -355,6 +355,11 @@ class AgentCycle(UiCase):
         self.assertEqual(self.wait_run(), "fertig")
         self.assertIn("Auftrag des Menschen", pg.evaluate("AG().runs[0].prompt_text"))
         pg.wait_for_selector("#agDlg[open] #agCont")
+        # 0.40: das Gespräch steht im Lauf (eigener Befehl: neue Sitzung, mit Hinweis), die vier Rollen in der Leiste
+        pg.wait_for_selector(".agthread .msg.me")
+        self.assertIn("Bitte noch einen Test für den Timeout.", pg.locator(".agthread").inner_text())
+        self.assertIn("neue Sitzung", pg.locator(".agcont").inner_text())
+        self.assertEqual(pg.locator(".cycle .ph").all_inner_texts()[1].split("\n")[0], "Entwickeln")
 
 
 class QaSession(UiCase):
