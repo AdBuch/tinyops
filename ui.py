@@ -7,7 +7,7 @@ Reihenfolge: Bausteine zuerst, «boot» als letztes. Eine neue Datei in static/j
 from pathlib import Path
 
 PARTS = ("core", "help", "lists", "board", "agents", "time", "qa", "shell", "settings", "update", "pair",
-         "focus", "detail", "session", "workspaces", "ux", "boot")
+         "focus", "detail", "branch", "session", "workspaces", "ux", "boot")
 CSS_MARK, JS_MARK = "<!-- tinyops:css -->", "<!-- tinyops:js -->"
 
 

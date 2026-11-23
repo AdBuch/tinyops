@@ -181,6 +181,7 @@ PREFIX = [
     ("POST", "/api/flow/", lambda app, cfg, r, a: app.flow_action(a, r.body())),
     ("POST", "/api/agents/", lambda app, cfg, r, a: app.agent_action(a, r.body())),
     ("POST", "/api/ai/", lambda app, cfg, r, a: app.ai_action(a, r.body())),
+    ("POST", "/api/branch/", lambda app, cfg, r, a: app.branch_action(a, r.body())),      # 0.41: Branch übernehmen
 ]
 
 
@@ -396,7 +397,7 @@ def make_handler(app, base, version, load_config):
                     return self._public_get(path)
                 if path.startswith("/api/pair/"):
                     return self._pair_route(method, path)
-                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/") or path in ("/api/update/run", "/api/update/service")):
+                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/") or path in ("/api/update/run", "/api/update/service") or path.startswith("/api/branch/")):
                     return self._err(403, "Einstellungen ändern geht nur am Rechner, nicht vom gekoppelten Gerät.")
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)

@@ -500,6 +500,29 @@ class SidePanel(UiCase):
             self.wait_js("[...document.querySelectorAll('.toast')].some(t => t.textContent === %s)" % json.dumps(title))
 
 
+class BranchInto(UiCase):
+    def test_take_agent_branch_into_feature(self):
+        """0.41: Agent-Branch in den Feature-Branch übernehmen (Demo: ohne git): Ziel, Commits, Weg wählen, Ergebnis mit Push-Befehl."""
+        pg = self.pg
+        card = "{id: 'c1', items: [{branch: 'agent/dlp-5656-13', by_agent: true, project_id: 1, project: 'dlp-core'}, {branch: 'feature/DLP-5656_SMB', iid: 64, project_id: 1, project: 'dlp-core'}]}"
+        self.wait_js("state && state.jira", 15000)
+        self.assertEqual(pg.evaluate("brTargets(%s, %s.items[0])" % (card, card)), ["feature/DLP-5656_SMB"])
+        self.assertIn("data-brinto", pg.evaluate("fxItem(%s, %s.items[0])" % (card, card)))           # Knopf am Agent-Branch
+        pg.evaluate("openBranchDlg({host: 'gitlab', project_id: 1, source: 'agent/dlp-5656-13', targets: ['feature/DLP-5656_SMB-for-non-root', 'main'], card: 'x'})")
+        pg.wait_for_selector("#brDlg[open] input[name=brhow]")
+        txt = pg.locator("#brDlgBody").inner_text()
+        self.assertIn("3 Commits aus agent/dlp-5656-13", txt)
+        self.assertIn("keine Konflikte erwartet", txt)
+        self.assertTrue(pg.evaluate("document.querySelector('input[name=brhow][value=ff]').disabled"))
+        self.assertEqual(pg.evaluate("document.querySelector('input[name=brhow]:checked').value"), "rebase")
+        pg.check("input[name=brhow][value=pick]")
+        self.assertFalse(pg.evaluate("document.querySelector('[data-brc]').disabled"))
+        pg.click("#brGo")
+        pg.wait_for_selector("#brPush")
+        self.assertIn("push origin feature/DLP-5656_SMB-for-non-root", pg.locator("#brDlgBody").inner_text())
+        self.assertIn("tinyops pusht nie", pg.locator("#brDlgBody").inner_text())
+
+
 class Terms(UiCase):
     def test_score_switch_and_areas(self):
         """E3/E4 (0.35): Spielstand abschaltbar, «Bereiche und Wochenziel», kein «Fokus-Modus» mehr."""

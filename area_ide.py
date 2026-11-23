@@ -16,6 +16,7 @@ from pathlib import Path
 import agents
 import github
 import links
+import integrate
 import reviewenv
 import tlog
 from common import UserError
@@ -360,3 +361,54 @@ class IdeArea:
                     self.ide_close({"ref": ref})
                 except UserError as e:
                     log.info("IntelliJ-Worktree %s bleibt: %s", ref, e)
+
+    # -- 0.41: einen Branch in einen anderen übernehmen (z. B. Agent → Feature-Branch des Tickets), nur lokal, nie push
+    def branch_action(self, action, b):
+        if getattr(self, "_integ", None) is None:
+            self._integ = integrate.Integrator()
+        if action in ("finish", "abort"):
+            tok = str(b.get("token") or "")
+            out = self._integ.finish(tok) if action == "finish" else self._integ.abort(tok)
+            self.audit("branch." + action, out.get("target", ""), ok=bool(out.get("ok")))
+            return out
+        host = "github" if b.get("host") == "github" else "gitlab"
+        try:
+            pid = int(b.get("project_id"))
+        except (TypeError, ValueError):
+            raise UserError("project_id fehlt.")
+        source, target = str(b.get("source") or "").strip(), str(b.get("target") or "").strip()
+        if self.demo:
+            return self._branch_demo(action, source, target, b)
+        repo = self._repo_of(host, pid)
+        if not repo:
+            raise UserError("Für dieses Projekt kenne ich keinen lokalen Checkout. Einstellungen → IntelliJ und Review-Umgebung → Pfad, "
+                            "oder den Ordner unter Workspaces aufnehmen.")
+        try:
+            if action == "plan":
+                return self._integ.plan(repo, source, target)
+            if action == "run":
+                how = str(b.get("how") or "")
+                out = self._integ.run(repo, source, target, how, commits=b.get("commits") or [], keep_on_conflict=bool(b.get("ide")))
+                if out.get("token"):
+                    ok, msg = self._launch_ide(out["worktree"])
+                    out["ide"], out["ide_msg"] = ok, msg
+                self.audit("branch.integrate", target, source=source, how=how, ok=bool(out.get("ok")), added=out.get("added", 0),
+                           conflicts=len(out.get("conflict") or []))
+                return out
+        except integrate.IntegrateError as e:
+            self.audit("branch.integrate", target, source=source, how=b.get("how") or action, ok=False, error=str(e)[:200])
+            raise UserError(str(e))
+        raise UserError("Unbekannte Aktion.")
+
+    def _branch_demo(self, action, source, target, b):
+        """Demo: zeigen, wie es aussähe, ohne git."""
+        if action == "plan":
+            commits = [{"sha": "%040x" % (0xa1b2c3 + i), "short": "%07x" % (0xa1b2c3 + i), "subject": s, "author": "vibe@agent1", "when": "vor %d Stunden" % (3 - i), "applied": False}
+                       for i, s in enumerate(["SMB-Zugriff ohne root", "Test für Freigabe ohne Rechte", "Installer: Gruppe smbusers"])]
+            return {"repo": "/home/demo/work/dlp-core", "source": source, "target": target, "commits": commits, "count": 3, "can_ff": False,
+                    "up_to_date": False, "conflicts": [], "stat": " 4 files changed, 61 insertions(+), 9 deletions(-)", "checked_out": "",
+                    "dirty": False, "behind_origin": False, "diverged": False, "push": "git -C /home/demo/work/dlp-core push origin %s" % target}
+        if action == "run":
+            return {"ok": True, "how": b.get("how"), "target": target, "head": "d3m0c0ffee12", "added": 3, "ahead": 3,
+                    "note": "Demo: nichts geändert.", "push": "git -C /home/demo/work/dlp-core push origin %s" % target, "checked_out": ""}
+        raise UserError("Unbekannte Aktion.")

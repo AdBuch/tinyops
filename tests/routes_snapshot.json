@@ -329,6 +329,31 @@
   "status": 400,
   "type": "application/json"
  },
+ "POST /api/branch/plan": {
+  "keys": [
+   "behind_origin",
+   "can_ff",
+   "checked_out",
+   "commits",
+   "conflicts",
+   "count",
+   "dirty",
+   "diverged",
+   "push",
+   "repo",
+   "source",
+   "stat",
+   "target",
+   "up_to_date"
+  ],
+  "status": 200,
+  "type": "application/json"
+ },
+ "POST /api/branch/x": {
+  "error": "Unbekannte Aktion.",
+  "status": 400,
+  "type": "application/json"
+ },
  "POST /api/flow/x": {
   "error": "Unbekannte Aktion.",
   "status": 400,

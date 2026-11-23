@@ -449,6 +449,16 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5h. Agent-Branch übernehmen (neu in 0.41.0)
+
+Im Detail-Panel steht am Branch eines Agenten «Übernehmen in …». Ziel ist der Feature-Branch des Tickets (der Branch des MR). Die Vorschau zeigt die Commits, den Umfang und ob Konflikte zu erwarten sind. Dann einen Weg wählen:
+- **Fast-Forward**, wenn der Feature-Branch nichts Eigenes hat,
+- **Rebase**: die Commits des Agenten obendrauf, gerade Geschichte,
+- **Merge** mit Merge-Commit,
+- **Cherry-Pick** der angehakten Commits.
+
+tinyops holt vorher beide Branches, arbeitet in einem eigenen Worktree neben deinem Checkout und lässt den Feature-Branch nur vorrücken. Ist er bei dir ausgecheckt (und sauber), wird er dort nachgezogen. Bei Konflikten wird alles zurückgenommen, oder der Worktree öffnet sich in IntelliJ; nach dem Lösen «Abschliessen». Pushen machst du: Der Befehl steht im Ergebnis.
+
 ## 5g. Gespräch mit dem Agenten, Kreislauf, Update und Dienst (neu in 0.40.0)
 
 **Gleiche Sitzung.** Unten im Lauf steht «Nachricht an …». Claude Code, Codex, Mistral Vibe, Goose und opencode setzen dabei ihre Sitzung fort: gleicher Ordner, gleicher Branch, der Agent weiss, was er vorher getan hat. So fragst du nach («Warum so?») oder sagst, wie es weitergeht, ohne etwas zu kopieren. Das «Gespräch» im Lauf zeigt deine Nachrichten und die Antworten des Agenten, Runde für Runde. Neue Sitzung (mit Zusammenfassung wie bis 0.39) gibt es nur, wenn es nicht anders geht: anderer Agent, eigener Befehl, Ordner weg; der Grund steht neben dem Eingabefeld.
@@ -834,6 +844,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     agent_scripts.py     Shell-Skripte eines Laufs: Hilfsbefehle, Worktree/Export, tmux, Bericht
     agent_ssh.py         Verbindung zu den Agenten-Rechnern (SSH) und Prüfen für die Einstellungen
     agent_talk.py        Gespräch: Weiterführen in derselben Sitzung, Kette der Läufe
+    integrate.py         Branch übernehmen: Fast-Forward, Rebase, Merge, Cherry-Pick im eigenen Worktree, nie push
     updater.py           Update aus dem Panel (neue Version, Neustart) und Dienst unter Linux (systemd --user)
     flow.py              Ablauf, nächster Schritt, Spielstand
     aiquota.py           Rest-Kontingent der KI-Abos (früher usage.py)

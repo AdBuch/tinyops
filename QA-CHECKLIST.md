@@ -103,6 +103,14 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.41.0
+
+Erledigt ohne eigenen Haken: `r24-10` (tote Klicks nennen den Ort), das zeigen deine Nutzungsberichte seit 0.24.
+
+- [ ] `r41-01` Detail-Panel einer Aufgabe mit MR-Branch und Agent-Branch: am Agent-Branch «Übernehmen in …» → Ziel ist der MR-Branch, Vorschau zeigt die Commits des Agenten; «Rebase» → «… übernommen», dein Arbeitsordner steht noch auf seinem Branch; Push-Befehl kopieren und ausführen → der MR zeigt die Commits
+- [ ] `r41-02` Fast-Forward, Merge, Rebase, Cherry-Pick, Konflikt zurück oder zum Lösen im Worktree, ausgecheckter Ziel-Branch, nie push [auto: test_integrate.Run]
+- [ ] `r41-03` Dialog: Ziel, Commits, Weg wählen, Ergebnis mit Push-Befehl; Knopf am Agent-Branch [auto: test_ui.BranchInto]
+
 ## 0.40.0
 
 Agenten: Weiterführen in derselben Sitzung, Gespräch im Lauf, vier Rollen mit Kreislauf zurück ans Entwickeln; dazu Update aus dem Panel und Dienst unter Linux.
@@ -290,7 +298,6 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 - [ ] `r24-07` Klick auf die Leiste → Fokus-Modus öffnet sich wieder [auto: test_ui.FocusSession]
 - [ ] `r24-08` Während eines festen Blocks ohne Sitzung → Leiste «Jetzt wäre: …-Block bis …» mit «Block starten»
 - [ ] `r24-09` Details offen, neben das Panel ins Leere klicken → Panel schliesst sich [auto: test_ui.Detail]
-- [ ] `r24-10` Nach einem Tag Nutzung den Bericht kopieren → tote Klicks nennen den Ort (z. B. «/ rcard.score»)
 
 ## 0.23.0
 

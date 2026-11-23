@@ -40,6 +40,7 @@ CALLS = [
     ("POST", "/api/settings/test/agent", {}), ("POST", "/api/settings/test/sonar", {}),
     ("GET", "/api/update/check", None), ("POST", "/api/update/run", {}), ("POST", "/api/update/service", {"do": "install"}),      # 0.40
     ("POST", "/api/agents/back", {}), ("POST", "/api/agents/again", {}),
+    ("POST", "/api/branch/plan", {"project_id": 1, "source": "agent/x-1", "target": "feature/x"}), ("POST", "/api/branch/x", {"project_id": 1}),   # 0.41
 ]
 # bei diesen Routen hängt die Form an Zeit oder Zufall: nur Status und Typ festhalten
 LOOSE = {"/api/overview", "/api/log?n=5", "/api/audit/export", "/api/settings/test/agent"}

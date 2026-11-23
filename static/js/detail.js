@@ -91,6 +91,8 @@ function fxItem(c, x) {
   if (x.review_app) b.push(`<a class="ibtn" href="${esc(x.review_app)}" target="_blank" rel="noopener" title="${esc(x.review_env || 'Review-App')}">${ic('globe')} Review-App</a>`);
   if (x.iid && x.ide) b.push(`<button class="ibtn" data-ide="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" title="Worktree genau auf ${esc((x.sha || '').slice(0, 8))} und IntelliJ öffnen">${ic('ide')} IntelliJ</button>`);
   if (x.iid) b.push(`<button class="ibtn" data-topics="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" data-tcard="${esc(c.id)}" title="Offene Review-Kommentare ansehen, als Prompt oder JSON exportieren, einem Agenten geben">${ic('chat')} Offene Punkte</button>`);
+  const into = brTargets(c, x);      // 0.41: diesen Branch in einen anderen der Aufgabe übernehmen (z. B. Agent → Feature-Branch)
+  if (into.length && (x.by_agent || !x.iid)) b.push(`<button class="ibtn" data-brinto="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, source: x.branch, targets: into, card: c.id }))}" title="Merge, Rebase, Fast-Forward oder Cherry-Pick in ${esc(into[0])}, lokal; gepusht wird nicht">${ic('merge')} Übernehmen in …</button>`);
   if (!x.iid && x.create_mr_url) b.push(`<a class="ibtn" href="${esc(x.create_mr_url)}" target="_blank" rel="noopener">${ic('mr')} ${x.host === 'github' ? 'PR' : 'MR'} erstellen</a>`);
   if (!c.key && state.jira && state.jira.ok) {
     b.push(`<button class="ibtn" data-tk="1" data-p="${x.project_id}" data-i="${x.iid ?? ''}" data-b="${esc(x.branch)}" data-cu="">${ic('ticket')} Ticket anlegen</button>`);

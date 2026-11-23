@@ -11,7 +11,7 @@ function uxPush(e) {
   if (UX.q.length > 400) UX.q.splice(0, UX.q.length - 400);
   if (['click', 'dead', 'view', 'dialog', 'fail'].includes(e.k)) { UX.trail.push(`${e.k === 'view' ? 'Ansicht' : e.k === 'dead' ? 'tot' : e.k === 'fail' ? 'Fehler' : e.k === 'dialog' ? 'Dialog' : 'Klick'} ${e.t || ''}`.slice(0, 80)); if (UX.trail.length > 8) UX.trail.shift(); }
 }
-const UX_ACT = '.wsrepo > summary,[data-wsgo],button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],[data-copy],#fx code,#fx .picn,#fx .chip[title],#fx .fxitem .nm b,.rcard.score,.aipace,#fbar,dialog';
+const UX_ACT = '.wsrepo > summary,[data-wsgo],button,a,input,select,textarea,summary,label,[role=button],[tabindex],[data-fopen],[data-fgo],[data-open],.frow,.hero[data-fid],.bcard,.tab,.chip[data-arun],[data-copy],[data-brinto],#fx code,#fx .picn,#fx .chip[title],#fx .fxitem .nm b,.rcard.score,.aipace,#fbar,dialog';
 function uxDesc(el) {
   if (!el || el === document.body || el === document.documentElement) return 'body';
   const tag = el.tagName.toLowerCase();

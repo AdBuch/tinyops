@@ -5,6 +5,27 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.41.0]
+
+Auf deinen Wunsch vom 23.11.: den Branch eines Agenten in den Feature-Branch des Tickets übernehmen, direkt aus dem Detail-Panel.
+
+### Neu
+- **«Übernehmen in …»** am Branch eines Agenten (und an jedem Branch ohne MR, wenn die Aufgabe weitere Branches hat). Das Ziel ist vorgewählt: der Branch des MR, sonst der nächste Branch der Aufgabe.
+  - **Vorschau:** die Commits, die dazukommen (älteste zuerst, schon übernommene markiert), Umfang, ob Konflikte zu erwarten sind (`git merge-tree`), ob Fast-Forward geht.
+  - **Vier Wege:** Fast-Forward (nur wenn der Ziel-Branch nichts Eigenes hat), Rebase (die Commits obendrauf, gerade Geschichte), Merge (mit Merge-Commit), Cherry-Pick (nur die angehakten Commits).
+  - **Sicher:** Vorher holt tinyops beide Branches (`git fetch`, nur lesend). Gearbeitet wird in einem eigenen Worktree, dein Arbeitsordner wird nicht umgeschaltet. Der Ziel-Branch rückt nur vor, er wird nie umgeschrieben. Ist er bei dir ausgecheckt, wird er dort nachgezogen. Hat er dort geänderte Dateien oder ist dein lokaler Stand von GitLab abgewichen, passiert nichts, mit Grund.
+  - **Konflikt:** Entweder wird alles zurückgenommen, oder der Worktree bleibt stehen und öffnet sich in IntelliJ. Nach dem Lösen «Abschliessen», oder «Abbrechen».
+  - **Push:** macht tinyops nie. Das Ergebnis nennt, wie weit dein Branch vor GitLab ist, mit dem Push-Befehl zum Kopieren.
+  - Jede Übernahme steht im Verlauf. Gekoppelte Geräte können das nicht.
+
+### Behoben
+- Auf Handy-Breite liess sich die Seite Einstellungen um ein paar Pixel seitlich schieben, wenn der Pfad zur Dienst-Datei lang ist (unter «Update und Dienst»). Er bricht jetzt um. Der Test dafür nennt bei einem Fehler, was übersteht.
+
+### Grenzen
+- Getestet mit echtem git gegen ein lokales Test-Repo, nicht gegen dein GitLab.
+- Liegt der Agent-Branch nur auf dem Agenten-Rechner, muss der Agent ihn erst pushen (Einstellungen → Agenten → «pusht seinen Branch»). tinyops sagt das dann.
+- Cherry-Pick eines Commits, der schon drin ist, bricht ab. Solche Commits sind in der Vorschau markiert und nicht angehakt.
+
 ## [0.40.0]
 
 Agenten: weiterführen in derselben Sitzung, vier Rollen mit Kreislauf zurück ans Entwickeln. Dazu, auf deinen Wunsch vom 23.11., Update aus dem Panel und tinyops als Dienst unter Linux.
