@@ -289,7 +289,10 @@ class Mobile(UiCase):
             if name:
                 self.tab(name)
             w = self.pg.evaluate("document.documentElement.scrollWidth")
-            self.assertLessEqual(w, self.width + 1, "seitliches Scrollen in %s" % (name or "Fokus"))
+            wide = [] if w <= self.width + 1 else self.pg.evaluate(      # 0.40: bei einem Fehler sagen, was übersteht
+                "[...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > %d; })"
+                ".slice(0, 6).map(e => e.tagName + '.' + e.className + '#' + e.id + ' ' + Math.round(e.getBoundingClientRect().right) + ' ' + (e.textContent || '').trim().slice(0, 60))" % (self.width + 1))
+            self.assertLessEqual(w, self.width + 1, "seitliches Scrollen in %s: %s" % (name or "Fokus", wide))
 
 
 class AgentCycle(UiCase):
