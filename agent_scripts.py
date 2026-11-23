@@ -74,6 +74,14 @@ echo "[tinyops] AK$k: $s" >&2
 printf '{"step": "%s", "expect": "%s", "ts": %s}\n' "$(j "$1" | cut -c1-300)" "$(j "$2" | cut -c1-300)" "$(date +%s)" >> "$R/$N.manual"
 echo "[tinyops] manueller Testschritt notiert" >&2
 ''',
+    "tinyops-finding": _HELPER_HEAD + r'''# tinyops-finding DATEI ZEILE "Befund" [hoch|mittel|klein]   hält einen Review-Befund mit Ort fest (0.42)
+# ZEILE ist die Zeilennummer in der neuen Fassung der Datei; - für einen Befund ohne Zeile. tinyops legt daraus Entwürfe in GitLab an, wenn der Mensch das will.
+[ $# -ge 3 ] || { echo 'Aufruf: tinyops-finding DATEI ZEILE "Befund" [hoch|mittel|klein]' >&2; exit 2; }
+l="$2"; case "$l" in -|"") l=0;; *[!0-9]*) echo "tinyops-finding: ZEILE ist eine Zahl oder -" >&2; exit 2;; esac
+case "${4:-mittel}" in hoch|high|blocker) s=hoch;; klein|low|nit|hinweis) s=klein;; *) s=mittel;; esac
+printf '{"path": "%s", "line": %d, "text": "%s", "severity": "%s", "ts": %s}\n' "$(j "$1" | cut -c1-300)" "$l" "$(j "$3" | cut -c1-2000)" "$s" "$(date +%s)" >> "$R/$N.findings"
+echo "[tinyops] Befund notiert: $1:$2 ($s)" >&2
+''',
     "tinyops-report": _HELPER_HEAD + r'''# tinyops-report < bericht.md   oder   tinyops-report "Text"   speichert den Ergebnisbericht (Markdown, höchstens 20 KB)
 if [ $# -gt 0 ]; then printf '%s\n' "$*"; else cat; fi | head -c 20000 > "$R/$N.summary.md.tmp" && mv "$R/$N.summary.md.tmp" "$R/$N.summary.md"
 echo "[tinyops] Bericht gespeichert." >&2
@@ -239,7 +247,7 @@ cat > "$R/{rid}.cmd" <<'{d2}'
 cat > "$R/runner.sh" <<'TINYOPS_RUNNER_EOF'
 {runner}TINYOPS_RUNNER_EOF
 command -v tmux >/dev/null 2>&1 || {{ echo "tmux nicht gefunden" >&2; exit 42; }}
-rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.manual" "$R/{rid}.summary.md" "$R/{rid}.answer."*
+rm -f "$R/{rid}.question.json" "$R/{rid}.qn" "$R/{rid}.checks" "$R/{rid}.ak" "$R/{rid}.manual" "$R/{rid}.findings" "$R/{rid}.summary.md" "$R/{rid}.answer."*
 {helpers}ID={rid}
 {prep}echo "$WD" > "$R/{rid}.wd"
 tmux new-session -d -s tinyops-{rid} -c "$WD" "sh '$R/runner.sh' {rid}"
@@ -266,9 +274,10 @@ def remote_status_script(ids):
 def remote_report_script(rid):
     return ('R="$HOME/.tinyops/runs"; echo "@@SUMMARY"; head -c 20000 "$R/%d.summary.md" 2>/dev/null; echo; echo "@@CHECKS"; '
             'tail -n 50 "$R/%d.checks" 2>/dev/null; echo "@@AK"; tail -n 200 "$R/%d.ak" 2>/dev/null; echo "@@MANUAL"; tail -n 30 "$R/%d.manual" 2>/dev/null; '
+            'echo "@@FINDINGS"; tail -n 100 "$R/%d.findings" 2>/dev/null; '
             # 0.40: Kennung der Sitzung (Codex, Vibe nennen sie im Log) und das Ende des Logs für die Antwort im Gespräch
             'echo "@@SESSION"; head -c 400000 "$R/%d.log" 2>/dev/null | grep -a -o -m1 -E %s; echo "@@TAIL"; tail -c 48000 "$R/%d.log" 2>/dev/null; true'
-            ) % (int(rid), int(rid), int(rid), int(rid), int(rid), shlex.quote(SESSION_GREP), int(rid))
+            ) % (int(rid), int(rid), int(rid), int(rid), int(rid), int(rid), shlex.quote(SESSION_GREP), int(rid))
 
 
 SESSION_GREP = 'session id: *[0-9a-fA-F-]{20,60}|"session_id" *: *"[A-Za-z0-9_.:-]{6,100}"'

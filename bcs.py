@@ -19,6 +19,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+import apicalls
+
 DEFAULTS = {"enabled": False, "url": "http://127.0.0.1:3210", "apprentices": True, "allow_lan": False}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -74,6 +76,7 @@ def is_loopback(url):
 
 READ_TIMEOUT = 8          # 0.36: Lesen wartet höchstens so lange (vorher 20 s je Anfrage, im Bericht Median 73 s)
 PAUSE_AFTER_FAIL = 60     # nach «nicht erreichbar» so lange nicht erneut lesen, sondern sofort dieselbe Meldung geben
+PAUSE_MAX = 600           # 0.42: jede weitere Fehlanfrage verdoppelt die Pause bis 10 min (Bericht: 28× 8 s Warten, wenn die Middleware aus ist)
 
 
 class Client:
@@ -81,18 +84,21 @@ class Client:
         self.base = check_url(url, allow_lan)
         self.token, self.timeout = token or "", timeout
         self.down = None          # (seit, meldung) solange die Middleware nicht antwortet
+        self.fails = 0            # Fehlanfragen in Folge, für die wachsende Pause
 
     def _call(self, method, path, params=None, body=None, timeout=None, write=False):
-        if not write and self.down and time.time() - self.down[0] < PAUSE_AFTER_FAIL:
-            wait = int(PAUSE_AFTER_FAIL - (time.time() - self.down[0])) + 1
+        pause = min(PAUSE_AFTER_FAIL * 2 ** max(self.fails - 1, 0), PAUSE_MAX)
+        if not write and self.down and time.time() - self.down[0] < pause:
+            wait = int(pause - (time.time() - self.down[0])) + 1
             raise BcsError("%s Keine Antwort seit %s, nächster Versuch in %d s." % (self.down[1], time.strftime("%H:%M", time.localtime(self.down[0])), wait), 0)
         try:
             out = self._call_once(method, path, params, body, timeout or (self.timeout if write else min(self.timeout, READ_TIMEOUT)), write)
         except BcsError as e:
             if e.code == 0 and not write and "nicht erreichbar" in str(e):
                 self.down = (time.time(), str(e))
+                self.fails += 1
             raise
-        self.down = None
+        self.down, self.fails = None, 0
         return out
 
     def _call_once(self, method, path, params, body, timeout, write):
@@ -105,6 +111,7 @@ class Client:
         if self.token:
             headers["Authorization"] = "Bearer " + self.token
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        apicalls.record("BCS", method, path)
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))      # Loopback und eigenes Netz nie über einen Proxy
         try:
             with opener.open(req, timeout=timeout) as r:

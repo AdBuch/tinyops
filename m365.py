@@ -27,6 +27,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+import apicalls
+
 LOGIN = "https://login.microsoftonline.com"
 GRAPH = "https://graph.microsoft.com/v1.0"
 DEFAULTS = {"enabled": False, "tenant": "", "client_id": "", "mail": True, "calendar": True, "teams": True, "calendar_write": False,
@@ -107,6 +109,7 @@ class Client:
 
     # -- HTTP
     def _open(self, req, timeout=20):
+        apicalls.record("Microsoft 365", req.get_method(), req.full_url)
         opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.ctx)) if self.ctx else urllib.request.build_opener()
         return opener.open(req, timeout=timeout)
 

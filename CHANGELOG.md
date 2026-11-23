@@ -5,6 +5,41 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.42.0]
+
+Deine Schwerpunkte vom 20.11.: schneller zum Testen von Hand und Reviews in GitLab, dazu jeder Aufruf nach aussen sichtbar. Und deine Rückmeldung vom 23.11. (Prüfbericht 0.40 ohne Fehler, Nutzungsbericht). Der Plan hatte das auf 0.42 und 0.43 verteilt; es kommt zusammen.
+
+### Neu
+- **Testen von Hand im Detail-Panel** (ab der Station «Prüfen»): eine **Prüfliste je Ticket**, zusammengestellt aus dem, was schon da ist:
+  - die Akzeptanzkriterien (mit dem, was der Agent dazu gemeldet hat; ohne Agent direkt aus dem Jira-Ticket),
+  - die Testschritte von Entwickler und Test-Agent (`tinyops-manual`),
+  - ein fester Schlusspunkt «aus Sicht eines Nutzers erreicht», und eigene Punkte.
+  - Je Punkt ✓ oder ✗; bei ✗ ein Satz, was nicht ging. Der Stand bleibt, auch nach einem neuen Lauf.
+- **«Jetzt testen»**: ein Klick holt genau den Commit des MR (oder den Branch des Agenten) in einen eigenen Worktree, öffnet IntelliJ darauf und startet die Review-Umgebung, wenn eine eingetragen ist. Was ging und was nicht, steht über der Liste. Nur am Rechner, nicht vom gekoppelten Gerät.
+- **«↺ N Fehler zurück an …»**: die Punkte mit ✗ und deine Sätze gehen in die Sitzung des Entwicklers (Kreislauf aus 0.40). Danach sind sie wieder offen, mit «zurück an Lauf N».
+- **«Alles ok: Getestet»** nimmt am Commit ab, wie bisher, mit der Prüfliste als Notiz. Mit offenen Punkten heisst der Knopf «Trotzdem abnehmen»; mit Fehlern geht es nicht.
+- Im Fokus steht **«Wartet auf deinen Test»** über «Du bist dran». «Manuell testen» in der Liste öffnet jetzt die Prüfliste, statt sofort abzunehmen.
+- **Review mit Agent (E14)**: «▶ Review mit Agent» an jedem MR unter «Andere warten auf dich» und im Detail-Panel. Ein Klick startet den Reviewer (Agent mit Review-Rolle, eigener Worktree) auf genau dem Commit des MR. Er holt den Stand selbst, ändert nichts und hält jeden Punkt mit Datei, Zeile und Schwere fest (`tinyops-finding`).
+  - Die Befunde stehen im Detail-Panel zum Abwählen. **«N als Entwürfe in GitLab»** legt sie als deine Entwürfe am MR an: an der Zeile, wenn sie im Diff liegt, sonst als allgemeiner Entwurf mit Datei und Zeile im Text. Positioniert wird auf dem Stand, den der Agent geprüft hat, auch wenn der MR inzwischen weiter ist.
+  - Abschicken machst du in GitLab. tinyops ruft nie `publish`, Approve, Merge oder Threads auflösen auf; erlaubt sind nur die Pfade in `gitlab_review.ALLOWED`, ein Test hält das fest.
+  - Ein zweites Mal ersetzt nur die Entwürfe, die tinyops selbst angelegt hat (in der Datenbank vermerkt und unsichtbar markiert). Deine eigenen bleiben.
+  - Dafür gibt es das eigene Token **«Token für Review-Entwürfe»** (Einstellungen → GitLab, Scope `api`). Ohne das: «Kopieren».
+- **Einstellungen → «Aufrufe nach aussen»**: jeder Aufruf je Dienst mit Methode, Pfad, wozu, wann und welchem Zugang, schreibende markiert, mit Zähler seit dem Start. Die Liste steht in `apicalls.py`; jede Stelle, die eine Verbindung öffnet, zählt dort mit. Ein Test prüft, dass keine daran vorbeigeht und jeder Pfad im Code in der Liste steht. Ein unbekannter Aufruf erscheint rot.
+
+### Geändert
+- **Agenten erben keine Zugangsdaten von tinyops mehr**: Umgebungsvariablen wie `TINYOPS_GITLAB_TOKEN` werden für jeden lokalen Lauf entfernt. Vorher hätte ein Agent ein Token gesehen, das du als Umgebungsvariable gesetzt hattest.
+- Die Station «Mergen» heisst «In GitLab mergen» und sagt, dass tinyops dort nur liest (zu deinem Wunsch «wenn auf testen und click auf mergen scheint was nicht zu klappen»: ich vermute, das war gemeint; sonst bitte kurz schreiben, was passiert ist).
+- BCS-Middleware aus: Nach jedem weiteren Fehlversuch wartet tinyops doppelt so lange, bis 10 Minuten, statt jede Minute 8 s zu warten (Bericht: 28× im Median 8 s).
+
+### Behoben
+- Klick neben das Agenten-Seitenpanel (in den Fokus) schliesst es (Bericht: 40 tote Klicks auf den Hintergrund, 27 schnelle Klicks im Agentenfenster). Ungesendeter Text bleibt geschützt.
+- Klick auf einen Agenten-Chip öffnet den Agenten der Aufgabe; Chips im Detail-Panel (Draft, Mergestatus, Agent) erklären sich beim Klick.
+- Auf dem Handy lag die Abschnittsliste der Einstellungen über dem Text (die Regel zum Ausblenden stand vor der Grundregel).
+
+### Nicht gemacht
+- Beim Review prüft tinyops noch nicht, ob es einen Punkt schon als Thread gibt, und gibt dem Agenten die offenen Threads nicht mit.
+- Ein MR aus einem Fork lässt sich reviewen (der Agent holt `refs/merge-requests/N/head`), ist aber nicht gegen ein echtes GitLab geprüft.
+
 ## [0.41.1]
 
 Gleicher Inhalt wie 0.41.0. Für v0.41.0 gab es kein Release: Auf GitHub ist kein git-Name eingetragen, und vier Tests zum Übernehmen brauchten einen. Der Tag v0.41.0 bleibt stehen, das Release ist dieses.

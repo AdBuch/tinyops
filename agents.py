@@ -36,7 +36,7 @@ from agent_rules import (  # noqa: F401  (0.40: aus agents.py gelöst, hier weit
     QUOTA_DEFAULT, ROLE_CMD_RE, ROLE_DEFAULTS, ROLE_PHASES, STATUS_ACTIVE, STATUS_ALL,
     USER_RE, _COMMENT, agent_roles, clean_agents, clean_connections, clean_paths,
     clone_hint, data_class, diff_counts, guard_warnings, guards_cfg, guards_text,
-    looks_cloud, parse_manual, parse_roles, path_allowed, review_items, slug,
+    looks_cloud, parse_findings, parse_manual, parse_roles, path_allowed, review_items, slug,
     valid_agent_dir)
 from agent_cmd import (  # noqa: F401  (0.40: aus agents.py gelöst, hier weiter erreichbar)
     ANSI, KINDS, MODEL, PROMPT, PROMPT_FILE, PROVIDER,
@@ -283,7 +283,7 @@ class Service(ConversationMixin):
         push = bool((agent or {}).get("push"))
         ws = (self.WORKSPACE_LINES.get(mode, self.WORKSPACE_LINES["shared"]).replace("{branch}", branch or "dem Hauptbranch").replace("{paths}", ", ".join(paths) or "-")
               .replace("{pusher}", "am Ende pushst du diesen Branch" if push else "den Branch pusht der Mensch"))
-        phase = {v: k for k, v in PHASE_TEMPLATE.items()}.get(template, "review" if template == "agent-prereview" else "develop")
+        phase = {v: k for k, v in PHASE_TEMPLATE.items()}.get(template, "review" if template in ("agent-prereview", "agent-mr-review") else "develop")
         vals = D(key=key or "(ohne Key)", title=title or "", project=project or "", branch=branch or "(noch keiner)",
                  url_line=("Link: %s\n" % url) if url else "", workspace_line=ws, push_line=self.PUSH_LINES[push],
                  guards=guards_text(guards_cfg(self.cfg), phase))
@@ -331,7 +331,7 @@ class Service(ConversationMixin):
         end = r["finished"] or time.time()
         v = dict(r)
         v["prompt_text"] = v.pop("prompt", "")
-        for k, empty in (("question", None), ("qa", []), ("checks", []), ("criteria", []), ("ak", []), ("result", None)):
+        for k, empty in (("question", None), ("qa", []), ("checks", []), ("criteria", []), ("ak", []), ("result", None), ("mr", None), ("findings", [])):
             try:
                 v[k] = json.loads(r[k]) if r.get(k) else empty
             except ValueError:
@@ -504,6 +504,7 @@ class Service(ConversationMixin):
         hb = write_helpers(d)
         spec["env"] = dict(spec.get("env") or {}, TINYOPS_RUN_DIR=str(d), TINYOPS_RUN_ID=str(rid), PYTHONUNBUFFERED="1",
                            PATH=str(hb) + os.pathsep + os.environ.get("PATH", ""))
+        spec["unset"] = sorted({"TINYOPS_" + n.upper() for n in store.NAMES} | store.SENSITIVE_ENV)     # 0.42: kein Token von tinyops im Agenten
         (d / ("%d.spec.json" % rid)).write_text(json.dumps(spec), encoding="utf-8")
         kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "cwd": str(d), "close_fds": True}
         if os.name == "nt":
@@ -597,7 +598,7 @@ class Service(ConversationMixin):
             if conn is None:
                 d = self.run_dir
                 rd = lambda ext: (d / ("%d.%s" % (r["id"], ext))).read_text(encoding="utf-8", errors="replace") if (d / ("%d.%s" % (r["id"], ext))).exists() else ""
-                summary, checks, ak, manual = rd("summary.md")[:20000], rd("checks"), rd("ak"), rd("manual")
+                summary, checks, ak, manual, findings = rd("summary.md")[:20000], rd("checks"), rd("ak"), rd("manual"), rd("findings")
                 logt = rd("log")
                 sess_line, tail = logt[:400000], logt[-48000:]
             else:
@@ -608,11 +609,13 @@ class Service(ConversationMixin):
                 checks, _, ak = checks.partition("@@AK")
                 ak, _, manual = ak.partition("@@MANUAL")
                 manual, _, sess_line = manual.partition("@@SESSION")
+                manual, _, findings = manual.partition("@@FINDINGS")
                 sess_line, _, tail = sess_line.partition("@@TAIL")
                 summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
             self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False),
                                         ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False),
-                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False), reply=last_reply(tail))
+                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False), reply=last_reply(tail),
+                                        findings=json.dumps(parse_findings(clean_text(findings, 120000)), ensure_ascii=False))
             if not r.get("session") and find_session(a, sess_line):      # 0.40: Codex und Vibe vergeben die Kennung selbst
                 self.store.agent_run_update(r["id"], session=find_session(a, sess_line))
             cur = self.store.agent_run(r["id"]) or r

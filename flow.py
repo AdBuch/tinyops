@@ -190,7 +190,7 @@ def derive(card, runs=(), checklist=(), seen_max=None, now=None, acceptance=None
             if nxt["kind"] == "do":          # Blocker und Warten (CI, Review) bleiben sichtbar, auch wenn von Hand weitergeschoben
                 if manual == 6:
                     url = (sorted(mrs, key=_mr_rank)[0]["url"]) if mrs else ""
-                    nxt = (_step("do", "merge", "Mergen", "Getestet. In GitLab mergen, danach erscheint «Abschliessen».", url=url) if mrs else
+                    nxt = (_step("do", "merge", "In GitLab mergen", "Getestet. Mergen machst du in GitLab (tinyops liest dort nur). Nach dem Merge erscheint hier «Abschliessen».", url=url) if mrs else
                            _step("do", "close", "Abschliessen", "Getestet. Ist alles gemergt? Dann auf «Fertig» setzen.", stage="done"))
                 elif manual == 5:
                     nxt = _step("do", "test", "Manuell testen", "Testen, dann als getestet markieren.", stage="tested",

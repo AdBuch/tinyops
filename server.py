@@ -62,7 +62,7 @@ from httpclient import Http  # noqa: F401
 from ideas import Ideas, similar  # noqa: F401
 from jira_client import JiraClient, jira_auth_header  # noqa: F401
 
-VERSION = "0.41.1"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
+VERSION = "0.42.0"   # Semantic Versioning: neue Funktion = minor, Korrektur = patch. Bei jeder Änderung auch CHANGELOG.md pflegen (ein Test prüft das)
 BASE = Path(__file__).resolve().parent
 
 
@@ -114,6 +114,8 @@ from area_ide import IdeArea  # noqa: E402
 from area_m365 import M365Area  # noqa: E402
 from area_qa import QaArea  # noqa: E402
 from area_sync import SyncArea  # noqa: E402
+from area_review import ReviewArea  # noqa: E402
+from area_test import TestArea  # noqa: E402
 from area_tickets import TicketArea  # noqa: E402
 from area_time import TimeArea  # noqa: E402
 from area_workspaces import WorkspaceArea  # noqa: E402
@@ -123,7 +125,7 @@ from config import (DEFAULTS, GITHUB_DEFAULTS, JIRA_DEFAULTS, LLM_DEFAULTS, PLAI
                     time_cfg, usage_cfg)
 
 
-class App(SyncArea, TicketArea, AgentArea, TimeArea, FocusArea, QaArea, WorkspaceArea, M365Area, IdeArea):
+class App(SyncArea, TicketArea, AgentArea, TimeArea, FocusArea, QaArea, WorkspaceArea, M365Area, IdeArea, TestArea, ReviewArea):
     """Zustand und Kern von tinyops: Config anwenden, Clients, Speicher, Audit. Die Aktionen liegen seit 0.38 in den Bereichen (area_*.py)."""
 
     @property
@@ -276,7 +278,7 @@ class App(SyncArea, TicketArea, AgentArea, TimeArea, FocusArea, QaArea, Workspac
                 self.problems.append("Helpdesk-Jira: %s fehlt." % ("Token" if need == "helpdesk_token" else "Passwort"))
             else:
                 try:
-                    self.hdj = JiraClient(dict(self.hdc), helpdesk.auth_header(self.hdc, secrets), ctx)
+                    self.hdj = JiraClient(dict(self.hdc), helpdesk.auth_header(self.hdc, secrets), ctx, label="Helpdesk")
                 except ValueError as e:
                     self.problems.append("Helpdesk-Jira: %s" % e)
         if self.ghc["enabled"]:

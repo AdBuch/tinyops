@@ -12,6 +12,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import apicalls
+
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     """Folgt keinen Weiterleitungen: Zugangsdaten gehen so nie an einen anderen Host."""
@@ -68,10 +70,11 @@ def classify(exc):
     return "other", str(r)
 
 
-def probe(url, headers=None, ctx=None, timeout=8, max_body=262144):
+def probe(url, headers=None, ctx=None, timeout=8, max_body=262144, svc="Einstellungen"):
     """GET ohne Weiterleitung. Liefert dict(status, headers, body, ms). Fehlerhafte HTTP-Status sind normale Antworten.
     Netzwerkfehler werden zu NetError."""
     req = urllib.request.Request(url, headers=headers or {})
+    apicalls.record(svc, "GET", url)          # 0.42: jeder Aufruf nach aussen steht in apicalls.CALLS
     opener = urllib.request.build_opener(NoRedirect, urllib.request.HTTPSHandler(context=ctx or ssl.create_default_context()))
     t0 = time.time()
     try:

@@ -256,7 +256,7 @@ class _AgentMixin:
     """Zuweisungen und Läufe von Coding-Agenten an Tickets (siehe agents.py). Der Prompt wird mitgespeichert, damit man sieht, was beauftragt wurde."""
     _COLS = ("agent", "ticket", "project_id", "branch", "title", "status", "workdir", "prompt", "note", "exit_code", "created", "started", "finished",
              "mode", "out_branch", "wt", "taken", "question", "answered", "qa", "summary", "checks", "ack", "criteria", "ak", "result",
-             "phase", "parent", "gate", "gate_note", "msteps", "mchecks", "renv", "session", "resume_of", "next_run", "ask", "reply", "fresh")
+             "phase", "parent", "gate", "gate_note", "msteps", "mchecks", "renv", "session", "resume_of", "next_run", "ask", "reply", "fresh", "mr", "findings")
 
     def agent_run_add(self, agent, ticket, project_id, branch, title):
         with self._conn(True) as c:
@@ -554,7 +554,45 @@ class _HdMixin:
             c.executemany("insert into hd_seen(key, ts) values(?,?) on conflict(key) do update set ts = excluded.ts", [(k, time.time()) for k in keys])
 
 
-class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin, _HdMixin):
+class _TestMixin:
+    """0.42: Prüfliste je Ticket. Stand je Punkt (ok, fail, offen) mit Notiz; eigene Punkte mit source «du»."""
+    def tcheck_list(self, key):
+        with self._conn() as c:
+            return [] if c is None else [dict(r) for r in c.execute("select * from ticket_checks where key=? order by pos, ts", (key,))]
+
+    def tcheck_set(self, key, iid, text, source, state=None, note=None, sha="", pos=None):
+        with self._conn(True) as c:
+            row = c.execute("select * from ticket_checks where key=? and id=?", (key, iid)).fetchone()
+            if row is None:
+                n = c.execute("select coalesce(max(pos), 0) + 1 from ticket_checks where key=?", (key,)).fetchone()[0]
+                c.execute("insert into ticket_checks(key, id, text, source, state, note, sha, ts, pos) values(?,?,?,?,?,?,?,?,?)",
+                          (key, iid, text, source, state or "", note or "", sha or "", time.time(), pos if pos is not None else n))
+            else:
+                c.execute("update ticket_checks set state=?, note=?, sha=?, ts=? where key=? and id=?",
+                          (row["state"] if state is None else state, row["note"] if note is None else note, sha or row["sha"], time.time(), key, iid))
+
+    def tcheck_delete(self, key, iid):
+        with self._conn(True) as c:
+            return c.execute("delete from ticket_checks where key=? and id=? and source='du'", (key, iid)).rowcount > 0
+
+
+class _DraftMixin:
+    """0.42 (E14): welche Entwurfs-Kommentare in GitLab tinyops selbst angelegt hat. Nur diese ändert oder löscht es."""
+    def drafts_of(self, project_id, iid):
+        with self._conn() as c:
+            return [] if c is None else [dict(r) for r in c.execute("select * from review_drafts where project_id=? and iid=? order by draft_id", (int(project_id), int(iid)))]
+
+    def draft_add(self, project_id, iid, draft_id, run, sha):
+        with self._conn(True) as c:
+            c.execute("insert or replace into review_drafts(project_id, iid, draft_id, run, sha, ts) values(?,?,?,?,?,?)",
+                      (int(project_id), int(iid), int(draft_id), int(run or 0), sha or "", time.time()))
+
+    def draft_forget(self, project_id, iid, draft_id):
+        with self._conn(True) as c:
+            c.execute("delete from review_drafts where project_id=? and iid=? and draft_id=?", (int(project_id), int(iid), int(draft_id)))
+
+
+class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptMixin, _PinMixin, _IdeMixin, _HdMixin, _TestMixin, _DraftMixin):
     def __init__(self, path):
         self.path = Path(path)
 
@@ -588,7 +626,8 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                             "question", "answered", "qa", "summary", "checks", "ack",   # 0.18: Rückfragen und Bericht
                             "criteria", "ak", "result",                                  # 0.26: Akzeptanzkriterien und Änderungen je Lauf
                             "phase", "parent", "gate", "gate_note", "msteps", "mchecks", "renv",   # 0.31: Zyklus, Freigaben, manuelle Prüfpunkte
-                            "session", "resume_of", "next_run", "ask", "reply", "fresh"):   # 0.40: Sitzung fortsetzen, Gespräch
+                            "session", "resume_of", "next_run", "ask", "reply", "fresh",   # 0.40: Sitzung fortsetzen, Gespräch
+                            "mr", "findings"):                                         # 0.42: Review eines MR, Befunde mit Datei und Zeile
                     if col not in have:
                         try:
                             conn.execute("alter table agent_runs add column %s text not null default ''" % col)
@@ -612,6 +651,11 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
                 conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
                              " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
                 conn.execute("create table if not exists ticket_group(key text primary key, head text not null, ts real not null)")   # 0.30
+                conn.execute("create table if not exists review_drafts(project_id integer not null, iid integer not null, draft_id integer not null,"
+                             " run integer not null default 0, sha text not null default '', ts real not null, primary key(project_id, iid, draft_id))")
+                conn.execute("create table if not exists ticket_checks(key text not null, id text not null, text text not null, source text not null,"
+                             " state text not null default '', note text not null default '', sha text not null default '', ts real not null,"
+                             " pos integer not null default 0, primary key(key, id))")   # 0.42: Prüfliste je Ticket
                 yield conn
         finally:
             conn.close()

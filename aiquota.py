@@ -21,6 +21,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import apicalls
+
 CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage"
 CODEX_URL = "https://chatgpt.com/backend-api/wham/usage"
 DEFAULT_FILES = {"claude": "~/.claude/.credentials.json", "codex": "~/.codex/auth.json"}
@@ -75,6 +77,7 @@ def codex_token(path):
 
 def _get(url, headers, ctx, timeout):
     req = urllib.request.Request(url, headers=headers, method="GET")
+    apicalls.record("KI-Kontingent", "GET", url)
     try:
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
             return json.loads(r.read(1 << 20).decode("utf-8", "replace"))

@@ -372,6 +372,11 @@ class GitLabClient:
             step("gl-assigned", "Mir zugeteilte MRs", "err", str(e))
         return sink
 
+    def mr_detail(self, project_id, iid):
+        """MR mit Beschreibung und Zielbranch (für den Review-Auftrag). Nur GET."""
+        mr = self.http.get("/projects/%s/merge_requests/%s" % (project_id, iid)) or {}
+        return {"title": mr.get("title") or "", "description": mr.get("description") or "", "target_branch": mr.get("target_branch") or "", "sha": mr.get("sha") or ""}
+
     def mr(self, project_id, iid):
         mr = self.http.get("/projects/%s/merge_requests/%s" % (project_id, iid))
         return {"title": mr["title"], "branch": mr["source_branch"], "sha": mr["sha"],

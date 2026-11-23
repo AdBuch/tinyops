@@ -14,10 +14,10 @@ jlog = tlog.get("jira")
 
 
 class JiraClient:
-    def __init__(self, jc, auth_header, ctx):
+    def __init__(self, jc, auth_header, ctx, label="Jira"):
         self.jc = jc
         self.base = jc["url"].rstrip("/")
-        self.http = Http("Jira", self.base + "/rest/api/2",
+        self.http = Http(label, self.base + "/rest/api/2",
                          {"Authorization": auth_header, "Accept": "application/json"}, ctx)
         self._sf = None   # Feld-ID des Sprint-Feldes; "" = es gibt keines
 

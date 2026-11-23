@@ -84,7 +84,7 @@ class Client:
 
     def _get(self, path, params, max_body=262144):
         try:
-            return net.probe(self.base + path + "?" + urllib.parse.urlencode(params), headers(self.token), self.ctx, timeout=self.timeout, max_body=max_body)
+            return net.probe(self.base + path + "?" + urllib.parse.urlencode(params), headers(self.token), self.ctx, timeout=self.timeout, max_body=max_body, svc="Sonar")
         except net.NetError as e:
             raise SonarError("Sonar nicht erreichbar (%s)" % e.detail)
 

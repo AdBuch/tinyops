@@ -391,6 +391,7 @@
   .setnav button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 8px; color: var(--quiet); font-weight: 600; }
   .setnav button:hover { background: var(--surface); color: var(--ink); }
   .setnav button.on { background: var(--surface); color: var(--ink); box-shadow: inset 3px 0 0 var(--focus); }
+  @media (max-width: 800px) { .setnav { display: none; } }      /* 0.42: stand vor der Grundregel und wirkte nicht (Liste lag auf dem Handy über dem Text) */
   .tokbox { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
   .tokbox > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; cursor: pointer; list-style: none; }
   .tokbox > summary::-webkit-details-marker { display: none; }
@@ -963,3 +964,36 @@
   .brhow { border: 0; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
   .brhow label { display: flex; gap: 6px; align-items: baseline; }
   .warnline { color: var(--warn-ink, #8a5a00); margin-top: 4px; }
+  /* 0.42: Testen von Hand */
+  .tcsec.now > h3 { color: var(--focus); }
+  .tctop { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; } .tctop .sp { flex: 1; }
+  .tcsteps { list-style: none; margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--raised); display: grid; gap: 4px; font-size: 13px; }
+  .tcsteps li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; } .tcsteps li span { color: var(--quiet); overflow-wrap: anywhere; min-width: 0; }
+  .tcsteps li.ok svg { color: var(--ok); } .tcsteps li.bad svg { color: var(--bad); }
+  ul.tc { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  ul.tc li { display: flex; gap: 10px; align-items: flex-start; padding: 6px; border-radius: 8px; }
+  ul.tc li:hover { background: var(--raised); }
+  .tcbtn { display: flex; gap: 4px; flex: none; }
+  .tcbtn button { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--quiet); }
+  .tcbtn button svg { width: 15px; height: 15px; }
+  .tcbtn .tcok.on { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .tcbtn .tcfail.on { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+  .tctxt { flex: 1; min-width: 0; display: grid; gap: 2px; padding-top: 4px; } .tctxt small { color: var(--quiet); }
+  li.tc-ok .tctxt > span { color: var(--quiet); } li.tc-fail .tctxt small { color: var(--bad); }
+  .tcnote { display: flex; gap: 6px; margin-top: 4px; } .tcnote input, .tcfoot input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+  .chip.tcsrc { flex: none; margin-top: 5px; }
+  .tcfoot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  /* 0.42: Aufrufe nach aussen */
+  details.calls { border-top: 1px solid var(--line); padding: 8px 0; } details.calls summary { cursor: pointer; }
+  table.calls { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+  table.calls th { text-align: left; font-weight: 600; color: var(--quiet); padding: 4px 8px 4px 0; }
+  table.calls td { padding: 5px 8px 5px 0; vertical-align: top; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  table.calls .n { text-align: right; white-space: nowrap; }
+  table.calls tr.unk td { color: var(--bad); } table.calls tr.unk td:first-child { box-shadow: inset 3px 0 0 var(--bad); padding-left: 6px; }
+  @media (max-width: 700px) { table.calls thead { display: none; } table.calls tr { display: grid; padding: 6px 0; border-top: 1px solid var(--line); } table.calls td { border: 0; padding: 1px 0; } table.calls .n { text-align: left; } }
+  /* 0.42: Review mit Agent */
+  ul.rvf { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  ul.rvf li { padding: 8px 10px; border-radius: 8px; background: var(--raised); }
+  ul.rvf .rvh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } ul.rvf label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  ul.rvf code { overflow-wrap: anywhere; } ul.rvf p { margin: 4px 0 0; }
+  table.calls td:nth-child(4) code { white-space: nowrap; }

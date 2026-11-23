@@ -21,6 +21,7 @@ import threading
 import time
 from pathlib import Path
 
+import apicalls
 import tlog
 
 log = tlog.get("update")
@@ -71,6 +72,7 @@ class Updater:
         if rc:
             st["why"] = "Keine Remote «%s» im Checkout." % remote
             return st
+        apicalls.record("Update", "GIT", "ls-remote")
         rc, out, err = self._git("ls-remote", "--tags", "--refs", remote, "v*", timeout=25)
         if rc:
             st["why"] = "GitHub nicht erreichbar: %s" % (err.splitlines()[-1][:160] if err else rc)

@@ -97,7 +97,7 @@ function fRow(e) {
     ${e.t === 'hd' ? `<span class="hdprio p${Math.min(5, e.h.prio_rank)}" title="Priorität ${esc(e.h.priority || 'ohne')}"></span>` : trackHtml(e.d)}
     <div class="fmain"><div class="fl1"><span class="fkey">${esc(eKey(e))}</span><span class="ftitle" title="${esc(eTitle(e))}">${esc(eTitle(e))}</span></div><div class="fl2">${srcTags(e)}${metaOf(e)}</div></div>
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
-    <div class="fbtns">${doneBtn(e)}${goBtn(e)}</div></div>`;
+    <div class="fbtns">${doneBtn(e)}${rvBtn(e)}${goBtn(e)}</div></div>`;
 }
 // 0.36: Die Fokus-Aufgabe als Arbeitsfläche: worum es geht, wann es fertig ist, Teilschritte und Agenten direkt da
 // (Wunsch: «das Fokus-Ticket ist wie ein Titel, nicht etwas, um daran zu arbeiten»)
@@ -150,7 +150,7 @@ function heroHtml(e, g) {
     ${trackHtml(e.d, true)}
     ${pin ? timeChip(e) : ''}
     <div class="hnext"><div class="hstep"><span class="hlabel">${lead}</span><h2>${esc(n.label)}</h2><p>${esc(n.why)}</p></div>
-      <div class="hbtns">${goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}${state.focus && e.t !== 'review' ? `<button class="big" data-fsess="${esc(e.id)}" title="Fokus-Sitzung mit Zeitbox: Ablenkungen parken, Zeit läuft auf diese Aufgabe">${ic('clock')} Fokus</button>` : ''}<button class="big" data-fopen="${esc(e.id)}">Details</button>
+      <div class="hbtns">${goBtn(e, 'primary big')}${rvBtn(e, 'big')}${testBtns(e, 'big')}${doneBtn(e, true)}${state.focus && e.t !== 'review' ? `<button class="big" data-fsess="${esc(e.id)}" title="Fokus-Sitzung mit Zeitbox: Ablenkungen parken, Zeit läuft auf diese Aufgabe">${ic('clock')} Fokus</button>` : ''}<button class="big" data-fopen="${esc(e.id)}">Details</button>
         ${pin ? `<button class="quiet-btn big" data-fpin="" title="Fokus lösen: wieder automatisch das Wichtigste zeigen">${ic('x')} Fokus lösen</button>` : `<button class="quiet-btn big" data-fskip="${esc(e.id)}" title="Nicht jetzt: die nächste Aufgabe zeigen (gilt bis du den Tab schliesst)">${ic('skip')} Nicht jetzt</button>`}</div></div>${bl}
     ${heroWork(e)}
   </section>`;
@@ -202,7 +202,9 @@ function renderFocus() {
   const hk = $('hCkNew'), hkv = hk ? [hk.dataset.hck, hk.value, document.activeElement === hk] : null;      // Eingabe im Hero über das Neuzeichnen retten
   $('fHero').innerHTML = heroHtml(g.hero, g);
   if (hkv && $('hCkNew') && $('hCkNew').dataset.hck === hkv[0]) { $('hCkNew').value = hkv[1]; if (hkv[2]) $('hCkNew').focus(); }
-  box.innerHTML = fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', g.mine, g.hero ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
+  const tests = g.mine.filter(e => e.d.phase === 5 && e.d.next.kind === 'do'), mine = g.mine.filter(e => !tests.includes(e));      // 0.42: Testen bleibt nicht liegen
+  box.innerHTML = fGroup('Wartet auf deinen Test', 'Details → «Jetzt testen»: Stand in IntelliJ, Prüfliste, Abnahme', tests, '')
+    + fGroup('Du bist dran', 'Blocker zuerst, dann was am weitesten ist', mine, g.hero || tests.length ? '' : 'Nichts. Alles andere wartet auf CI, andere oder Agenten.')
     + fGroup('Andere warten auf dich', 'Reviews und dir zugeteilte MRs', g.reviews, '')
     + fGroup(hdName(), 'Dir zugewiesen, nach Priorität und SLA', g.hd, '')
     + hdQueue()
@@ -281,7 +283,7 @@ function renderRail() {
   }
   const runs = ((state.agents && state.agents.runs) || []).filter(r => r.active || r.status === 'zugewiesen').slice(0, 6);
   if (state.agents && state.agents.enabled) {
-    const drag = state.agents.agents.map(a => { const q = agQuota(a); return `<span class="agdrag ${q ? q.cls : ''}" draggable="true" data-agdrag="${esc(a.id)}" title="Auf eine Aufgabe im Fokus oder im Board ziehen${a.roles.length < 4 ? '. Rollen: ' + a.roles.map(x => ROLE_L[x]).join(', ') : ''}">${ic('play')}${esc(a.name)}${q ? ` <small>${esc(q.text)}</small>` : ''}</span>`; }).join('');
+    const drag = state.agents.agents.map(a => { const q = agQuota(a); return `<span class="agdrag ${q ? q.cls : ''}" draggable="true" data-agdrag="${esc(a.id)}" title="Klick: der Aufgabe oben (oder der offenen) zuweisen. Oder auf eine Aufgabe im Fokus oder im Board ziehen${a.roles.length < 4 ? '. Rollen: ' + a.roles.map(x => ROLE_L[x]).join(', ') : ''}">${ic('play')}${esc(a.name)}${q ? ` <small>${esc(q.text)}</small>` : ''}</span>`; }).join('');
     h += `<section class="rcard"><h3>Agenten <small>${runs.filter(r => r.active).length} aktiv</small></h3>${drag ? `<div class="agdrags">${drag}</div>` : ''}${runs.length ? runs.map(r => `<div class="ragent" data-arun="${r.id}">${r.active ? '<span class="agspin"></span>' : ic('clock')}<b>${esc(r.agent_name)}</b><span>${esc(r.ticket)} · ${esc(r.status)}</span></div>`).join('') : '<div class="small quiet">Kein Agent beschäftigt. Zuweisen geht im Detail jeder Aufgabe.</div>'}</section>`;
   }
   if (F().ideas) h += `<section class="rcard"><h3>Ideen <small>${(state.ideas || []).filter(i => ['neu', 'geparkt'].includes(i.status) && !i.expired).length}/${state.idea_cap || ''} im Pool</small></h3><button data-fidea="1">Idee festhalten <kbd class="small quiet">i</kbd></button></section>`;

@@ -75,7 +75,7 @@ class Client:
         url = self.api + path + (("?" + urllib.parse.urlencode(params)) if params else "")
         t0 = time.time()
         try:
-            r = net.probe(url, headers(self.token), self.ctx, timeout=self.timeout, max_body=max_body)
+            r = net.probe(url, headers(self.token), self.ctx, timeout=self.timeout, max_body=max_body, svc="GitHub")
         except net.NetError as e:
             raise GitHubError("GitHub nicht erreichbar (%s)." % e.detail)
         data = net.parse_json(r)

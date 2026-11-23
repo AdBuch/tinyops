@@ -125,7 +125,7 @@ class Service(unittest.TestCase):
 
     def test_routes_keep_paired_devices_out(self):
         src = (ROOT / "routes.py").read_text(encoding="utf-8")
-        self.assertIn('path in ("/api/update/run", "/api/update/service")', src)
+        self.assertIn('path in ("/api/update/run", "/api/update/service", "/api/test/start")', src)
 
 
 if __name__ == "__main__":

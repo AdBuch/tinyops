@@ -335,6 +335,29 @@ def diff_counts(diff_lines):
     return out
 
 
+SEVERITIES = ("hoch", "mittel", "klein")
+
+
+def parse_findings(text):
+    """0.42: Befunde aus <nr>.findings (eine JSON-Zeile je tinyops-finding). Pfad ohne ../ und ohne führenden Schrägstrich."""
+    out = []
+    for line in (text or "").splitlines()[-100:]:
+        try:
+            d = json.loads(line)
+            n = int(d.get("line") or 0)
+        except (ValueError, TypeError, AttributeError):
+            continue
+        path = str(d.get("path") or "").strip()
+        while path.startswith(("./", "/")):
+            path = path[2:] if path.startswith("./") else path[1:]
+        text_ = " ".join(str(d.get("text") or "").split())[:2000]
+        if not path or not text_ or ".." in path.split("/") or n < 0:
+            continue
+        sev = d.get("severity") if d.get("severity") in SEVERITIES else "mittel"
+        out.append({"path": path[:300], "line": n, "text": text_, "severity": sev})
+    return out
+
+
 def parse_manual(text):
     out = []
     for line in (text or "").splitlines()[-30:]:

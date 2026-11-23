@@ -4,10 +4,10 @@ function renderFx() {
   const e = focusEntries().find(x => x.id === FXID);
   if (!e) { closeFx(); return; }
   const n = e.d.next, url = eUrl(e);
-  const keep = ['fxCkNew', 'fxNote', 'fxEnv'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
+  const keep = ['fxCkNew', 'fxNote', 'fxEnv', 'tcNew', 'tcNote', 'tcBackNote'].filter(id => $(id)).map(id => ({ id, v: $(id).value, f: document.activeElement === $(id) }));
   const head = `<div class="fxtop">${srcTags(e)}<span class="fkey">${esc(eKey(e))}</span>${url ? `<a class="ibtn" href="${esc(url)}" target="_blank" rel="noopener">${ic('ext')} ${e.t === 'review' ? 'MR' : e.t === 'hd' ? 'Helpdesk' : 'Ticket'} öffnen</a>` : ''}<span class="sp"></span><button class="quiet-btn" data-fxclose="1" aria-label="Schliessen" title="Schliessen (Esc)">${ic('x')}</button></div><h2>${esc(eTitle(e))}</h2>`;
   let body = `<div>${trackHtml(e.d, true, e.t === 'card' && !e.c.idea_id)}${e.t === 'card' && e.d.override && !e.c.local ? `<div class="small quiet" style="margin-top:8px">Von Hand gesetzt (aus den Daten: ${esc(state.flow.phases[e.d.data_phase].label)}). <button class="quiet-btn" data-fxauto="1">Automatisch</button></div>` : e.t === 'card' && !e.c.idea_id ? '<div class="small quiet" style="margin-top:8px">Klick auf eine Station setzt sie von Hand. Branch und MR ergeben sich aus GitLab.</div>' : ''}</div>
-    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : e.t === 'hd' ? `<a class="ibtn big" href="${esc(e.h.url)}" target="_blank" rel="noopener">${ic('ext')} Im Helpdesk öffnen</a>` : goBtn(e, 'primary big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
+    <div class="fxnext k-${esc(n.kind)}"><div><b>${esc(n.label)}</b><span>${esc(n.why)}</span></div><div class="hbtns">${n.kind === 'done' ? '' : e.t === 'hd' ? `<a class="ibtn big" href="${esc(e.h.url)}" target="_blank" rel="noopener">${ic('ext')} Im Helpdesk öffnen</a>` : goBtn(e, 'primary big')}${rvBtn(e, 'big')}${testBtns(e, 'big')}${doneBtn(e, true)}</div>
       ${(n.action || {}).accept ? `<div class="fxacc"><input id="fxNote" maxlength="500" placeholder="Was hast du getestet? (optional)" autocomplete="off"><input id="fxEnv" maxlength="120" placeholder="Umgebung (optional)" autocomplete="off"></div>` : ''}</div>
     ${accHtml(e.d.acceptance || [])}`;
   if (e.t === 'hd') {
@@ -24,6 +24,7 @@ function renderFx() {
       <div class="fxfoot"><button class="primary" data-fpin="hd:${esc(h.key)}">${ic('chevron2')} Als Fokus anheften, Zeit starten</button>${FOC() ? `<button data-fsess="hd:${esc(h.key)}">${ic('clock')} Fokus-Sitzung</button>` : ''}<button data-hdreload="${esc(h.key)}">Neu lesen</button></div>`;
   } else if (e.t === 'review') {
     body += `<div><h3>Merge Request</h3><div class="fxitem"><span class="pd ${esc(e.r.pipeline)}" title="${esc(pipelineLabel[e.r.pipeline] || e.r.pipeline)}"></span><div class="nm"><b>!${esc(e.r.iid)} ${esc(e.r.title)}</b><small>${esc(e.r.project)} · von ${esc(e.r.author)} · seit ${e.r.age_days} d</small></div><div class="ibtns"><button class="ibtn" data-topics="${esc(JSON.stringify({ host: e.r.host || 'gitlab', project_id: e.r.project_id, iid: e.r.iid }))}" title="Offene Review-Kommentare ansehen und exportieren">${ic('chat')} Offene Punkte</button><a class="ibtn" href="${esc(e.r.url)}" target="_blank" rel="noopener">${ic('ext')} Öffnen</a></div></div></div>`;
+    if (rvOk(e)) body += rvHtml(e);               // 0.42 (E14): Review mit Agent, Entwürfe in GitLab
   } else {
     const c = e.c;
     if (c.key && !c.local && !c.idea_id) body += `<div><h3>Tickets in diesem Task <small>${1 + (c.companions || []).length}</small></h3><div class="fxitem"><div class="nm"><b>${esc(c.key)} ${typeChip(c.type)}</b><small>${esc(c.status || '')} · Task</small></div></div>
@@ -35,6 +36,7 @@ function renderFx() {
     }
     if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
     else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
+    if (tcShow(e)) body += tcHtml(e);             // 0.42: Testen von Hand
     if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;
     if (c.idea_id) body += ideaHtml(c.idea_id);
     if (!c.idea_id) body += `<div><h3>Verlauf <small>Was du entschieden hast</small></h3><ol class="aud short" id="fxHist">${HIST.id === c.id ? audRows(HIST.rows, true) : '<li class="quiet small" style="display:block">lädt …</li>'}</ol></div>`;
@@ -100,7 +102,7 @@ function fxItem(c, x) {
   if (state.jira && state.jira.ok) b.push(`<button class="ibtn" data-assign="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" data-t="${esc(x.title || c.title)}" data-iid="${x.iid ?? ''}">${ic('link')} ${c.key ? 'Ticket ändern' : 'Zuordnen'}</button>`);
   if (x.iid) b.push(`<button class="ibtn" data-mrtry="${esc(JSON.stringify({ host: x.host || 'gitlab', project_id: x.project_id, iid: x.iid }))}" title="Prompts, git-Befehle und Review-Umgebung">${ic('flask')} Ausprobieren</button>`);
   return `<div class="fxitem">${x.iid ? `<span class="pd ${esc(x.pipeline)}" title="${esc(pipelineLabel[x.pipeline] || x.pipeline)}"></span>` : branchIcon(x.branch, 20)}
-    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code data-copy="${esc(x.branch)}" title="Klick kopiert den Branch">${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft">Draft</span>' : ''}${ms && !(x.draft && x.merge_status === 'draft_status') ? `<span class="chip ${ms[1]}">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
+    <div class="nm"><b title="${esc(x.branch)}">${x.iid ? esc(mrNo(x)) + ' ' : ''}${esc(x.title || x.branch)}</b><small><span class="picn">${branchIcon(x.branch, 15)}<code data-copy="${esc(x.branch)}" title="Klick kopiert den Branch">${esc(short(x.branch, 48))}</code></span><span class="picn">${repoIcon(x.project, 15)}${esc(x.project)}</span>${x.draft ? '<span class="chip draft" title="Entwurf (Draft): in GitLab noch nicht bereit zum Review und zum Merge">Draft</span>' : ''}${ms && !(x.draft && x.merge_status === 'draft_status') ? `<span class="chip ${ms[1]}" title="Mergestatus in GitLab: ${esc(ms[0])} (${esc(x.merge_status)})">${ms[0]}</span>` : ''}${reviewChips(x)}${sq}${x.by_agent ? '<span class="chip agent" title="Branch eines Agenten. «Übernehmen in …» bringt ihn in den Feature-Branch.">Agent</span>' : ''}${x.ide_wt ? `<span class="chip ${x.ide_wt.stale ? 'warn' : 'tk'}" title="${esc(x.ide_wt.path)}">IntelliJ auf ${esc(x.ide_wt.sha.slice(0, 8))}${x.ide_wt.stale ? ' (veraltet)' : ''}<button class="x" data-ideclose="${esc(x.ref || (x.project_id + ':' + x.branch))}" title="Worktree entfernen" aria-label="Worktree entfernen">×</button></span>` : ''}${x.manual ? `<button class="quiet-btn" data-unlink="1" data-p="${x.project_id}" data-b="${esc(x.branch)}" title="Von Hand verknüpft. Verknüpfung lösen">Lösen</button>` : ''}</small></div>
     <div class="ibtns">${b.join('')}</div></div>`;
 }
 function openFx(id) { FXID = id; renderFx(); const p = $('fx'); p.hidden = false; document.body.classList.add('fxopen'); requestAnimationFrame(() => p.classList.add('on')); }
@@ -130,6 +132,9 @@ async function doNext(e, btn) {
     if (a.tiny) { const r = await post('/api/flow/tiny', a.tiny); toast(`${r.key} angelegt (Kategorie ${r.pool}). Der Branch hängt jetzt daran.`); burstAt(btn); closeFx(); await load(); return; }
     if (n.id === 'plan') { setView('board'); return; }
     if (a.check) { await fCheck(a.check, true, btn); return; }
+    if (a.accept && e.t === 'card' && FXID !== e.id && tcShow(e)) {     // 0.42: aus der Liste erst zur Prüfliste, abgenommen wird dort
+      openFx(e.id); setTimeout(() => { const s = document.querySelector('#fx .tcsec'); if (s) s.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 250); return;
+    }
     if (a.accept && e.t === 'card') {
       const note = FXID === e.id && $('fxNote') ? $('fxNote').value : '', envv = FXID === e.id && $('fxEnv') ? $('fxEnv').value : '';
       const r = await post('/api/flow/accept', { id: e.c.id, note, env: envv });

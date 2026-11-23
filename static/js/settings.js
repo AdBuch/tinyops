@@ -23,7 +23,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="update">Update und Dienst</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="update">Update und Dienst</button><button data-goto="calls">Aufrufe nach aussen</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -33,9 +33,11 @@ async function loadSettings() {
     </div>
     ${field('gl-token', 'Zugriffstoken', '', { type: 'password', ph: S.secrets.gitlab_token.set ? '•••••••• gespeichert' : 'glpat-…', err: 'gitlab_token',
       help: secretHelp('gitlab_token', 'Token') + (glTokenUrl ? ` Neu anlegen: <a href="${glTokenUrl}" target="_blank" rel="noopener">Persönliche Zugriffstoken</a>, Scope nur <code>read_api</code>, Ablaufdatum setzen.` : '') })}
+    ${field('gl-rtoken', 'Token für Review-Entwürfe (optional)', '', { type: 'password', ph: S.secrets.gitlab_review_token.set ? '•••••••• gespeichert' : 'glpat-…', err: 'gitlab_review_token',
+      help: secretHelp('gitlab_review_token', 'Token') + ' Nur für «Entwürfe in GitLab anlegen» beim Review: Scope <code>api</code>. tinyops benutzt es ausschliesslich für deine Entwurfs-Kommentare (anlegen, eigene ersetzen) und schickt nie ab; welche Aufrufe das sind, steht unten unter «Aufrufe nach aussen». Agenten sehen es nie. Ohne dieses Token gibt es die Befunde zum Kopieren.' })}
     <div class="row">
       <button class="primary" id="gl-test">Verbindung testen</button>
-      ${S.secrets.gitlab_token.set ? '<button id="gl-del">Gespeicherten Token löschen</button>' : ''}
+      ${S.secrets.gitlab_token.set ? '<button id="gl-del">Gespeicherten Token löschen</button>' : ''}${S.secrets.gitlab_review_token.set ? '<button id="gl-rdel">Review-Token löschen</button>' : ''}
       <span class="quiet small">Testet mit den Werten in den Feldern, auch ungespeicherten.</span>
     </div>
     <div id="gl-result"></div>
@@ -276,6 +278,10 @@ async function loadSettings() {
   ${sect('update', 'Update und Dienst', 'Neue Versionen erkennt tinyops selbst und holt sie auf deinen Klick. Unter Linux läuft es auf Wunsch als Dienst.', `
     <div id="upd-box"><div class="small quiet">Sehe nach …</div></div>`)}
 
+  ${sect('calls', 'Aufrufe nach aussen', 'Alles, was tinyops bei GitLab, Jira, Sonar und den anderen Diensten aufruft: Methode, Pfad, wozu, wann und mit welchem Zugang. Schreibende Aufrufe sind markiert. Die Zahlen gelten seit dem letzten Start und zählen nur, nie Inhalte. Ein Aufruf, der nicht in dieser Liste steht, erscheint rot.', `
+    <div class="row"><button id="calls-load">Zähler auffrischen</button><label class="check"><input type="checkbox" id="calls-used"><span>nur benutzte</span></label></div>
+    <div id="calls-box"><div class="small quiet">lädt …</div></div>`)}
+
   ${sect('more', 'Weiteres', 'Vorerst ausgeblendet, damit die Oberfläche beim Wesentlichen bleibt.', `
     <label class="check"><input type="checkbox" id="ft-ideas" ${S.features.ideas ? 'checked' : ''}><span>Ideenbox</span></label>
     <label class="check"><input type="checkbox" id="ft-ai" ${S.features.ai ? 'checked' : ''}><span>KI-Konten <span class="quiet small">(nur von Hand gepflegt, da die Anbieter keine Abfrage bieten; vorerst aus)</span></span></label>
@@ -297,6 +303,7 @@ async function loadSettings() {
   if ($('gh-del')) $('gh-del').onclick = () => delSecrets(['github_token'], 'GitHub-Token');
   renderJiraSecret(); renderProjects(); renderBookmarklet(); renderUsageBox(); loadUsage(false); renderM3Status();
   renderLlmKey(); wireApp(); if (UPD) renderUpdBox(); else checkUpdate(false);
+  loadCalls(); $('calls-load').onclick = loadCalls; $('calls-used').onchange = () => drawCalls();
   FA = S.focus.areas.map(a => ({ ...a, pools: (a.pools || []).join(', '), activities: (a.activities || []).join(', ') })); renderFocusAreas();
   $('fa-add').onclick = () => { FA.push({ id: '', name: '', target_pct: 0, ticket: '', pools: '', activities: '', blocks_text: '' }); renderFocusAreas(); };
   renderHdSecret(); $('hd-auth').onchange = renderHdSecret;
@@ -316,6 +323,7 @@ async function loadSettings() {
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
   $('id-suggest').onclick = suggestIdentity; $('ji-auth').onchange = renderJiraSecret;
   if ($('gl-del')) $('gl-del').onclick = () => delSecrets(['gitlab_token'], 'GitLab-Token');
+  if ($('gl-rdel')) $('gl-rdel').onclick = () => delSecrets(['gitlab_review_token'], 'Review-Token');
   if ($('ji-del')) $('ji-del').onclick = () => delSecrets(['jira_token', 'jira_password'], 'Jira-Zugangsdaten');
   if (window.IntersectionObserver) {   // Navigation zeigt beim Scrollen, wo man ist
     const spy = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) box.querySelectorAll('[data-goto]').forEach(x => x.classList.toggle('on', 's-' + x.dataset.goto === en.target.id)); }),
@@ -753,6 +761,7 @@ $('viewSettings').addEventListener('click', async ev => {
 function collect() {
   const secrets = {};
   if ($('gl-token').value.trim()) secrets.gitlab_token = $('gl-token').value;
+  if ($('gl-rtoken').value.trim()) secrets.gitlab_review_token = $('gl-rtoken').value;
   if ($('ji-secret').value.trim()) secrets[val('ji-auth') === 'basic' ? 'jira_password' : 'jira_token'] = $('ji-secret').value;
   if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
@@ -810,4 +819,23 @@ async function delSecrets(names, label) {
   if (!confirm(label + ' wirklich aus dem Speicher löschen?')) return;
   try { await api('POST', '/api/settings/save', { ...collect(), secrets: {}, delete_secrets: names }); toast('Gelöscht'); await loadSettings(); await load(); }
   catch (e) { showErrors(e.data && e.data.errors); toast(e.message); }
+}
+// 0.42: Aufrufe nach aussen (Entscheid vom 20.11.): Liste aus apicalls.CALLS mit Zählern seit dem Start
+let CALLS = null;
+async function loadCalls() {
+  try { CALLS = await api('GET', '/api/apicalls'); } catch (e) { CALLS = { error: e.message }; }
+  drawCalls();
+}
+function drawCalls() {
+  const box = $('calls-box'); if (!box || !CALLS) return;
+  if (CALLS.error) { box.innerHTML = `<div class="banner bad">${esc(CALLS.error)}</div>`; return; }
+  const only = $('calls-used') && $('calls-used').checked;
+  const when = ts => ts ? new Date(ts * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '';
+  const rows = CALLS.rows.filter(r => !only || r.count || r.unknown);
+  const by = {};
+  rows.forEach(r => (by[r.svc] = by[r.svc] || []).push(r));
+  box.innerHTML = Object.keys(by).map(svc => `<details class="calls" ${by[svc].some(r => r.unknown || r.write) ? 'open' : ''}><summary><b>${esc(svc)}</b> <span class="small quiet">${by[svc].length} Aufruf${by[svc].length === 1 ? '' : 'e'}, ${by[svc].reduce((n, r) => n + r.count, 0)}× seit dem Start${by[svc].some(r => r.write) ? ', schreibt auch' : ', nur lesend'}</span></summary>
+    <table class="calls"><thead><tr><th>Methode und Pfad</th><th>Wozu</th><th>Wann</th><th>Zugang</th><th class="n">Anzahl</th></tr></thead><tbody>${by[svc].map(r => `<tr class="${r.unknown ? 'unk' : r.write ? 'wr' : ''}">
+      <td><code>${esc(r.method)} ${esc(r.path)}</code>${r.write ? ' <span class="chip warn" title="ändert etwas beim Dienst">schreibt</span>' : ''}</td><td>${esc(r.what)}</td><td class="small">${esc(r.when)}</td><td class="small"><code>${esc(r.token)}</code></td>
+      <td class="n">${r.count}×${r.last ? `<span class="small quiet"> · ${esc(when(r.last))}</span>` : ''}</td></tr>`).join('')}</tbody></table></details>`).join('') || '<div class="small quiet">Seit dem Start noch keine Aufrufe.</div>';
 }

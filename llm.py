@@ -19,6 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import apicalls
 import tlog
 from net import NoRedirect, classify
 
@@ -66,6 +67,7 @@ def _chat_stream(url, body, key, idle, deadline, ctx=None):
     if key:
         headers["Authorization"] = "Bearer " + key
     req = urllib.request.Request(url, data=json.dumps(dict(body, stream=True)).encode("utf-8"), headers=headers)
+    apicalls.record("LLM", "POST", url)
     opener = urllib.request.build_opener(NoRedirect, *([urllib.request.HTTPSHandler(context=ctx)] if ctx else []))
     t0 = time.time()
     first, parts = None, []
@@ -122,6 +124,7 @@ def _request(url, body=None, key="", timeout=120, ctx=None):
     if key:
         headers["Authorization"] = "Bearer " + key
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8") if body is not None else None, headers=headers)
+    apicalls.record("LLM", "POST" if body is not None else "GET", url)
     opener = urllib.request.build_opener(NoRedirect, *([urllib.request.HTTPSHandler(context=ctx)] if ctx else []))
     try:
         with opener.open(req, timeout=timeout) as r:

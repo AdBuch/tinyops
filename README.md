@@ -449,6 +449,14 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5i. Testen von Hand, Review in GitLab, Aufrufe nach aussen (neu in 0.42.0)
+
+**Testen:** Ab der Station «Prüfen» steht im Detail-Panel «Testen von Hand» mit einer Prüfliste: die Akzeptanzkriterien (ohne Agent aus dem Jira-Ticket), die Testschritte von Entwickler und Test-Agent und eigene Punkte. «Jetzt testen» legt einen Worktree auf genau dem Commit des MR (oder dem Branch des Agenten) an, öffnet IntelliJ und startet die Review-Umgebung, wenn eine eingetragen ist. Je Punkt ✓ oder ✗ mit einem Satz. «↺ Fehler zurück an …» schickt die ✗ in die Sitzung des Entwicklers; «Alles ok: Getestet» nimmt am Commit ab. Im Fokus stehen solche Aufgaben unter «Wartet auf deinen Test».
+
+**Review in GitLab:** «▶ Review mit Agent» an einem MR eines Kollegen startet den Reviewer-Agenten (eigener Worktree) auf dem Commit des MR. Er hält Befunde mit Datei und Zeile fest (`tinyops-finding`). Mit dem **Token für Review-Entwürfe** (Einstellungen → GitLab, Scope `api`) legt «als Entwürfe in GitLab» daraus deine Entwürfe am MR an; abschicken machst du in GitLab. tinyops benutzt dieses Token nur für die Pfade in `gitlab_review.ALLOWED` (Entwürfe lesen, anlegen, eigene löschen), schickt nie ab und ersetzt nur Entwürfe, die es selbst angelegt hat. Agenten sehen kein Token. Ohne Token: «Kopieren».
+
+**Aufrufe nach aussen:** Einstellungen → «Aufrufe nach aussen» listet jeden Aufruf je Dienst mit Methode, Pfad, Zweck, Zeitpunkt, Zugang und Zähler seit dem Start. Die Liste steht in `apicalls.py`; ein Test lässt ein Release scheitern, wenn ein Aufruf daran vorbeigeht.
+
 ## 5h. Agent-Branch übernehmen (neu in 0.41.0)
 
 Im Detail-Panel steht am Branch eines Agenten «Übernehmen in …». Ziel ist der Feature-Branch des Tickets (der Branch des MR). Die Vorschau zeigt die Commits, den Umfang und ob Konflikte zu erwarten sind. Dann einen Weg wählen:
@@ -818,6 +826,10 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     area_workspaces.py   Bereich Workspaces
     area_m365.py         Bereich Microsoft 365
     area_ide.py          Bereich IntelliJ und Review-Umgebung
+    area_test.py         Bereich Testen von Hand: Prüfliste je Ticket, Jetzt testen, Fehler zurück, Abnahme
+    area_review.py       Bereich Review mit Agent: Review starten, Befunde, Entwürfe in GitLab
+    gitlab_review.py     Review-Entwürfe in GitLab: feste Liste erlaubter Pfade, Diff-Positionen, nie abschicken
+    apicalls.py          jeder Aufruf nach aussen: Liste mit Zweck und Zugang, Zähler für die Einstellungen
     routes.py            HTTP: Zugang (Host, Token, Geräte), Routentabelle, Antworten
     common.py            gemeinsame Bausteine: Fehlerarten, Zeit, Jira-Keys, Secrets auflösen
     httpclient.py        HTTP-Client für GitLab, Jira und Co. (ohne Weiterleitungen)

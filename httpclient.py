@@ -6,6 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import apicalls
 import tlog
 from common import HttpStatus, UserError
 from net import NoRedirect
@@ -23,6 +24,7 @@ class Http:
     def post_json(self, path, body):
         """Schreibender Aufruf. Wird nur für ausdrücklich ausgelöste Aktionen benutzt (Ticket anlegen)."""
         lg = glog if self.label == "GitLab" else jlog
+        apicalls.record(self.label, "POST", path)
         req = urllib.request.Request(self.base + path, data=json.dumps(body).encode("utf-8"), method="POST",
                                      headers=dict(self.headers, **{"Content-Type": "application/json"}))
         t0 = time.time()
@@ -52,6 +54,7 @@ class Http:
         if params:
             url += "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=self.headers)
+        apicalls.record(self.label, "GET", path)
         lg = glog if self.label == "GitLab" else jlog
         t0 = time.time()
         shown = path + (("?" + urllib.parse.urlencode(params)) if params else "")

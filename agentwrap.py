@@ -31,8 +31,8 @@ def main():
     rc = 127
     try:
         kw = {"cwd": spec.get("cwd") or None, "stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL}
-        if spec.get("env"):
-            kw["env"] = dict(os.environ, **{str(k): str(v) for k, v in spec["env"].items()})
+        env = {k: v for k, v in os.environ.items() if k not in set(spec.get("unset") or ())}     # 0.42: Secrets von tinyops erbt der Agent nie
+        kw["env"] = dict(env, **{str(k): str(v) for k, v in (spec.get("env") or {}).items()})
         if os.name == "nt":
             kw["creationflags"] = 0x00000200   # CREATE_NEW_PROCESS_GROUP
         else:

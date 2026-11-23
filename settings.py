@@ -36,7 +36,7 @@ log = tlog.get("settings")
 _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Fehlversuch nicht erneut getestet wird
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
-SECRET_FIELDS = ("gitlab_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token",
+SECRET_FIELDS = ("gitlab_token", "gitlab_review_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token",
                  "helpdesk_token", "helpdesk_password", "bcs_token")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "ai", "score")      # 0.34: «testenv» entfällt (E2); 0.35: «score» (E3)
@@ -181,9 +181,13 @@ def _redirect_hint(resp, base):
             "häufig ist es http→https oder ein anderer Hostname." % loc)
 
 
-def _get(base, path, headers, ctx, params=None, timeout=10):
+def _svc(path):
+    return "GitLab" if path.startswith("/api/v4") else "Jira" if path.startswith("/rest/api/2") else "Sonar" if path.startswith("/api/") else "GitHub"
+
+
+def _get(base, path, headers, ctx, params=None, timeout=10, svc=None):
     url = base + path + (("?" + urllib.parse.urlencode(params)) if params else "")
-    return net.probe(url, headers, ctx, timeout=timeout)
+    return net.probe(url, headers, ctx, timeout=timeout, svc=svc or _svc(path))
 
 
 def _token(form, stored, name):
@@ -497,7 +501,7 @@ def test_sonar(form, stored):
         return r.result()
     hdr = sonar.headers(tok)
     try:
-        resp = net.probe(base + "/api/authentication/validate", hdr, ctx, timeout=10)
+        resp = net.probe(base + "/api/authentication/validate", hdr, ctx, timeout=10, svc="Sonar")
         data = net.parse_json(resp)
         if resp["status"] == 200 and isinstance(data, dict) and data.get("valid"):
             r.add("auth", "Anmeldung", "ok", "Token gilt (%s)" % src)
@@ -517,7 +521,7 @@ def test_sonar(form, stored):
     bad, good = [], []
     for name, key in mapped:
         try:
-            resp = net.probe(base + "/api/components/show?" + urllib.parse.urlencode({"component": key}), hdr, ctx, timeout=10)
+            resp = net.probe(base + "/api/components/show?" + urllib.parse.urlencode({"component": key}), hdr, ctx, timeout=10, svc="Sonar")
         except net.NetError as e:
             r.add("keys", "Projektschlüssel", "fail", e.detail, net_hint(e.kind))
             return r.result()
@@ -939,7 +943,7 @@ def test_helpdesk(form, stored):
             r.skip(sid, t)
         return r.result()
     try:
-        resp = _get(base, "/rest/api/2/serverInfo", {"Accept": "application/json"}, ctx)
+        resp = _get(base, "/rest/api/2/serverInfo", {"Accept": "application/json"}, ctx, svc="Helpdesk")
         d, st = net.parse_json(resp), resp["status"]
         if st == 200 and isinstance(d, dict) and d.get("version"):
             old = d["version"].split(".")[:2]
@@ -976,7 +980,7 @@ def test_helpdesk(form, stored):
         return r.result()
     user = None
     try:
-        resp = _get(base, "/rest/api/2/myself", hdr, ctx)
+        resp = _get(base, "/rest/api/2/myself", hdr, ctx, svc="Helpdesk")
         st, d = resp["status"], net.parse_json(resp)
         denied = resp["headers"].get("x-authentication-denied-reason", "") + resp["headers"].get("x-seraph-loginreason", "")
         if st == 200 and isinstance(d, dict) and d.get("name"):
@@ -1005,7 +1009,7 @@ def test_helpdesk(form, stored):
             r.skip(sid, title, "keine JQL eingetragen")
             continue
         try:
-            resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": "summary,status,priority", "maxResults": 5})
+            resp = _get(base, "/rest/api/2/search", hdr, ctx, {"jql": jql, "fields": "summary,status,priority", "maxResults": 5}, svc="Helpdesk")
             st, d = resp["status"], net.parse_json(resp)
             if st == 200 and isinstance(d, dict):
                 lines = ["%s · %s · %s" % (i["key"], ((i.get("fields") or {}).get("status") or {}).get("name", ""),

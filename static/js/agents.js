@@ -50,6 +50,16 @@ function agShow() {
   }
   d.scrollTop = 0;
 }
+// 0.42: Klick auf leeren Hintergrund schliesst das Seitenpanel (Bericht: 40 Klicks ins Leere, 27 Wutklicks am Panel).
+// Klicks auf Einträge, Knöpfe und Felder lassen es offen; mit Eingetipptem bleibt es auch offen.
+document.addEventListener('click', ev => {
+  const d = $('agDlg'), t = ev.target;
+  if (!d.open || d.matches(':modal') || d.contains(t) || document.querySelector('dialog:modal')) return;
+  const empty = t === document.body || t === document.documentElement || ['viewFocus', 'fMain', 'main', 'viewBoard', 'viewOverview'].includes(t.id) || (t.classList && t.classList.contains('view'));
+  if (!empty) return;
+  if (typeof dlgDirty === 'function' && dlgDirty(d)) { toast('Im Agentenfenster steht noch Eingetipptes. Schliessen mit ×.'); return; }
+  agClose();
+});
 document.addEventListener('keydown', ev => {   // Esc schliesst das Seitenpanel, solange kein Dialog darüber liegt
   const d = $('agDlg');
   if (ev.key !== 'Escape' || !d.open || d.matches(':modal') || document.querySelector('dialog:modal')) return;
@@ -532,6 +542,14 @@ document.addEventListener('change', ev => {
   if (s && s.value) { const v = s.value; s.value = ''; openAgentDlg({ ticket: s.dataset.ticket, agent: v }); }
 });
 document.addEventListener('click', ev => { const b = ev.target.closest && ev.target.closest('[data-arun]'); if (b) { ev.preventDefault(); openRunDlg(+b.dataset.arun); } });
+// 0.42: Klick auf einen Agenten in der Seitenleiste weist ihn der Aufgabe oben im Fokus zu (wie Ziehen; Bericht: 7 tote Klicks)
+document.addEventListener('click', ev => {
+  const a = ev.target.closest && ev.target.closest('[data-agdrag]');
+  if (!a) return;
+  const h = (FXID && fEntry(FXID)) || focusGroups().hero;
+  if (!h || h.t !== 'card') { toast('Zieh den Agenten auf eine Aufgabe, oder öffne zuerst eine.'); return; }
+  openAgentDlg({ ticket: h.c.key || h.c.id, agent: a.dataset.agdrag, pid: (h.c.items || [])[0] && h.c.items[0].project_id });
+});
 // Ziehen
 document.addEventListener('dragstart', ev => {
   const ad = ev.target.closest && ev.target.closest('[data-agdrag]');
