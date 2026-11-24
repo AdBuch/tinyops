@@ -169,6 +169,7 @@ EXACT = {
     ("POST", "/api/mr/env"): lambda app, cfg, r: app.mr_env(r.body()),          # 0.34: Review-Umgebung für einen MR
     ("POST", "/api/review/start"): lambda app, cfg, r: app.review_start(r.body()),          # 0.42: ▶ Review starten (Agent auf dem MR)
     ("POST", "/api/review/state"): lambda app, cfg, r: app.review_state(r.body()),
+    ("POST", "/api/review/options"): lambda app, cfg, r: app.review_options(r.body()),       # 0.42.1: Agent wählen, Ticket und Ziel
     ("POST", "/api/review/copy"): lambda app, cfg, r: app.review_copy(r.body()),
     ("POST", "/api/review/drafts"): lambda app, cfg, r: app.review_drafts(r.body()),        # E14: nur Entwürfe, nie abschicken
     ("GET", "/api/apicalls"): lambda app, cfg, r: apicalls.view(),                           # 0.42: was tinyops nach aussen aufruft

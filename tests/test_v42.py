@@ -319,6 +319,71 @@ class Drafts(unittest.TestCase):
         self.assertEqual(got[0]["text"], 'sagt "nichts"')
 
 
+class ReviewStart(unittest.TestCase):
+    """0.42.1: Agent wählen, Ticket und Ziel gehen mit an den Reviewer (Rückmeldung vom 24.11.)."""
+    def setUp(self):
+        import briefing
+        d = Path(tempfile.mkdtemp())
+        c = server.load_config(None)
+        c.update(data_dir=str(d / "data"), projects=[{"id": 1, "name": "dlp-core", "data_class": "restricted"}], connections=[],
+                 agents=[{"id": "cloud", "name": "Claude", "kind": "claude", "connection": "local", "workspace_root": str(d / "ws"), "roles": {"review": "/reviewer"}},
+                         {"id": "lokal", "name": "Qwen", "kind": "goose", "model": "qwen3", "cloud": False, "connection": "local", "workspace_root": str(d / "ws")},
+                         {"id": "shared", "name": "Alt", "kind": "goose", "model": "qwen3", "cloud": False, "connection": "local", "workspace_root": str(d / "ws"),
+                          "isolation": "shared"}])
+        self.app = app = server.App(c, False, {}, d / "config.json", watchdog=False)
+        mr = {"host": "gitlab", "project_id": 1, "iid": 9, "branch": "feature/DLP-7-export", "title": "Export als CSV", "sha": "c0ffee1234567890",
+              "keys": ["DLP-7"], "url": "https://gitlab.example/mr/9"}
+        app._find_mr = lambda host, pid, iid: mr if (pid, iid) == (1, 9) else None
+        app.client = type("C", (), {"mr_detail": lambda self, pid, iid: {"description": "Siehe auch DLP-8. Token: glpat-abcdefghijklmnopqrstu", "target_branch": "develop"}})()
+        self.briefs = {"DLP-7": briefing.make("jira", "DLP-7", "CSV-Export", "Story", "In Arbeit", "Nutzer exportieren Listen.\n\nh3. Akzeptanzkriterien\n* Umlaute stimmen\n* Leere Liste zeigt Hinweis", [])}
+        app.ticket_brief = lambda key, title="": self.briefs.get(key) or briefing.empty("jira", key, "Ticket nicht lesbar: 404")
+        self.started = []
+        app.agents.start = lambda rid, prompt, pid=None, branch=None, phase="develop", **k: self.started.append((rid, prompt, phase))
+        self.ref = {"host": "gitlab", "project_id": 1, "iid": 9}
+
+    def test_options_list_agents_with_reason_and_ticket(self):
+        o = self.app.review_options(self.ref)
+        self.assertEqual([(a["id"], a["ok"]) for a in o["agents"]], [("lokal", True), ("cloud", False), ("shared", False)])
+        self.assertIn("restricted", o["agents"][1]["why"])
+        self.assertIn("Worktree", o["agents"][2]["why"])
+        self.assertEqual(o["keys"], ["DLP-7", "DLP-8"])
+        self.assertEqual((o["ticket"]["key"], o["ticket"]["criteria"], o["target"]), ("DLP-7", 2, "develop"))
+        self.assertEqual(self.app.review_options(dict(self.ref, ticket=""))["ticket"], None)
+        self.assertTrue(self.app.review_options(dict(self.ref, ticket="DLP-99"))["ticket"]["error"])
+        with self.assertRaises(server.UserError):
+            self.app.review_options(dict(self.ref, ticket="kein key"))
+
+    def test_start_with_chosen_agent_ticket_and_goal(self):
+        with self.assertRaises(server.UserError) as e:
+            self.app.review_start(dict(self.ref, agent="cloud"))
+        self.assertIn("restricted", str(e.exception))
+        out = self.app.review_start(dict(self.ref, agent="lokal", ticket="dlp-7", goal="Nur der Export, die Liste selbst ist schon reviewt."))
+        rid, prompt, phase = self.started[0]
+        self.assertEqual((out["agent"], phase, rid), ("Qwen", "review", out["id"]))
+        self.assertIn("Nur der Export, die Liste selbst ist schon reviewt.", prompt)
+        self.assertIn("## Ticket DLP-7: CSV-Export", prompt)
+        self.assertIn("AK2: Leere Liste zeigt Hinweis", prompt)
+        self.assertIn("Prüf je Kriterium", prompt)
+        self.assertIn("## Beschreibung des MR", prompt)
+        self.assertNotIn("glpat-abcdefghijklmnopqrstu", prompt, "Geheimnisse in der MR-Beschreibung werden geschwärzt")
+        self.assertIn("git diff --stat origin/develop...HEAD", prompt)
+        mr = json.loads(self.app.store.agent_run(rid)["mr"])
+        self.assertEqual((mr["ticket"], mr["goal"][:8]), ("DLP-7", "Nur der "))
+        self.assertTrue(any(r["action"] == "review.start" for r in self.app.audit_log.export()))
+
+    def test_start_without_ticket_says_so(self):
+        self.app.client = type("C", (), {"mr_detail": lambda self, pid, iid: {}})()
+        self.app.review_start(self.ref)                    # ohne Wahl: der erste, der darf
+        prompt = self.started[0][1]
+        self.assertIn("weder Beschreibung noch Ticket", prompt)
+        self.assertNotIn("## Ticket", prompt)
+
+    def test_ui(self):
+        js = ui.source(ROOT)
+        for s in ("/api/review/options", "id=\"rvAgent\"", "id=\"rvTicket\"", "id=\"rvGoal\"", "data-rvrun"):
+            self.assertIn(s, js)
+
+
 class ApiCalls(unittest.TestCase):
     """Entscheid vom 20.11.: jeder Aufruf nach aussen steht in apicalls.CALLS; keine Verbindung daran vorbei."""
     OPEN = ("urlopen(", "opener.open(", "self._open(req")

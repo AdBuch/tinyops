@@ -18,6 +18,8 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 
 **23.11., später:** Testen von Hand und Reviews in GitLab kamen zusammen in 0.42.0 (dein Wunsch: «implementier 42 mit den agent-reviews, und testing enhancements»). Alles ab «Einstellungen und Datenbank» rückt eine Version nach vorne; der Plan endet mit 0.48.
 
+**24.11.:** Deine Rückmeldung: «es ist momentan ein bisschen viel». Offen sind Outlook und Teams mit echten Konten zu testen, das Härten der Anbindungen (0.45) und ein **Redesign der Oberfläche** (neu, noch ohne Termin). Bis du die Prüfliste 0.40 bis 0.42 durch hast, kommen nur Korrekturen aus deinen Rückmeldungen (wie 0.42.1), keine neuen Themen. Wo das Redesign hingehört, entscheiden wir danach; ein Kandidat ist der Platz von «Tests und Doku» (0.44), weil Tests und Doku ohnehin dem neuen Aussehen folgen müssten.
+
 **Warum:** Der Plan 0.15–0.20 ist geliefert. Danach kamen 12 Releases in 9 Tagen. Das Testen kam nicht mit, es gibt Doppelungen, und die Kerndateien sind gross: `server.py` hat 5'250 Zeilen, `static/index.html` 4'800, `agents.py` 1'730, `settings.py` 1'630. Das widerspricht dem Ziel «einfach reviewen».
 
 **Regeln für diese Releases**
@@ -40,7 +42,7 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 | **0.39.0** ✓ | Oberfläche zerlegen: `index.html` 5'155 Zeilen → HTML, `app.css` und 16 Skriptteile (grösster 808 Zeilen), zusammengesetzt von `ui.py` ohne Build; dazu QR-Code beim Koppeln, Klickbares im Detail-Panel, Agentenfenster als Seitenpanel (geliefert 2026-11-22) | Refactoring + Korrekturen | E6 ✓ |
 | **0.40.0** ✓ | Agenten: Gespräch in derselben Sitzung (Claude Code, Codex, Vibe, Goose, opencode), vier Rollen mit «Zurück ans Entwickeln» und «Erneut prüfen», Git-User je Agent, `agents.py` 1'787 → 925 Zeilen in sechs Module; dazu Update aus dem Panel und Dienst unter Linux (geliefert 2026-11-23) | Refactoring + Wünsche | E5 ✓ |
 | **0.41.0/0.41.1** ✓ | Agent-Branch übernehmen: im Detail-Panel «Übernehmen in …» mit Fast-Forward, Rebase, Merge oder Cherry-Pick in den Feature-Branch, lokal im eigenen Worktree, Konflikte in IntelliJ lösen; dazu die Korrektur der Handy-Breite in den Einstellungen (geliefert 2026-11-23) | Wunsch | – |
-| **0.42.0** ✓ | Testen von Hand und Reviews in GitLab: Prüfliste je Ticket mit «Jetzt testen», Fehler zurück ans Entwickeln; «▶ Review mit Agent» mit Befunden als deine Entwürfe in GitLab (E14); jeder Aufruf nach aussen in den Einstellungen; dazu Korrekturen aus dem Bericht vom 23.11. (geliefert 2026-11-23) | Neu + Korrekturen | E14 ✓ |
+| **0.42.0/0.42.1** ✓ | Testen von Hand und Reviews in GitLab: Prüfliste je Ticket mit «Jetzt testen», Fehler zurück ans Entwickeln; «▶ Review mit Agent» mit Befunden als deine Entwürfe in GitLab (E14); jeder Aufruf nach aussen in den Einstellungen; dazu Korrekturen aus dem Bericht vom 23.11. (geliefert 2026-11-23). 0.42.1: beim Review den Agenten wählen und Ticket und Ziel des MR mitgeben (Rückmeldung vom 24.11.) | Neu + Korrekturen | E14 ✓ |
 | 0.43.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
 | 0.44.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
 | 0.45.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |

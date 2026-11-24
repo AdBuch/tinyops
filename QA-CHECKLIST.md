@@ -109,8 +109,9 @@ Seit 0.42 prüft ein Test `b-13`, `b-14` und `b-15` (Schritt ohne Ticket, tiny-T
 
 - [ ] `r42-01` Aufgabe in «Testen» mit MR (oder fertigem Agenten-Lauf): Fokus zeigt sie unter «Wartet auf deinen Test»; Details → «Jetzt testen» → IntelliJ geht auf dem Commit des MR auf, die Review-Umgebung startet (wenn eingetragen); die Prüfliste zeigt die Akzeptanzkriterien und die Testschritte
 - [ ] `r42-02` Einen Punkt ✗ mit einem Satz, «↺ Fehler zurück an …» → der Entwickler bessert in seiner Sitzung nach, der Punkt ist wieder offen; nach dem Nachtesten alles ✓ → «Alles ok: Getestet» → Abnahme am Commit
-- [ ] `r42-03` MR eines Kollegen → «▶ Review mit Agent» → nach dem Lauf Befunde mit Datei:Zeile im Detail-Panel; mit Review-Token «als Entwürfe in GitLab» → im MR stehen sie als ausstehendes Review an den richtigen Zeilen, nichts ist abgeschickt; noch einmal → nur die von tinyops werden ersetzt
+- [ ] `r42-03` MR eines Kollegen → «▶ Review mit Agent» → Agent wählen (ein nicht erlaubter ist ausgegraut mit Grund), Ticket ist erkannt, ein Satz als Ziel → «Review starten» → nach dem Lauf sagt der Bericht, ob das Ziel erreicht ist; Befunde Befunde mit Datei:Zeile im Detail-Panel; mit Review-Token «als Entwürfe in GitLab» → im MR stehen sie als ausstehendes Review an den richtigen Zeilen, nichts ist abgeschickt; noch einmal → nur die von tinyops werden ersetzt
 - [ ] `r42-04` Prüfliste: Quellen, Fehler nur mit Satz, eigene Punkte, Fehler zurück, Abnahme nur ohne Fehler [auto: test_v42.Checklist]
+- [ ] `r42-07` Review-Start: Agenten mit Grund, Ticket aus dem MR, Ziel, Kriterien und geschwärzte MR-Beschreibung im Auftrag [auto: test_v42.ReviewStart]
 - [ ] `r42-05` Entwürfe: nur erlaubte Pfade, Position im Diff, nur eigene ersetzt, nie abschicken, ohne Token Kopieren, Agent ohne Token [auto: test_v42.Drafts]
 - [ ] `r42-06` Einstellungen → «Aufrufe nach aussen»: jeder Aufruf steht in der Liste, keine Verbindung daran vorbei; BCS-Pause wächst bis 10 min [auto: test_v42.ApiCalls]
 

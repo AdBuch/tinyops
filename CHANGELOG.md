@@ -5,6 +5,18 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.42.1]
+
+Deine Rückmeldung vom 24.11. zu den Reviews: Der Agent liess sich nicht wählen, und ihm fehlte, worum es im MR geht.
+
+### Geändert
+- **«▶ Review mit Agent» öffnet zuerst einen kurzen Start** im Detail-Panel, unter «Review mit Agent»:
+  - **Agent:** alle Agenten mit Rolle und Kontingent. Wer nicht darf, steht ausgegraut mit Grund da, zum Beispiel «restricted: nur Agenten ohne Cloud» oder «kein eigener Worktree». Vorgewählt ist der zuletzt gewählte.
+  - **Ticket:** erkannt aus Branch, Titel und Beschreibung des MR, änderbar. Darunter Titel, Status und wie viele Akzeptanzkriterien es hat. Der Reviewer bekommt Beschreibung und Kriterien und prüft je Kriterium, ob der MR es erfüllt.
+  - **Ziel:** ein Satz von dir, worum es geht oder worauf er achten soll. Er geht wörtlich an den Reviewer.
+  - Die Beschreibung des MR geht wie bisher mit, jetzt als Daten markiert und mit geschwärzten Geheimnissen. Hat der MR weder Beschreibung noch Ticket, soll der Agent sagen, was er angenommen hat.
+- Der Bericht des Reviewers sagt jetzt auch, ob der MR sein Ziel erreicht und welches Kriterium offen ist.
+
 ## [0.42.0]
 
 Deine Schwerpunkte vom 20.11.: schneller zum Testen von Hand und Reviews in GitLab, dazu jeder Aufruf nach aussen sichtbar. Und deine Rückmeldung vom 23.11. (Prüfbericht 0.40 ohne Fehler, Nutzungsbericht). Der Plan hatte das auf 0.42 und 0.43 verteilt; es kommt zusammen.

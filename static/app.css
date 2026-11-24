@@ -997,3 +997,11 @@
   ul.rvf .rvh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } ul.rvf label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
   ul.rvf code { overflow-wrap: anywhere; } ul.rvf p { margin: 4px 0 0; }
   table.calls td:nth-child(4) code { white-space: nowrap; }
+  /* 0.42.1: Start eines Reviews */
+  .rvform { display: grid; gap: 8px; padding: 12px; border-radius: 10px; background: var(--raised); }
+  .rvrow { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; } .rvrow.top { align-items: start; } .rvrow.top > span { padding-top: 7px; }
+  .rvrow > span { color: var(--quiet); font-size: 13px; }
+  .rvrow select, .rvrow input, .rvrow textarea { width: 100%; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+  .rvrow textarea { resize: vertical; }
+  .rvinfo { margin-left: 74px; } .rvinfo .bad { color: var(--bad); }
+  @media (max-width: 600px) { .rvrow { grid-template-columns: 1fr; gap: 4px; } .rvinfo { margin-left: 0; } }

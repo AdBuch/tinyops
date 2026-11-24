@@ -109,6 +109,10 @@ class DemoClient:
         ]
         return {"target_branch": "main", "sha": sha, "web_url": "https://gitlab.example/demo/-/merge_requests/%s" % iid}, disc
 
+    def mr_detail(self, project_id, iid):
+        return {"title": "", "description": "Filter in der Richtlinien-Tabelle, damit Admins schneller finden. Siehe DLP-118.",
+                "target_branch": "develop", "sha": ""}
+
     def mr(self, project_id, iid):
         return {"title": "Demo-MR %s" % iid, "branch": "feature/DLP-101-demo-%s" % iid,
                 "sha": "a1b2c3d4e5f60718", "url": "https://gitlab.example/demo/%s" % iid}
