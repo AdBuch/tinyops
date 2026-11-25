@@ -269,22 +269,23 @@ async function loadSettings() {
     <div class="grid2">
       <div class="field"><label for="vo-kind">Art des Servers</label>
         <select class="full" id="vo-kind">${S.voice.kinds.map(k => `<option value="${esc(k.id)}" ${k.id === S.voice.kind ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select>
-        <div class="help">tinyops ruft <code id="vo-path">${esc((S.voice.kinds.find(k => k.id === S.voice.kind) || S.voice.kinds[0]).path)}</code> auf.</div></div>
-      ${field('vo-url', 'Adresse', S.voice.url, { err: 'voice.url', ph: 'http://127.0.0.1:8178', help: 'Nur Adressen im eigenen Netz, wie beim KI-Entwurf.' })}
+        <div class="help" id="vo-pathhelp">tinyops ruft <code id="vo-path">${esc((S.voice.kinds.find(k => k.id === S.voice.kind) || S.voice.kinds[0]).path)}</code> auf.</div></div>
+      <div class="vo-ext">${field('vo-url', 'Adresse', S.voice.url, { err: 'voice.url', ph: 'http://127.0.0.1:8178', help: 'Nur Adressen im eigenen Netz, wie beim KI-Entwurf.' })}</div>
     </div>
+    <div id="vo-kit" class="vokit"></div>
     <div class="grid2">
-      ${field('vo-model', 'Modell', S.voice.model, { err: 'voice.model', ph: 'mistralai/Voxtral-Mini-3B-2507', help: 'Nur beim OpenAI-kompatiblen Server: der Name, den der Server unter /v1/models nennt. Bei whisper.cpp leer lassen (das Modell wählt der Server beim Start).' })}
+      <div class="vo-ext">${field('vo-model', 'Modell', S.voice.model, { err: 'voice.model', ph: 'mistralai/Voxtral-Mini-3B-2507', help: 'Nur beim OpenAI-kompatiblen Server: der Name, den der Server unter /v1/models nennt. Bei whisper.cpp leer lassen (das Modell wählt der Server beim Start).' })}</div>
       <div class="field"><label for="vo-lang">Sprache</label>
         <select class="full" id="vo-lang">${[['de', 'Deutsch'], ['en', 'Englisch'], ['fr', 'Französisch'], ['it', 'Italienisch'], ['auto', 'erkennen lassen']].map(([v, l]) => `<option value="${v}" ${v === S.voice.language ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <div class="help">Fest eingestellt ist die Erkennung schneller und sicherer. Fachwörter wie Ticket-Keys kommen auf Deutsch meist richtig an.</div></div>
     </div>
     <div class="grid2">
       ${field('vo-max', 'Längste Aufnahme in Sekunden', S.voice.max_seconds, { type: 'number', err: 'voice.max_seconds', help: 'Danach endet die Aufnahme von selbst (10 bis 300).' })}
-      ${field('vo-key', 'Schlüssel (optional)', '', { type: 'password', ph: S.secrets.voice_key && S.secrets.voice_key.set ? '•••••••• gespeichert' : 'nur wenn der Server einen verlangt', err: 'voice_key', help: 'Zum Beispiel <code>vllm serve … --api-key</code>. Lokal meist leer.' })}
+      <div class="vo-ext">${field('vo-key', 'Schlüssel (optional)', '', { type: 'password', ph: S.secrets.voice_key && S.secrets.voice_key.set ? '•••••••• gespeichert' : 'nur wenn der Server einen verlangt', err: 'voice_key', help: 'Zum Beispiel <code>vllm serve … --api-key</code>. Lokal meist leer.' })}</div>
     </div>
-    <label class="check"><input type="checkbox" id="vo-remote" ${S.voice.allow_remote ? 'checked' : ''}>
+    <label class="check vo-ext"><input type="checkbox" id="vo-remote" ${S.voice.allow_remote ? 'checked' : ''}>
       <span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(nicht empfohlen: deine Sprache verlässt dann das Netz)</span></span></label>
-    <div class="row"><button class="primary" id="vo-test">Erkennung testen</button></div>
+    <div class="row vo-ext"><button class="primary" id="vo-test">Erkennung testen</button></div>
     <div id="vo-result"></div>`)}
 
   ${sect('app', 'App und Handy', 'tinyops als eigenes Fenster auf dem Rechner und als App auf dem Handy. Das Panel bleibt dabei nur für gekoppelte Geräte offen.', `
@@ -343,8 +344,10 @@ async function loadSettings() {
   $('us-test').onclick = testUsage;
   $('vo-test').onclick = testVoice; $('vo-kind').onchange = () => {          // 0.43: Art wechseln setzt die übliche Adresse, solange keine eigene drinsteht
     const k = S.voice.kinds.find(x => x.id === val('vo-kind')), cur = val('vo-url');
-    if (k) { $('vo-path').textContent = k.path; if (!cur || S.voice.kinds.some(x => x.url === cur)) $('vo-url').value = k.url; }
+    if (k) { $('vo-path').textContent = k.path; if (k.id !== 'builtin' && (!cur || S.voice.kinds.some(x => x.url === cur))) $('vo-url').value = k.url; }
+    vkMode();
   };
+  vkMode();
   $('sq-test').onclick = testSonar; if ($('sq-del')) $('sq-del').onclick = () => delSecrets(['sonar_token'], 'Sonar-Token');
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
@@ -818,7 +821,8 @@ function collect() {
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
     usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
-    voice: { enabled: $('vo-on').checked, kind: val('vo-kind'), url: val('vo-url'), model: val('vo-model'), language: val('vo-lang'), allow_remote: $('vo-remote').checked, max_seconds: val('vo-max') },
+    voice: { enabled: $('vo-on').checked, kind: val('vo-kind'), url: val('vo-url'), model: val('vo-model'), language: val('vo-lang'), allow_remote: $('vo-remote').checked, max_seconds: val('vo-max'),
+             builtin_model: $('vo-bmodel') ? val('vo-bmodel') : S.voice.builtin_model, program: $('vo-prog') ? val('vo-prog') : S.voice.program, threads: $('vo-threads') ? val('vo-threads') : S.voice.threads },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked, score: $('ft-score').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },
@@ -876,4 +880,52 @@ function drawCalls() {
     <table class="calls"><thead><tr><th>Methode und Pfad</th><th>Wozu</th><th>Wann</th><th>Zugang</th><th class="n">Anzahl</th></tr></thead><tbody>${by[svc].map(r => `<tr class="${r.unknown ? 'unk' : r.write ? 'wr' : ''}">
       <td><code>${esc(r.method)} ${esc(r.path)}</code>${r.write ? ' <span class="chip warn" title="ändert etwas beim Dienst">schreibt</span>' : ''}</td><td>${esc(r.what)}</td><td class="small">${esc(r.when)}</td><td class="small"><code>${esc(r.token)}</code></td>
       <td class="n">${r.count}×${r.last ? `<span class="small quiet"> · ${esc(when(r.last))}</span>` : ''}</td></tr>`).join('')}</tbody></table></details>`).join('') || '<div class="small quiet">Seit dem Start noch keine Aufrufe.</div>';
+}
+// 0.44: Eingebautes Whisper. tinyops baut whisper.cpp und lädt das Modell auf Klick, startet den Server selbst.
+let VK = null, vkTimer = 0;
+function vkMode() {
+  const b = val('vo-kind') === 'builtin';
+  document.querySelectorAll('#s-voice .vo-ext').forEach(el => { el.hidden = b; });
+  $('vo-pathhelp').hidden = b;
+  if (b) vkLoad(); else $('vo-kit').innerHTML = '';
+}
+async function vkLoad(body) {
+  try { VK = body ? await api('POST', '/api/voice/kit', body) : await api('GET', '/api/voice/kit?model=' + encodeURIComponent($('vo-bmodel') ? val('vo-bmodel') : S.voice.builtin_model)); }
+  catch (e) { toast(e.message); }
+  vkDraw();
+}
+function vkDraw() {
+  const box = $('vo-kit'); if (!box || !VK || val('vo-kind') !== 'builtin') return;
+  const keep = { m: $('vo-bmodel') ? val('vo-bmodel') : (VK.model || S.voice.builtin_model), p: $('vo-prog') ? val('vo-prog') : S.voice.program, t: $('vo-threads') ? val('vo-threads') : S.voice.threads };
+  const j = VK.job || {}, run = j.state === 'läuft', m = VK.models.find(x => x.id === keep.m) || VK.models[0];
+  const pct = j.total ? Math.min(100, Math.round(100 * j.done / j.total)) : 0;
+  const line = (ok, label, text) => `<div class="vkline"><span class="vkst ${ok ? 'ok' : ''}">${ic(ok ? 'check' : 'x')}</span><b>${label}</b><span>${text}</span></div>`;
+  box.innerHTML = `
+    ${line(!!VK.program, 'Programm', VK.program ? `${esc(VK.program_source)} <code>${esc(VK.program)}</code>` : 'noch nicht gebaut: «Einrichten» holt whisper.cpp ' + esc(VK.tag) + ' und baut es für diesen Prozessor (ein bis fünf Minuten)')}
+    <div class="field"><label for="vo-bmodel">Modell</label><select class="full" id="vo-bmodel">${VK.models.map(x => `<option value="${x.id}" ${x.id === keep.m ? 'selected' : ''}>${x.id} · ${x.mib} MB${x.present ? ' · geladen' : ''}</option>`).join('')}</select>
+      <div class="help">${esc(m.about)}</div></div>
+    ${line(m.present, 'Modell', m.present ? `${esc(m.file)} liegt bereit` : `${esc(m.file)} (${m.mib} MB) wird beim Einrichten geladen und geprüft`)}
+    ${line(VK.running, 'Server', VK.running ? `läuft auf 127.0.0.1:${VK.port}` : 'startet beim ersten Diktieren von selbst und hört nach 20 Minuten ohne Nutzung auf')}
+    ${VK.missing_tools && VK.missing_tools.length ? `<div class="banner warn">Zum Bauen fehlt: ${esc(VK.missing_tools.join(', '))}. <code>${esc(VK.hint)}</code> (einmal im Terminal), dann «Einrichten».</div>` : ''}
+    ${run ? `<div class="vkjob"><b>${esc(j.step)}</b>${j.total ? `<div class="vkbar"><span style="width:${pct}%"></span></div><span class="small quiet">${Math.round(j.done / 1048576)} von ${Math.round(j.total / 1048576)} MB</span>` : '<span class="agspin"></span>'}</div>` : ''}
+    ${j.state === 'fehler' ? `<div class="banner bad">${esc(j.error)}</div>` : ''}
+    ${j.state === 'fertig' ? `<div class="banner okb">Eingerichtet. Haken «Spracherkennung einschalten», «Speichern», dann diktieren.</div>` : ''}
+    ${VK.test ? `<div class="banner okb">Der Server antwortet: eine Sekunde Stille in ${VK.test.took} s erkannt${VK.test.text ? ' («' + esc(VK.test.text) + '»)' : ''}.</div>` : ''}
+    ${j.log && j.log.length ? `<details class="small" ${j.state === 'fehler' ? 'open' : ''}><summary>Ausgabe</summary><pre class="vklog">${esc(j.log.join('\n'))}</pre></details>` : ''}
+    <div class="row">
+      ${!VK.ready ? `<button class="primary" id="vk-setup" ${run || S.demo ? 'disabled' : ''}>${VK.program ? 'Modell laden' : 'Einrichten'}</button>` : `<button class="primary" id="vk-test" ${run ? 'disabled' : ''}>Erkennung testen</button>`}
+      ${VK.running ? '<button id="vk-stop">Server anhalten</button>' : ''}
+      ${(VK.program_source || '').startsWith('von tinyops') || VK.models.some(x => x.present) ? `<button id="vk-remove" ${run ? 'disabled' : ''}>Entfernen</button>` : ''}
+    </div>
+    <details class="small"><summary>Fortgeschritten</summary><div class="grid2">
+      ${field('vo-prog', 'Eigenes Programm (optional)', keep.p, { ph: '/usr/local/bin/whisper-server', err: 'voice.program', help: 'Ein vorhandenes whisper-server, z. B. aus dem Paketmanager. Dann baut tinyops nichts.' })}
+      ${field('vo-threads', 'Threads', keep.t, { type: 'number', err: 'voice.threads', help: '0 heisst automatisch: alle Kerne bis auf einen, höchstens 8.' })}
+    </div><div class="small quiet">Ordner: <code>${esc(VK.dir)}</code></div></details>`;
+  $('vo-bmodel').onchange = () => vkLoad();
+  if ($('vk-setup')) $('vk-setup').onclick = () => { $('vo-on').checked = true; vkLoad({ action: 'setup', model: val('vo-bmodel'), program: val('vo-prog') }); };
+  if ($('vk-test')) $('vk-test').onclick = async () => { $('vk-test').disabled = true; $('vk-test').textContent = 'Startet und testet …'; await vkLoad({ action: 'test', model: val('vo-bmodel'), program: val('vo-prog') }); };
+  if ($('vk-stop')) $('vk-stop').onclick = () => vkLoad({ action: 'stop' });
+  if ($('vk-remove')) $('vk-remove').onclick = async () => { if (confirm('Eingebautes Whisper entfernen? Programm und Modelle werden gelöscht:\n' + VK.dir)) vkLoad({ action: 'remove' }); };
+  clearTimeout(vkTimer);
+  if (run) vkTimer = setTimeout(() => vkLoad(), 1500);
 }

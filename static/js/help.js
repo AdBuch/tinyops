@@ -16,7 +16,11 @@ const HELP = {
     <p>Aktualisieren geht wie beim Start über <code>start.py</code>: neue Version holen, Selbsttest, bei Fehlern zurück auf die alte. Danach startet tinyops neu und die Seite lädt von selbst. Deine Einstellungen, Zugangsdaten und Daten liegen ausserhalb des Programmordners und bleiben, wie sie sind.</p>
     <p>Nicht aktualisiert wird, wenn im Programmordner Dateien geändert sind oder er auf einem Branch steht (Entwicklung). Der Grund steht dann hier.</p>
     <p><b>Als Dienst (Linux):</b> tinyops startet dann bei der Anmeldung und nach einem Absturz von selbst, ohne Terminal. Es ist ein Benutzer-Dienst (<code>systemctl --user</code>), kein sudo nötig. Log: <code>journalctl --user -u tinyops -f</code>. Ohne Anmeldung (nach einem Neustart) läuft er erst nach einmal <code>loginctl enable-linger $USER</code>. Im Terminal geht dasselbe mit <code>python3 server.py --install-service</code>.</p>`,
-  voice: `<p><b>Lokal einrichten</b>, eines von beiden:</p>
+  voice: `<p><b>Am einfachsten: «Eingebaut».</b> tinyops holt whisper.cpp, baut es für deinen Prozessor und lädt das Modell, alles auf einen Klick «Einrichten» (ein bis fünf Minuten, einmal). Eine Grafikkarte braucht es nicht.
+    Zum Bauen braucht der Rechner git, cmake und einen C++-Compiler; unter Ubuntu einmal <code>sudo apt install build-essential cmake git</code>. tinyops selbst nutzt nie sudo.</p>
+    <p><b>Modelle:</b> «small» (181 MB) ist der Standard und versteht Deutsch gut; «base» (57 MB) für schwache Rechner; «turbo» (547 MB) ist am genauesten, auf dem Prozessor aber spürbar langsamer. Gespeicherte Modelle werden vor dem ersten Einsatz gegen die Prüfsumme geprüft.</p>
+    <p>Der Server läuft nur auf 127.0.0.1, startet beim ersten Diktieren und hört nach 20 Minuten ohne Nutzung wieder auf. Ein Modell im Speicher braucht etwa so viel RAM wie die Datei gross ist, plus etwas.</p>
+    <p><b>Oder einen eigenen Server</b>, eines von beiden:</p>
     <p><b>whisper.cpp</b> (läuft auch ohne Grafikkarte): Modell laden, z. B. <code>ggml-small.bin</code> oder <code>ggml-large-v3-turbo-q5_0.bin</code>, dann
     <code>whisper-server -m models/ggml-small.bin --host 127.0.0.1 --port 8178 -l de</code>. Art «whisper.cpp-Server», Adresse <code>http://127.0.0.1:8178</code>.</p>
     <p><b>Voxtral Mini</b> (Mistral, braucht eine Grafikkarte mit etwa 10 GB): <code>vllm serve mistralai/Voxtral-Mini-3B-2507 --tokenizer_mode mistral --config_format mistral --load_format mistral</code>.

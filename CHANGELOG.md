@@ -5,6 +5,26 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.44.0]
+
+Eingebautes Whisper, auf deinen Wunsch: Spracherkennung ohne eigenen Server und ohne Grafikkarte, eingerichtet von tinyops.
+
+### Neu
+- **Einstellungen → Sprache → «Eingebaut»** (neuer Standard): ein Klick «Einrichten», und tinyops
+  1. holt whisper.cpp in einer festen Version (v1.9.5, `git clone`, nur lesend) und baut `whisper-server` mit cmake für genau deinen Prozessor (AVX2/AVX-512 werden genutzt). Das dauert einmal ein bis fünf Minuten; danach bleibt nur das Programm (etwa 4 MB), der Quelltext wird gelöscht.
+  2. lädt das Modell von Hugging Face und prüft es gegen die SHA1 aus der Modellkarte. Stimmt sie nicht, wird es nicht benutzt.
+  3. startet den Server beim ersten Diktieren selbst, nur auf 127.0.0.1, und beendet ihn nach 20 Minuten ohne Nutzung und wenn tinyops endet.
+- **Modelle:** «small» (181 MB, Standard, gut für Deutsch), «base» (57 MB, für schwache Rechner), «turbo» (547 MB, am genauesten, auf dem Prozessor langsamer). Wechseln lädt nur das neue Modell.
+- Fortschritt, Ausgabe des Bauens und «Erkennung testen» stehen im Abschnitt. «Entfernen» löscht Programm und Modelle.
+- Fehlen cmake oder ein C++-Compiler, sagt tinyops, wie du sie einmal installierst (Ubuntu: `sudo apt install build-essential cmake git`). tinyops selbst nutzt nie sudo.
+- Liegt schon ein `whisper-server` im PATH oder trägst du eines ein (Fortgeschritten), baut tinyops nichts.
+- «Aufrufe nach aussen» nennt das Holen des Quelltexts und des Modells; beides passiert nur auf «Einrichten».
+
+### Grenzen
+- Hier geprüft: echtes Holen und Bauen von whisper.cpp v1.9.5 unter Linux und Erkennung mit dessen kleinem Testmodell. Die Modelle von Hugging Face konnte ich hier nicht laden; ihre Prüfsummen stammen aus der Modellkarte.
+- Unter Windows braucht das Bauen Visual Studio Build Tools und CMake, das habe ich nicht geprüft. Einfacher dort: ein fertiges `whisper-server.exe` als Programm eintragen.
+- Ein Modell braucht im Speicher etwa so viel wie die Datei, «small» also rund 300 MB, solange der Server läuft.
+
 ## [0.43.0]
 
 Voice Prompting Wednesday, auf deinen Wunsch: diktieren statt tippen und Agenten per Sprachbefehl beauftragen. Erkannt wird auf einem Server in deinem Netz (dein Wunsch: «gerne lokal»).

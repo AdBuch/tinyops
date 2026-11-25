@@ -175,6 +175,8 @@ EXACT = {
     ("POST", "/api/review/start"): lambda app, cfg, r: app.review_start(r.body()),          # 0.42: ▶ Review starten (Agent auf dem MR)
     ("POST", "/api/review/state"): lambda app, cfg, r: app.review_state(r.body()),
     ("POST", "/api/voice/transcribe"): lambda app, cfg, r: app.voice_transcribe(r.raw(voice.MAX_BYTES), r.q("lang")),   # 0.43: diktieren
+    ("GET", "/api/voice/kit"): lambda app, cfg, r: app.voice_kit({"model": r.q("model")}),         # 0.44: eingebautes Whisper
+    ("POST", "/api/voice/kit"): lambda app, cfg, r: app.voice_kit(r.body()),
     ("POST", "/api/voice/command"): lambda app, cfg, r: app.voice_command(r.body()),        # Sprachbefehl verstehen, führt nichts aus
     ("POST", "/api/voice/run"): lambda app, cfg, r: app.voice_run(r.body()),                # erst nach deiner Bestätigung
     ("POST", "/api/review/options"): lambda app, cfg, r: app.review_options(r.body()),       # 0.42.1: Agent wählen, Ticket und Ziel
@@ -419,7 +421,7 @@ def make_handler(app, base, version, load_config):
                     return self._public_get(path)
                 if path.startswith("/api/pair/"):
                     return self._pair_route(method, path)
-                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/") or path in ("/api/update/run", "/api/update/service", "/api/test/start") or path.startswith("/api/branch/")):
+                if self._dev is not None and method != "GET" and (path.startswith("/api/settings") or path.startswith("/api/m365/") or path in ("/api/update/run", "/api/update/service", "/api/test/start", "/api/voice/kit") or path.startswith("/api/branch/")):
                     return self._err(403, "Einstellungen ändern geht nur am Rechner, nicht vom gekoppelten Gerät.")
                 if method == "GET" and path == "/":
                     return self._send(200, html, "text/html", extra)

@@ -14,6 +14,7 @@ import re
 import agents
 import llm
 import voice
+import voicekit
 from common import UserError
 
 PHASE_WORDS = (("review", r"review\w*|prüf\w*|durchseh\w*|gegenles\w*|code ?review"), ("test", r"test\w*"),
@@ -37,9 +38,50 @@ def _norm(s):
 class VoiceArea:
     USES = {"area_agents": ("agent_action",), "area_review": ("review_start",)}
 
+    # ------------------------------------------------------------ Eingebautes Whisper (0.44)
+    def _kit(self):
+        k = getattr(self, "_voicekit", None)
+        if k is None:
+            k = self._voicekit = voicekit.WhisperKit(self.data_dir() / "whisper")
+        return k
+
+    def voice_kit(self, b=None):
+        """GET: Zustand. POST action: setup (bauen und Modell laden), test (starten und eine Sekunde Stille erkennen), stop, remove."""
+        vc = voice.cfg_of(self.cfg)
+        b = b or {}
+        mid = b.get("model") if b.get("model") in voicekit.MODELS else vc.get("builtin_model") or "small"
+        prog = str(b.get("program") if b.get("program") is not None else vc.get("program") or "").strip()
+        kit, act = self._kit(), b.get("action") or ""
+        try:
+            if act == "setup":
+                if self.demo:
+                    raise UserError("In der Demo baut und lädt tinyops nichts.")
+                kit.setup(mid, prog)
+                self.audit("voice.setup", mid, program=bool(prog))
+            elif act == "remove":
+                kit.remove()
+                self.audit("voice.remove", "whisper")
+            elif act == "stop":
+                kit.stop()
+            elif act == "test":
+                base = kit.ensure(mid, vc.get("language") if vc.get("language") != "auto" else "auto", prog, vc.get("threads"))
+                text, _, took = voice.transcribe(dict(vc, enabled=True, kind="whispercpp", url=base), voice.silence_wav(1.0))
+                return dict(kit.status(prog, mid), test={"took": round(took, 1), "text": text})
+            elif act:
+                raise UserError("Unbekannte Aktion.")
+        except (voicekit.KitError, voice.VoiceError) as e:
+            raise UserError(str(e))
+        return kit.status(prog, mid)
+
     # ------------------------------------------------------------ Diktieren
     def voice_transcribe(self, wav, lang=""):
         vc = voice.cfg_of(self.cfg)
+        if vc.get("enabled") and vc.get("kind") == "builtin":
+            try:
+                base = self._kit().ensure(vc.get("builtin_model") or "small", vc.get("language") or "de", vc.get("program") or "", vc.get("threads"))
+            except voicekit.KitError as e:
+                raise UserError(str(e))
+            vc = dict(vc, kind="whispercpp", url=base)
         try:
             text, secs, took = voice.transcribe(vc, wav, lang if lang in voice.LANGS else None, self._voice_key(), self.ssl_ctx)
         except voice.VoiceError as e:

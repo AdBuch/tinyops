@@ -103,6 +103,12 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.44.0
+
+- [ ] `r44-01` Dein Rechner ohne Grafikkarte: Einstellungen → Sprache → «Eingebaut», Modell «small», «Einrichten» → Bauen und Laden laufen sichtbar durch (oder es sagt, was zum Bauen fehlt); Haken an, Speichern, «Erkennung testen» → grün; dann im Auftrag diktieren → der Text kommt nach wenigen Sekunden, `ps` zeigt `whisper-server` nur auf 127.0.0.1
+- [ ] `r44-02` Bauen (Nachbau über cmake), Modell mit Prüfsumme, falsche Prüfsumme verworfen, eigenes Programm ohne Bauen, fehlendes cmake erklärt, Start und Stopp, alter Server nach Neustart beendet [auto: test_v44.Kit]
+- [ ] `r44-03` «Eingebaut» ist Standard, Zustand und Modelle, nur am Rechner (nicht vom gekoppelten Gerät) [auto: test_v44.AppLevel]
+
 ## 0.43.0
 
 Voice Prompting: diktieren und Sprachbefehle an Agenten, erkannt auf deinem Server. Damit die Liste unter 60 Punkten von Hand bleibt, sind `r28-04` bis `r28-06` (Microsoft 365 im Fokus) und `r29-03`, `r29-04`, `r29-07` (BCS) zu je einem Punkt zusammengelegt; du prüfst sie ohnehin zusammen mit den echten Systemen.

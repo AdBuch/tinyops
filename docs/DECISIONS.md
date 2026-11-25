@@ -2,7 +2,7 @@
 
 Offene und getroffene Entscheide für tinyops. Jeder Eintrag sagt, was zur Wahl steht, was ich empfehle und bis wann es feststehen muss.
 Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis ein neuer Eintrag sie ersetzt.
-Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau dazu), seit dem 20.11. ab 0.41 um zwei weitere (Testen von Hand, Reviews in GitLab), seit dem 23.11. ab 0.41 um noch eine (Agent-Branch übernehmen), seit dem 25.11. ab 0.43 um eine (Voice Prompting). Die Versionsnummern unten sind schon angepasst.
+Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau dazu), seit dem 20.11. ab 0.41 um zwei weitere (Testen von Hand, Reviews in GitLab), seit dem 23.11. ab 0.41 um noch eine (Agent-Branch übernehmen), seit dem 25.11. ab 0.43 um zwei (Voice Prompting, eingebautes Whisper). Die Versionsnummern unten sind schon angepasst.
 
 ## Getroffen
 
@@ -45,12 +45,13 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 | 2026-11-23 | **Testen:** «Getestet» aus der Liste im Fokus öffnet erst die Prüfliste | Abgenommen wird im Detail-Panel (mit Prüfliste) oder dort direkt mit «Getestet»; ein Klick in der Liste nimmt nicht mehr ungesehen ab (0.42) |
 | 2026-11-25 | **E15: Voice Prompting nur lokal.** Erkannt wird auf einem Server im eigenen Netz (whisper.cpp, Voxtral Mini über vLLM, speaches), wie beim KI-Entwurf: andere Adressen nur mit «Externe Adresse erlauben» | Wunsch vom 25.11. («gerne lokal»). Die Aufnahme geht als WAV nur an diesen Server und wird nirgends gespeichert; im Log stehen nur Länge und Dauer (0.43) |
 | 2026-11-25 | **Sprachbefehle dürfen zuweisen, starten und Review anstossen, immer erst nach deiner Bestätigung** | tinyops zeigt, was es verstanden hat (Ticket oder MR, Agent, Rolle, starten), mit Grund, wenn etwas nicht erlaubt ist. Ausgeführt wird über dieselben Wege wie die Knöpfe. Feste Regeln zuerst, das lokale Sprachmodell nur als Rückfall. Im Verlauf steht die Aktion, nicht der Wortlaut (0.43) |
+| 2026-11-25 | **Eingebautes Whisper:** tinyops darf auf deinen Klick whisper.cpp (fester Tag) holen und bauen und ein Modell von Hugging Face laden | Wunsch vom 25.11. («einfach reinziehen», ohne Grafikkarte). Nur auf «Einrichten», nur in den Datenordner, ohne sudo; Modell nur mit passender SHA1; der Server hört nur auf 127.0.0.1 und läuft nur, solange du diktierst (0.44) |
 
 ## Offen
 
 | Nr. | Frage | Optionen | Empfehlung | Bis |
 |---|---|---|---|---|
-| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · c) **Prompt zum Kopieren** (neu 18.11.): tinyops gibt dir je App einen Prompt, die App listet deine offenen Themen als JSON, du fügst das in tinyops ein · d) **Sitzungen der Coding-Agenten** (neu 18.11.): Claude Code, Codex und Vibe legen ihre Sitzungen als Dateien auf deinem Rechner ab; tinyops liest Ordner, Titel und Datum · b) mehr | **a + c + d**. c nutzt, was die Chat-Apps selbst über deine Chats wissen (bei Claude die Suche in früheren Chats); das ist hilfreich, aber nicht vollständig. d ist vollständig für die Agenten, weil es deine eigenen Dateien sind. Die Agenten selbst sehen deine Web-Chats nicht. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.48 |
+| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · c) **Prompt zum Kopieren** (neu 18.11.): tinyops gibt dir je App einen Prompt, die App listet deine offenen Themen als JSON, du fügst das in tinyops ein · d) **Sitzungen der Coding-Agenten** (neu 18.11.): Claude Code, Codex und Vibe legen ihre Sitzungen als Dateien auf deinem Rechner ab; tinyops liest Ordner, Titel und Datum · b) mehr | **a + c + d**. c nutzt, was die Chat-Apps selbst über deine Chats wissen (bei Claude die Suche in früheren Chats); das ist hilfreich, aber nicht vollständig. d ist vollständig für die Agenten, weil es deine eigenen Dateien sind. Die Agenten selbst sehen deine Web-Chats nicht. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.49 |
 
 ## Ideen, nicht geplant
 

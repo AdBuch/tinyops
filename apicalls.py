@@ -71,6 +71,11 @@ _RAW = (
     # Spracherkennung (0.43): nur im eigenen Netz, ausser allow_remote; nur auf deinen Klick am Mikrofon
     ("Spracherkennung", "POST", "/v1/audio/transcriptions, /inference", r"/(v1/audio/transcriptions|inference)", "gesprochenen Text erkennen (Aufnahme geht nur dorthin, wird nicht gespeichert)",
      False, "auf Klick am Mikrofon, Einstellungen: Testen", "voice_key (optional)"),
+    # Eingebautes Whisper (0.44): nur auf Klick «Einrichten»
+    ("Eingebautes Whisper", "GIT", "git clone --depth 1 --branch %s github.com/ggml-org/whisper.cpp" % "v1.9.5", r"clone", "Quelltext von whisper.cpp zum Bauen (fester Release-Tag)", False,
+     "auf Klick «Einrichten», einmal", "keiner (öffentliches Repo)"),
+    ("Eingebautes Whisper", "GET", "huggingface.co/ggerganov/whisper.cpp/resolve/main/<modell>", r"/ggerganov/whisper\.cpp/resolve/main/ggml-[a-z0-9.\-_]+\.bin",
+     "Sprachmodell laden, Prüfsumme wird geprüft", False, "auf Klick «Einrichten», je Modell einmal", "keiner"),
     # Microsoft 365 (delegiert, ohne Client-Secret)
     ("Microsoft 365", "POST", "login: /:tenant/oauth2/v2.0/{token,devicecode}", r"/%s/oauth2/v2\.0/(token|devicecode)" % N, "anmelden, Zugang erneuern", False,
      "Anmelden, stündlich", "m365_refresh"),

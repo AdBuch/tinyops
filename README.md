@@ -449,6 +449,10 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5k. Eingebautes Whisper (neu in 0.44.0)
+
+Einstellungen → Sprache → **«Eingebaut»** → «Einrichten»: tinyops holt whisper.cpp (v1.9.5), baut es mit cmake für deinen Prozessor und lädt das Modell («small» 181 MB, «base» 57 MB, «turbo» 547 MB) mit Prüfsumme. Der Server startet beim ersten Diktieren, nur auf 127.0.0.1, und hört nach 20 Minuten ohne Nutzung auf. Zum Bauen braucht der Rechner git, cmake und einen C++-Compiler (Ubuntu: `sudo apt install build-essential cmake git`). Alles liegt in `<Datenordner>/whisper/`.
+
 ## 5j. Voice Prompting (neu in 0.43.0)
 
 Einstellungen → **Sprache**: einen Server zur Spracherkennung in deinem Netz eintragen, zum Beispiel `whisper-server -m models/ggml-small.bin --host 127.0.0.1 --port 8178 -l de` (whisper.cpp) oder Voxtral Mini über vLLM (`vllm serve mistralai/Voxtral-Mini-3B-2507 --tokenizer_mode mistral --config_format mistral --load_format mistral`, OpenAI-kompatibel). Nur Adressen im eigenen Netz; die Aufnahme wird nicht gespeichert.
@@ -835,6 +839,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     area_test.py         Bereich Testen von Hand: Prüfliste je Ticket, Jetzt testen, Fehler zurück, Abnahme
     area_review.py       Bereich Review mit Agent: Review starten, Befunde, Entwürfe in GitLab
     gitlab_review.py     Review-Entwürfe in GitLab: feste Liste erlaubter Pfade, Diff-Positionen, nie abschicken
+    voicekit.py          eingebautes Whisper: whisper.cpp bauen, Modell mit Prüfsumme laden, Server starten und beenden
     voice.py             Spracherkennung über einen lokalen Server (whisper.cpp, OpenAI-kompatibel), Einstellungen und Test
     area_voice.py        Bereich Sprache: diktieren, Sprachbefehle verstehen und nach Bestätigung ausführen
     apicalls.py          jeder Aufruf nach aussen: Liste mit Zweck und Zugang, Zähler für die Einstellungen

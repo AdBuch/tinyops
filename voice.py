@@ -19,13 +19,15 @@ import uuid
 import apicalls
 import llm
 import tlog
+import voicekit
 
 log = tlog.get("tinyops")
 
-KINDS = {"openai": ("OpenAI-kompatibel (vLLM mit Voxtral, speaches, faster-whisper)", "/v1/audio/transcriptions", "http://127.0.0.1:8000"),
+KINDS = {"builtin": ("Eingebaut: tinyops richtet whisper.cpp selbst ein (ohne Grafikkarte)", "/inference", "http://127.0.0.1"),
+         "openai": ("OpenAI-kompatibel (vLLM mit Voxtral, speaches, faster-whisper)", "/v1/audio/transcriptions", "http://127.0.0.1:8000"),
          "whispercpp": ("whisper.cpp-Server", "/inference", "http://127.0.0.1:8178")}
-DEFAULTS = {"enabled": False, "kind": "whispercpp", "url": "http://127.0.0.1:8178", "model": "", "language": "de", "allow_remote": False,
-            "max_seconds": 120, "timeout": 60}
+DEFAULTS = {"enabled": False, "kind": "builtin", "url": "", "model": "", "language": "de", "allow_remote": False,
+            "max_seconds": 120, "timeout": 60, "builtin_model": "small", "program": "", "threads": 0}
 LANGS = ("de", "en", "fr", "it", "auto")
 MAX_BYTES = 16000 * 2 * 300 + 4096          # 5 Minuten WAV, mehr nimmt tinyops nicht an
 
@@ -41,7 +43,7 @@ def cfg_of(cfg):
 
 
 def ready(vc):
-    return bool(vc.get("enabled") and vc.get("url"))
+    return bool(vc.get("enabled") and (vc.get("url") or vc.get("kind") == "builtin"))
 
 
 def check_url(vc):
@@ -100,6 +102,8 @@ def transcribe(vc, wav, language=None, key="", ssl_ctx=None):
         raise VoiceError("Die Aufnahme ist länger als %d s." % int(vc.get("max_seconds") or 120))
     base = check_url(vc)
     kind = vc.get("kind") if vc.get("kind") in KINDS else "whispercpp"
+    if kind == "builtin":          # Adresse kommt vom eingebauten Server (area_voice → voicekit)
+        kind = "whispercpp"
     path = KINDS[kind][1]
     if kind == "openai" and base.endswith("/v1"):           # Adresse mit /v1 eingetragen, wie beim Sprachmodell üblich
         base = base[:-3]
@@ -148,7 +152,8 @@ def transcribe(vc, wav, language=None, key="", ssl_ctx=None):
 # ---------------------------------------------------------------- Einstellungen (ausserhalb von settings.py, das ist schon gross genug)
 def view(cfg):
     vc = cfg_of(cfg)
-    return {k: vc.get(k) for k in DEFAULTS} | {"kinds": [{"id": k, "label": v[0], "path": v[1], "url": v[2]} for k, v in KINDS.items()]}
+    return {k: vc.get(k) for k in DEFAULTS} | {"kinds": [{"id": k, "label": v[0], "path": v[1], "url": v[2]} for k, v in KINDS.items()],
+                                              "builtin_models": [{"id": k, "file": v[0], "mib": v[1], "about": v[3]} for k, v in voicekit.MODELS.items()]}
 
 
 def clean(m, cfg, errors):
@@ -156,6 +161,12 @@ def clean(m, cfg, errors):
     vc["enabled"] = bool(m.get("enabled", False))
     vc["kind"] = m.get("kind") if m.get("kind") in KINDS else "whispercpp"
     vc["url"] = (m.get("url") or "").strip().rstrip("/")[:300]
+    vc["builtin_model"] = m.get("builtin_model") if m.get("builtin_model") in voicekit.MODELS else "small"
+    vc["program"] = (m.get("program") or "").strip()[:500]
+    try:
+        vc["threads"] = max(0, min(64, int(m.get("threads") or 0)))
+    except (TypeError, ValueError):
+        errors["voice.threads"] = "Eine Zahl, 0 heisst automatisch."
     vc["model"] = (m.get("model") or "").strip()[:120]
     vc["language"] = m.get("language") if m.get("language") in LANGS else "de"
     vc["allow_remote"] = bool(m.get("allow_remote", False))
@@ -166,7 +177,9 @@ def clean(m, cfg, errors):
             errors["voice." + k] = "Eine Zahl von %d bis %d." % (lo, hi)
     if vc["kind"] == "openai" and vc["enabled"] and not vc["model"]:
         errors["voice.model"] = "Der OpenAI-kompatible Server braucht den Modellnamen (z. B. mistralai/Voxtral-Mini-3B-2507)."
-    if vc["enabled"]:
+    if vc["enabled"] and vc["kind"] != "builtin":
+        if not vc["url"]:
+            errors["voice.url"] = "Adresse des Servers fehlt."
         try:
             check_url(vc)
         except VoiceError as e:

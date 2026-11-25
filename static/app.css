@@ -1023,3 +1023,11 @@
   #vBar select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; max-width: 260px; }
   #vBar .warn-t { color: var(--warn); }
   @media (max-width: 700px) { #vBar { bottom: 84px; } }
+  /* 0.44: Eingebautes Whisper */
+  .banner.okb { background: var(--ok-bg); color: var(--ok); }
+  .vokit { display: grid; gap: 8px; margin: 6px 0 14px; } .vokit:empty { display: none; }
+  .vkline { display: grid; grid-template-columns: 22px 84px 1fr; gap: 8px; align-items: baseline; font-size: 14px; } .vkline span:last-child { overflow-wrap: anywhere; color: var(--quiet); }
+  .vkst { color: var(--quiet); } .vkst.ok { color: var(--ok); } .vkst svg { width: 15px; height: 15px; }
+  .vkjob { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--raised); }
+  .vkbar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; } .vkbar span { display: block; height: 100%; background: var(--focus); }
+  .vklog { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--raised); padding: 8px; border-radius: 8px; }
