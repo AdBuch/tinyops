@@ -46,7 +46,7 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 | **0.41.0/0.41.1** ✓ | Agent-Branch übernehmen: im Detail-Panel «Übernehmen in …» mit Fast-Forward, Rebase, Merge oder Cherry-Pick in den Feature-Branch, lokal im eigenen Worktree, Konflikte in IntelliJ lösen; dazu die Korrektur der Handy-Breite in den Einstellungen (geliefert 2026-11-23) | Wunsch | – |
 | **0.42.0/0.42.1** ✓ | Testen von Hand und Reviews in GitLab: Prüfliste je Ticket mit «Jetzt testen», Fehler zurück ans Entwickeln; «▶ Review mit Agent» mit Befunden als deine Entwürfe in GitLab (E14); jeder Aufruf nach aussen in den Einstellungen; dazu Korrekturen aus dem Bericht vom 23.11. (geliefert 2026-11-23). 0.42.1: beim Review den Agenten wählen und Ticket und Ziel des MR mitgeben (Rückmeldung vom 24.11.) | Neu + Korrekturen | E14 ✓ |
 | **0.43.0** ✓ | Voice Prompting: Mikrofon an den Prompt-Feldern (Auftrag, «Nachricht an …», Review-Ziel, Ideen, Prüfliste), Sprachbefehle an Agenten (zuweisen, starten, Review anstossen) mit Bestätigung; Erkennung nur über einen Server im eigenen Netz (whisper.cpp, Voxtral Mini über vLLM, speaches) (geliefert 2026-11-25) | Wunsch | E15 ✓ |
-| **0.44.0** ✓ | Eingebautes Whisper: tinyops baut whisper.cpp für deinen Prozessor, lädt das Modell (small, base, turbo) mit Prüfsumme und startet den Server selbst, nur auf 127.0.0.1; ohne Grafikkarte (geliefert 2026-11-25) | Wunsch | E15 ✓ |
+| **0.44.0/0.44.1** ✓ | Eingebautes Whisper: tinyops baut whisper.cpp für deinen Prozessor, lädt das Modell (small, base, turbo) mit Prüfsumme und startet den Server selbst, nur auf 127.0.0.1; ohne Grafikkarte (geliefert 2026-11-25). 0.44.1: Review-Befunde auch von Agenten ohne `tinyops-finding` (aus dem Bericht gelesen) und vor dem Anlegen bearbeitbar (Rückmeldung vom 25.11.) | Wunsch + Korrektur | E15 ✓ |
 | 0.45.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
 | 0.46.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
 | 0.47.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
@@ -200,6 +200,7 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 **0.44.0 – Eingebautes Whisper** ✓ (Wunsch vom 25.11.: «einfach reinziehen», Intel-Prozessor ohne Grafikkarte)
 - «Eingebaut» als Standard: whisper.cpp v1.9.5 holen und mit cmake bauen, Modell laden (SHA1 aus der Modellkarte), Server auf 127.0.0.1 beim ersten Diktieren, Ende nach 20 Minuten ohne Nutzung.
 - Voxtral bleibt über den OpenAI-kompatiblen Weg möglich, braucht aber eine Grafikkarte.
+- 0.44.1: Ein anderer Agent lieferte das Review nur als Text. tinyops liest Befunde jetzt auch aus Bericht und letzter Antwort (Block, JSON, Tabelle, Aufzählung), und du bearbeitest die Liste vor dem Anlegen in GitLab.
 
 **0.45.0 – Einstellungen und Datenbank**
 - `settings.py`: ein Schema je Feld (Typ, Grenzen, Hilfe) statt handgeschriebener Prüfungen. Die Oberfläche liest die Hilfe aus derselben Quelle.

@@ -44,6 +44,12 @@ Pfad relativ zum Repository, Zeile in der **neuen** Fassung und möglichst eine 
 Schreib wie ein freundlicher Kollege: was, warum, ein Vorschlag. Keine Punkte, die nur Geschmack sind.
 Daraus werden auf Wunsch Entwürfe in GitLab, die nur der Mensch sieht und selbst abschickt.
 
+Gibt es `tinyops-finding` bei dir nicht oder schlägt es fehl, schreib die Befunde in deinen Bericht (oder deine letzte Antwort) als Block mit einer Zeile je Befund, `pfad:zeile | schwere | text`:
+
+```findings
+src/main/java/Foo.java:42 | hoch | Bei leerer Liste wirft das eine NPE; Optional.ofNullable oder früh zurück.
+```
+
 ## Zum Schluss (mit `tinyops-report`)
 
 Zuerst **«bereit zum Mergen»**, **«mit kleinen Punkten»** oder **«noch nicht»**. Dann: erreicht der MR sein Ziel (oben), und welches Kriterium ist offen? Zum Schluss zwei, drei Sätze zum Gesamtbild und welche Stelle ein Mensch unbedingt selbst ansehen soll.

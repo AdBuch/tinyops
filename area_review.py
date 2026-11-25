@@ -11,6 +11,7 @@ import agents
 import briefing
 import gitlab_review
 import links
+import review_findings as rfind
 import secretstore as store
 from common import UserError, extract_keys
 
@@ -158,7 +159,8 @@ class ReviewArea:
         if self.agents:
             for r in sorted(self.agents.store.agent_runs(ticket=key), key=lambda r: -r["id"])[:5]:
                 v = self.agents.run_view(r)
-                runs.append({"id": v["id"], "status": v["status"], "agent": v["agent_name"], "findings": sorted(v["findings"] or [], key=lambda x: (SEV_ORDER.get(x["severity"], 1), x["path"], x["line"])), "sha": ((v.get("mr") or {}).get("sha") or "")[:8],
+                runs.append({"id": v["id"], "status": v["status"], "agent": v["agent_name"], "findings": self._rv_findings(v), "sha": ((v.get("mr") or {}).get("sha") or "")[:8],
+                             "edited": isinstance((v.get("mr") or {}).get("edited"), list),
                              "summary": (v.get("summary") or "")[:1500], "active": v["active"],
                              "ticket": (v.get("mr") or {}).get("ticket") or "", "goal": (v.get("mr") or {}).get("goal") or ""})
         return {"key": key, "runs": runs, "drafts": len(self.store.drafts_of(pid, iid)), "token": bool(self._rv_token()), "sha": (it.get("sha") or "")[:8],
@@ -178,11 +180,40 @@ class ReviewArea:
         if r["status"] in ("zugewiesen", "läuft"):
             raise UserError("Das Review läuft noch.")
         v = self.agents.run_view(r)
-        f = sorted(v["findings"] or [], key=lambda x: (SEV_ORDER.get(x["severity"], 1), x["path"], x["line"]))
+        f = self._rv_findings(v)
         if b.get("only") is not None:                       # Auswahl in der Oberfläche (Index in der sortierten Liste)
             keep = {int(i) for i in b.get("only") or [] if str(i).isdigit()}
             f = [x for i, x in enumerate(f) if i in keep]
         return v, f
+
+    @staticmethod
+    def _rv_findings(v):
+        """0.44.1: deine bearbeitete Liste, sonst die des Agenten (tinyops-finding), sonst aus Bericht und letzter Antwort gelesen."""
+        mr = v.get("mr") or {}
+        if isinstance(mr.get("edited"), list):
+            f = mr["edited"]
+        elif v.get("findings"):
+            f = [dict(x, **{"from": x.get("from") or "agent"}) for x in v["findings"]]
+        elif v.get("status") in ("zugewiesen", "läuft"):
+            f = []
+        else:
+            f = rfind.from_report(v.get("summary") or "", v.get("reply") or "")
+        return sorted(f, key=lambda x: (SEV_ORDER.get(x["severity"], 1), x["path"], x["line"]))
+
+    def review_findings(self, b):
+        """0.44.1: Befunde vor dem Anlegen ändern (Ort, Schwere, Text, löschen, hinzufügen) oder zurück zur Liste des Agenten. Nur in tinyops."""
+        v, _ = self._rv_run({"run": b.get("run")})
+        mr = dict(v["mr"])
+        if b.get("reset"):
+            mr.pop("edited", None)
+        else:
+            if not isinstance(b.get("findings"), list):
+                raise UserError("findings muss eine Liste sein.")
+            mr["edited"] = rfind.clean_list(b["findings"])
+        self.agents.store.agent_run_update(v["id"], mr=json.dumps(mr, ensure_ascii=False))
+        n = len(mr.get("edited") or [])
+        self.audit("review.findings", v.get("ticket") or "", run=v["id"], count=n, reset=bool(b.get("reset")))
+        return {"count": n, "reset": bool(b.get("reset"))}
 
     def review_copy(self, b):
         v, f = self._rv_run(b)

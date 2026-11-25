@@ -465,6 +465,8 @@ Einstellungen → **Sprache**: einen Server zur Spracherkennung in deinem Netz e
 
 **Review in GitLab:** «▶ Review mit Agent» an einem MR eines Kollegen öffnet einen kurzen Start: Agent wählen, Ticket (aus dem MR erkannt, änderbar) und ein Satz zum Ziel. Der Reviewer-Agent (eigener Worktree) prüft den Commit des MR gegen dieses Ziel und die Akzeptanzkriterien des Tickets. Er hält Befunde mit Datei und Zeile fest (`tinyops-finding`). Mit dem **Token für Review-Entwürfe** (Einstellungen → GitLab, Scope `api`) legt «als Entwürfe in GitLab» daraus deine Entwürfe am MR an; abschicken machst du in GitLab. tinyops benutzt dieses Token nur für die Pfade in `gitlab_review.ALLOWED` (Entwürfe lesen, anlegen, eigene löschen), schickt nie ab und ersetzt nur Entwürfe, die es selbst angelegt hat. Agenten sehen kein Token. Ohne Token: «Kopieren».
 
+Seit 0.44.1: Ruft ein Agent `tinyops-finding` nicht auf, liest tinyops die Befunde aus seinem Bericht oder seiner letzten Antwort (Block ```` ```findings ```` mit `pfad:zeile | schwere | text`, JSON, Tabelle oder Aufzählung mit `pfad:zeile`) und sagt das dazu. «Bearbeiten» ändert Ort, Schwere und Text, löscht oder ergänzt Befunde, bevor sie Entwürfe werden.
+
 **Aufrufe nach aussen:** Einstellungen → «Aufrufe nach aussen» listet jeden Aufruf je Dienst mit Methode, Pfad, Zweck, Zeitpunkt, Zugang und Zähler seit dem Start. Die Liste steht in `apicalls.py`; ein Test lässt ein Release scheitern, wenn ein Aufruf daran vorbeigeht.
 
 ## 5h. Agent-Branch übernehmen (neu in 0.41.0)
@@ -839,6 +841,7 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     area_test.py         Bereich Testen von Hand: Prüfliste je Ticket, Jetzt testen, Fehler zurück, Abnahme
     area_review.py       Bereich Review mit Agent: Review starten, Befunde, Entwürfe in GitLab
     gitlab_review.py     Review-Entwürfe in GitLab: feste Liste erlaubter Pfade, Diff-Positionen, nie abschicken
+    review_findings.py   Review-Befunde aus dem Bericht eines Agenten lesen (ohne tinyops-finding) und bearbeitete Listen prüfen
     voicekit.py          eingebautes Whisper: whisper.cpp bauen, Modell mit Prüfsumme laden, Server starten und beenden
     voice.py             Spracherkennung über einen lokalen Server (whisper.cpp, OpenAI-kompatibel), Einstellungen und Test
     area_voice.py        Bereich Sprache: diktieren, Sprachbefehle verstehen und nach Bestätigung ausführen

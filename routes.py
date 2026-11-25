@@ -182,6 +182,7 @@ EXACT = {
     ("POST", "/api/review/options"): lambda app, cfg, r: app.review_options(r.body()),       # 0.42.1: Agent wählen, Ticket und Ziel
     ("POST", "/api/review/copy"): lambda app, cfg, r: app.review_copy(r.body()),
     ("POST", "/api/review/drafts"): lambda app, cfg, r: app.review_drafts(r.body()),        # E14: nur Entwürfe, nie abschicken
+    ("POST", "/api/review/findings"): lambda app, cfg, r: app.review_findings(r.body()),    # 0.44.1: Befunde vor dem Anlegen bearbeiten
     ("GET", "/api/apicalls"): lambda app, cfg, r: apicalls.view(),                           # 0.42: was tinyops nach aussen aufruft
 }
 

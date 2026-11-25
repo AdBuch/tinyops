@@ -5,6 +5,21 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.44.1]
+
+Korrektur nach deiner Rückmeldung: Mit einem anderen Agenten kam das Review an, aber nicht in einer Form, die tinyops als Entwürfe in GitLab anlegen konnte.
+
+### Behoben
+- **Befunde aus dem Bericht:** Meldet ein Agent seine Befunde nicht über `tinyops-finding` (Befehl fehlt in seiner Umgebung, oder er schreibt sie einfach in den Text), liest tinyops sie aus seinem Bericht oder seiner letzten Antwort: aus einem Block ```` ```findings ```` (`pfad:zeile | schwere | text`), aus JSON, aus einer Markdown-Tabelle (Datei, Zeile, Befund, Schwere) oder aus Aufzählungspunkten mit `pfad:zeile`. Das gilt auch für Läufe, die schon fertig sind.
+- Im Abschnitt «Review mit Agent» steht dann, dass die Befunde aus dem Bericht gelesen sind; prüf Ort und Text vor dem Anlegen.
+- Der Auftrag an den Reviewer nennt den Block ```` ```findings ```` als Ausweg, wenn `tinyops-finding` nicht geht.
+
+### Neu
+- **Befunde bearbeiten:** «Bearbeiten» unter der Liste: Datei, Zeile, Schwere und Text ändern, Befunde löschen oder selbst hinzufügen, «Speichern». Auch ohne erkannte Befunde gibt es «Befund hinzufügen». Deine Liste bleibt, auch wenn der Bericht neu eingelesen wird; «Liste von … wiederherstellen» holt die des Agenten zurück. Das ändert nur tinyops, nichts in GitLab, bis du «als Entwürfe in GitLab» klickst.
+
+### Grenzen
+- Das Lesen aus freiem Text ist eine Schätzung: Ein Befund ohne Dateipfad wird nicht erkannt, und die Schwere errät tinyops aus Wörtern wie «kritisch» oder «nit» (sonst «mittel»). Schick mir gerne ein Beispiel eines Berichts, dann stimme ich das ab.
+
 ## [0.44.0]
 
 Eingebautes Whisper, auf deinen Wunsch: Spracherkennung ohne eigenen Server und ohne Grafikkarte, eingerichtet von tinyops.

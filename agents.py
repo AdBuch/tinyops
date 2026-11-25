@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import briefing
+import review_findings
 import secretscan
 import secretstore as store
 import tlog
@@ -612,10 +613,14 @@ class Service(ConversationMixin):
                 manual, _, findings = manual.partition("@@FINDINGS")
                 sess_line, _, tail = sess_line.partition("@@TAIL")
                 summary = head.split("@@SUMMARY", 1)[-1].strip("\n")
-            self.store.agent_run_update(r["id"], summary=clean_text(summary, 20000).strip(), checks=json.dumps(parse_checks(checks), ensure_ascii=False),
+            summary, reply = clean_text(summary, 20000).strip(), last_reply(tail)
+            found = parse_findings(clean_text(findings, 120000))
+            if not found and r.get("phase") == "review":      # 0.44.1: Agent ohne tinyops-finding: Befunde aus Bericht oder letzter Antwort
+                found = review_findings.from_report(summary, reply)
+            self.store.agent_run_update(r["id"], summary=summary, checks=json.dumps(parse_checks(checks), ensure_ascii=False),
                                         ak=json.dumps(briefing.parse_ak(clean_text(ak, 60000)), ensure_ascii=False),
-                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False), reply=last_reply(tail),
-                                        findings=json.dumps(parse_findings(clean_text(findings, 120000)), ensure_ascii=False))
+                                        msteps=json.dumps(parse_manual(clean_text(manual, 20000)), ensure_ascii=False), reply=reply,
+                                        findings=json.dumps(found, ensure_ascii=False))
             if not r.get("session") and find_session(a, sess_line):      # 0.40: Codex und Vibe vergeben die Kennung selbst
                 self.store.agent_run_update(r["id"], session=find_session(a, sess_line))
             cur = self.store.agent_run(r["id"]) or r
