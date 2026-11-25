@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler
 
 import apicalls
 import devices
+import voice
 import qr
 import ui
 import secretstore as store
@@ -64,13 +65,17 @@ class Req:
     def body(self):
         return self._h._body()
 
+    def raw(self, limit):
+        """0.43: Körper als Bytes (Aufnahme fürs Diktieren), nicht JSON."""
+        return self._h._raw(limit)
+
     def q(self, k, d=""):
         return (self.query.get(k) or [d])[0]
 
 
 SETTINGS_TESTS = {"gitlab": ("GitLab", settings.test_gitlab), "jira": ("Jira", settings.test_jira), "helpdesk": ("Helpdesk", settings.test_helpdesk),
                   "sonar": ("Sonar", settings.test_sonar), "github": ("GitHub", settings.test_github), "agent": ("Agent", settings.test_agent),
-                  "llm": ("KI", settings.test_llm)}
+                  "llm": ("KI", settings.test_llm), "voice": ("Spracherkennung", settings.test_voice)}
 
 
 def _m365_callback(app, cfg, r):          # Rückleitung von Microsoft: einfache Seite, dann zurück ins Panel
@@ -169,6 +174,9 @@ EXACT = {
     ("POST", "/api/mr/env"): lambda app, cfg, r: app.mr_env(r.body()),          # 0.34: Review-Umgebung für einen MR
     ("POST", "/api/review/start"): lambda app, cfg, r: app.review_start(r.body()),          # 0.42: ▶ Review starten (Agent auf dem MR)
     ("POST", "/api/review/state"): lambda app, cfg, r: app.review_state(r.body()),
+    ("POST", "/api/voice/transcribe"): lambda app, cfg, r: app.voice_transcribe(r.raw(voice.MAX_BYTES), r.q("lang")),   # 0.43: diktieren
+    ("POST", "/api/voice/command"): lambda app, cfg, r: app.voice_command(r.body()),        # Sprachbefehl verstehen, führt nichts aus
+    ("POST", "/api/voice/run"): lambda app, cfg, r: app.voice_run(r.body()),                # erst nach deiner Bestätigung
     ("POST", "/api/review/options"): lambda app, cfg, r: app.review_options(r.body()),       # 0.42.1: Agent wählen, Ticket und Ziel
     ("POST", "/api/review/copy"): lambda app, cfg, r: app.review_copy(r.body()),
     ("POST", "/api/review/drafts"): lambda app, cfg, r: app.review_drafts(r.body()),        # E14: nur Entwürfe, nie abschicken
@@ -379,6 +387,12 @@ def make_handler(app, base, version, load_config):
                 app.audit("device.revoke", str(b.get("id")))
                 return self._send(200, {"devices": app.devices.list()})
             return self._err(404, "Nicht gefunden.")
+
+        def _raw(self, limit):
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > limit:
+                raise UserError("Die Aufnahme ist zu lang.")
+            return self.rfile.read(n) if n else b""
 
         def _body(self):
             n = int(self.headers.get("Content-Length") or 0)

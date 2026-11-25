@@ -17,6 +17,7 @@ import agents
 import devices
 import github
 import llm
+import voice
 import net
 import secretstore as store
 import sonar
@@ -37,7 +38,7 @@ _cool = {}   # (Jira-Adresse, Benutzer) → Zeitpunkt, bis zu dem nach einem Feh
 COOLDOWN_S = 30
 JQL_DEFAULT = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC'
 SECRET_FIELDS = ("gitlab_token", "gitlab_review_token", "jira_token", "jira_password", "llm_key", "sonar_token", "github_token",
-                 "helpdesk_token", "helpdesk_password", "bcs_token")
+                 "helpdesk_token", "helpdesk_password", "bcs_token", "voice_key")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}$")
 CONFIG_KEYS_FEATURES = ("ideas", "ai", "score")      # 0.34: «testenv» entfällt (E2); 0.35: «score» (E3)
 FEATURE_DEFAULTS = {"score": True}                   # fehlt der Schlüssel, bleibt der Spielstand an (wie vor 0.35)
@@ -462,6 +463,17 @@ def test_llm(form, stored):
     for status, title, detail, hint in steps:
         r.add(title.lower(), title, status, detail, hint)
     return r.result(models=models[:40])
+
+
+def test_voice(form, stored):
+    """0.43: Spracherkennung im eigenen Netz: Adresse, eine Sekunde Stille erkennen lassen."""
+    key = (form.get("secret") or "").strip() or (stored("voice_key")[0] or "")
+    if key:
+        store.register(key)
+    r = Report()
+    for status, title, detail, hint in voice.test(form, key):
+        r.add(title.lower(), title, status, detail, hint)
+    return r.result()
 
 
 def test_sonar(form, stored):
@@ -1108,6 +1120,7 @@ def view(cfg, config_path, features_default=None):
                  "wip_issue_types": jc.get("wip_issue_types", ["Story"]), "group_link_types": jc.get("group_link_types") or [], "jql_in_progress": jc.get("jql_in_progress") or JQL_DEFAULT,
                  "only_active_sprints": bool(jc.get("only_active_sprints", True)),
                  "allow_create": bool(jc.get("allow_create", False)), "create_type": jc.get("create_type", "Story")},
+        "voice": voice.view(cfg),
         "llm": {"enabled": bool((cfg.get("llm") or {}).get("enabled", False)), "provider": (cfg.get("llm") or {}).get("provider", "ollama"),
                 "url": (cfg.get("llm") or {}).get("url", "http://127.0.0.1:11434"), "model": (cfg.get("llm") or {}).get("model", ""),
                 "allow_remote": bool((cfg.get("llm") or {}).get("allow_remote", False)),
@@ -1318,6 +1331,9 @@ def build_config(current, p):
         jc["jql_in_progress"] = jql
         jc.pop("helpdesk", None)
         cfg["jira"] = jc
+
+    if p.get("voice") is not None:           # 0.43: Spracherkennung, Regeln in voice.py
+        voice.clean(p["voice"], cfg, errors)
 
     m = p.get("llm")
     if m is not None:

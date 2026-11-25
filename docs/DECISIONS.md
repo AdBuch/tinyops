@@ -2,7 +2,7 @@
 
 Offene und getroffene Entscheide für tinyops. Jeder Eintrag sagt, was zur Wahl steht, was ich empfehle und bis wann es feststehen muss.
 Getroffene Entscheide bleiben stehen, mit Datum und Begründung. Sie gelten, bis ein neuer Eintrag sie ersetzt.
-Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau dazu), seit dem 20.11. ab 0.41 um zwei weitere (Testen von Hand, Reviews in GitLab), seit dem 23.11. ab 0.41 um noch eine (Agent-Branch übernehmen). Die Versionsnummern unten sind schon angepasst.
+Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau dazu), seit dem 20.11. ab 0.41 um zwei weitere (Testen von Hand, Reviews in GitLab), seit dem 23.11. ab 0.41 um noch eine (Agent-Branch übernehmen), seit dem 25.11. ab 0.43 um eine (Voice Prompting). Die Versionsnummern unten sind schon angepasst.
 
 ## Getroffen
 
@@ -43,6 +43,8 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 | 2026-11-23 | **Agenten erben keine Zugangsdaten von tinyops** | Gehört zu E14 («der Agent sieht das Token nie»): Jeder lokale Lauf startet ohne die Umgebungsvariablen, aus denen tinyops Secrets liest (`TINYOPS_<NAME>` und die in der Config genannten). Agenten auf SSH-Rechnern haben ohnehin nur ihre eigene Umgebung (0.42) |
 | 2026-11-23 | «Testen von Hand» und «Reviews in GitLab» kommen zusammen in 0.42 | Dein Wunsch vom 23.11. Der Plan endet damit bei 0.48 statt 0.49 |
 | 2026-11-23 | **Testen:** «Getestet» aus der Liste im Fokus öffnet erst die Prüfliste | Abgenommen wird im Detail-Panel (mit Prüfliste) oder dort direkt mit «Getestet»; ein Klick in der Liste nimmt nicht mehr ungesehen ab (0.42) |
+| 2026-11-25 | **E15: Voice Prompting nur lokal.** Erkannt wird auf einem Server im eigenen Netz (whisper.cpp, Voxtral Mini über vLLM, speaches), wie beim KI-Entwurf: andere Adressen nur mit «Externe Adresse erlauben» | Wunsch vom 25.11. («gerne lokal»). Die Aufnahme geht als WAV nur an diesen Server und wird nirgends gespeichert; im Log stehen nur Länge und Dauer (0.43) |
+| 2026-11-25 | **Sprachbefehle dürfen zuweisen, starten und Review anstossen, immer erst nach deiner Bestätigung** | tinyops zeigt, was es verstanden hat (Ticket oder MR, Agent, Rolle, starten), mit Grund, wenn etwas nicht erlaubt ist. Ausgeführt wird über dieselben Wege wie die Knöpfe. Feste Regeln zuerst, das lokale Sprachmodell nur als Rückfall. Im Verlauf steht die Aktion, nicht der Wortlaut (0.43) |
 
 ## Offen
 

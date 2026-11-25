@@ -333,6 +333,11 @@ def _ask(cfg, key, system, prompt, ssl_ctx=None, what="Anfrage"):
     return text
 
 
+def ask(cfg, key, system, prompt, ssl_ctx=None, what="Anfrage"):
+    """Eine Frage an das lokale Modell, Antwort als Text (0.43: Sprachbefehle)."""
+    return _ask(cfg, key, system, prompt, ssl_ctx, what)
+
+
 BOOKING_SYSTEM = (
     "Du formulierst Texte für Zeitbuchungen eines Entwicklers. Deutsch, sachlich, je höchstens 120 Zeichen, ohne Ticket-Nummer am Anfang "
     "(die setzt das System), ohne Minuten, ohne Füllwörter wie «Arbeit an». Beschreibe, was getan wurde, nur aus den gelieferten Angaben; erfinde nichts. "

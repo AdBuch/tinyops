@@ -5,6 +5,34 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.43.0]
+
+Voice Prompting Wednesday, auf deinen Wunsch: diktieren statt tippen und Agenten per Sprachbefehl beauftragen. Erkannt wird auf einem Server in deinem Netz (dein Wunsch: «gerne lokal»).
+
+### Neu
+- **Spracherkennung, lokal** (Einstellungen → Sprache): tinyops spricht mit zwei Arten von Servern.
+  - **whisper.cpp-Server** (`whisper-server`, läuft auch ohne Grafikkarte)
+  - **OpenAI-kompatibel** (`/v1/audio/transcriptions`): vLLM mit **Voxtral Mini** von Mistral, speaches, faster-whisper-server.
+  - Wie beim KI-Entwurf gehen nur Adressen im eigenen Netz, andere nur mit Haken. «Erkennung testen» schickt eine Sekunde Stille und misst die Zeit.
+  - Der Browser nimmt auf und schickt WAV (16 kHz, mono). Die Aufnahme wird nirgends gespeichert; im Log stehen nur Länge und Dauer.
+- **Diktieren:** In den Prompt-Feldern erscheint oben rechts ein Mikrofon: Auftrag an den Agenten, «Nachricht an …», Freigabe-Notiz, Antwort auf eine Rückfrage, Review-Ziel, Idee, Prüfliste, Ticket-Beschreibung. Klick oder <kbd>Alt</kbd>+<kbd>M</kbd> startet, nochmal beendet, <kbd>Esc</kbd> verwirft. Der Text kommt an die Cursorstelle.
+- **Sprachbefehle an Agenten:** Taste <kbd>v</kbd> oder das Mikrofon oben.
+  - Zum Beispiel: «DLP-123 an Qwen zum Entwickeln», «DLP-123 an Claude planen, nur zuweisen», «DLP-123 Review mit Qwen», «Review für MR 47 mit Claude».
+  - tinyops zeigt, was es verstanden hat: Ticket oder MR, Agent, Rolle, ob gleich gestartet wird. Alles davon ist änderbar. Was nicht erlaubt ist (Cloud-Agent an restricted, kein Worktree, Review ohne fertigen Entwickeln-Lauf), steht mit Grund da, und «Starten» ist gesperrt.
+  - Ausgeführt wird erst auf «Starten», über dieselben Wege wie die Knöpfe. «Im Dialog öffnen» bringt den gewohnten Agenten-Dialog oder den Review-Start, vorausgefüllt.
+  - Was du gesagt hast, geht wörtlich als «Dein gesprochener Auftrag» an den Agenten. Im Verlauf steht die Aktion (`voice.run`), nicht der Wortlaut.
+  - Verstanden wird mit festen Regeln (Ticket-Key, «MR 47», Agentenname, Stichworte für die Rolle, «nur zuweisen»). Nur wenn die kein Ticket finden, fragt tinyops das lokale KI-Modell, falls eingerichtet; auch dann gelten nur Tickets und MRs, die in tinyops stehen.
+- Einstellungen → «Aufrufe nach aussen» listet die Spracherkennung.
+
+### Geändert
+- Prüfliste: `r28-04` bis `r28-06` und `r29-03`, `r29-04`, `r29-07` sind zu je einem Punkt zusammengelegt, damit es unter 60 Punkten von Hand bleibt.
+
+### Grenzen
+- Gegen whisper.cpp und Voxtral selbst habe ich das nicht laufen lassen, nur gegen einen Nachbau ihrer Schnittstellen. Die Aufnahme im Browser ist mit dem Test-Mikrofon von Chromium geprüft.
+- Das Mikrofon geht im Browser nur am Rechner (`localhost`) oder über `https`. Auf dem Handy über `http` gibt es kein Mikrofon.
+- Ticket-Keys erkennt whisper.cpp meist als «DLP-123» oder «DLP 123»; beides geht. Zahlen in Worten («hundertdreiundzwanzig») versteht tinyops nicht.
+- whisper.cpp nimmt die Sprache aus dem Start (`-l de`); die Einstellung «Sprache» schickt tinyops mit, ob dein Server sie beachtet, hängt von seiner Version ab.
+
 ## [0.42.1]
 
 Deine Rückmeldung vom 24.11. zu den Reviews: Der Agent liess sich nicht wählen, und ihm fehlte, worum es im MR geht.

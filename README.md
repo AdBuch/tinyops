@@ -449,6 +449,12 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5j. Voice Prompting (neu in 0.43.0)
+
+Einstellungen → **Sprache**: einen Server zur Spracherkennung in deinem Netz eintragen, zum Beispiel `whisper-server -m models/ggml-small.bin --host 127.0.0.1 --port 8178 -l de` (whisper.cpp) oder Voxtral Mini über vLLM (`vllm serve mistralai/Voxtral-Mini-3B-2507 --tokenizer_mode mistral --config_format mistral --load_format mistral`, OpenAI-kompatibel). Nur Adressen im eigenen Netz; die Aufnahme wird nicht gespeichert.
+
+**Diktieren:** Mikrofon oben rechts in den Prompt-Feldern oder <kbd>Alt</kbd>+<kbd>M</kbd>. **Sprachbefehl:** Taste <kbd>v</kbd>, zum Beispiel «DLP-123 an Qwen zum Entwickeln» oder «Review für MR 47 mit Claude». tinyops zeigt den Vorschlag und führt erst auf «Starten» aus.
+
 ## 5i. Testen von Hand, Review in GitLab, Aufrufe nach aussen (neu in 0.42.0)
 
 **Testen:** Ab der Station «Prüfen» steht im Detail-Panel «Testen von Hand» mit einer Prüfliste: die Akzeptanzkriterien (ohne Agent aus dem Jira-Ticket), die Testschritte von Entwickler und Test-Agent und eigene Punkte. «Jetzt testen» legt einen Worktree auf genau dem Commit des MR (oder dem Branch des Agenten) an, öffnet IntelliJ und startet die Review-Umgebung, wenn eine eingetragen ist. Je Punkt ✓ oder ✗ mit einem Satz. «↺ Fehler zurück an …» schickt die ✗ in die Sitzung des Entwicklers; «Alles ok: Getestet» nimmt am Commit ab. Im Fokus stehen solche Aufgaben unter «Wartet auf deinen Test».
@@ -829,6 +835,8 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     area_test.py         Bereich Testen von Hand: Prüfliste je Ticket, Jetzt testen, Fehler zurück, Abnahme
     area_review.py       Bereich Review mit Agent: Review starten, Befunde, Entwürfe in GitLab
     gitlab_review.py     Review-Entwürfe in GitLab: feste Liste erlaubter Pfade, Diff-Positionen, nie abschicken
+    voice.py             Spracherkennung über einen lokalen Server (whisper.cpp, OpenAI-kompatibel), Einstellungen und Test
+    area_voice.py        Bereich Sprache: diktieren, Sprachbefehle verstehen und nach Bestätigung ausführen
     apicalls.py          jeder Aufruf nach aussen: Liste mit Zweck und Zugang, Zähler für die Einstellungen
     routes.py            HTTP: Zugang (Host, Token, Geräte), Routentabelle, Antworten
     common.py            gemeinsame Bausteine: Fehlerarten, Zeit, Jira-Keys, Secrets auflösen

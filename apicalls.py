@@ -68,6 +68,9 @@ _RAW = (
     ("LLM", "GET", "/api/tags, /v1/models, /models", r"/(api/tags|v1/models|models)", "verfügbare Modelle", False, "Einstellungen, Kopfzeile", "llm_key"),
     ("LLM", "POST", "/api/chat, /v1/chat/completions", r"/(api/chat|v1/chat/completions|chat/completions)", "Text erzeugen (Entwurf, Bewertung, Zeittexte)", False,
      "auf Klick", "llm_key"),
+    # Spracherkennung (0.43): nur im eigenen Netz, ausser allow_remote; nur auf deinen Klick am Mikrofon
+    ("Spracherkennung", "POST", "/v1/audio/transcriptions, /inference", r"/(v1/audio/transcriptions|inference)", "gesprochenen Text erkennen (Aufnahme geht nur dorthin, wird nicht gespeichert)",
+     False, "auf Klick am Mikrofon, Einstellungen: Testen", "voice_key (optional)"),
     # Microsoft 365 (delegiert, ohne Client-Secret)
     ("Microsoft 365", "POST", "login: /:tenant/oauth2/v2.0/{token,devicecode}", r"/%s/oauth2/v2\.0/(token|devicecode)" % N, "anmelden, Zugang erneuern", False,
      "Anmelden, stündlich", "m365_refresh"),

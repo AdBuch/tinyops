@@ -34,7 +34,8 @@ async function rvOpenForm(r, ticket) {
     const o = await post('/api/review/options', ticket === undefined ? rvRef(r) : { ...rvRef(r), ticket });
     if (RV.k !== k) return;
     const ok = o.agents.filter(a => a.ok), last = rvLastAgent();
-    const v = keep || { agent: (ok.find(a => a.id === last) || ok[0] || {}).id || '', ticket: o.ticket ? o.ticket.key : '', goal: '' };
+    const pre = RV.prefill || {}; RV.prefill = null;      // 0.43: aus einem Sprachbefehl
+    const v = keep || { agent: (ok.find(a => a.id === (pre.agent || last)) || ok[0] || {}).id || '', ticket: pre.ticket ?? (o.ticket ? o.ticket.key : ''), goal: pre.goal || '' };
     if (ticket !== undefined) v.ticket = ticket;
     RV.form = { o, v };
   } catch (err) { RV.form = { error: err.message, v: keep }; }

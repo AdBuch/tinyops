@@ -15,6 +15,7 @@ import links
 import settings
 import sonar
 import tlog
+import voice
 from common import UserError, extract_keys, ignored_branch, parse_ts
 from gitlab_client import branch_cfg, classify_commits, identity
 from secretstore import scrub
@@ -640,5 +641,6 @@ class SyncArea:
             "pools": self.pools_view(data),
             "ai": self.store.ai_accounts() if self.has("ai") else [],
             "agents": agents_v,
+            "voice": {"enabled": voice.ready(voice.cfg_of(self.cfg)), "max": int(voice.cfg_of(self.cfg).get("max_seconds") or 120)},   # 0.43
         })
         return data

@@ -23,7 +23,7 @@ async function loadSettings() {
    <nav class="setnav" aria-label="Abschnitte">
      <button data-goto="gitlab" class="on">GitLab</button><button data-goto="identity">Meine Commits</button>
      <button data-goto="filters">Filter</button><button data-goto="jira">Jira</button>
-     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="update">Update und Dienst</button><button data-goto="calls">Aufrufe nach aussen</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
+     <button data-goto="github">GitHub</button><button data-goto="sonar">Sonar</button><button data-goto="agents">Agenten</button><button data-goto="ide">IntelliJ</button><button data-goto="usage">KI-Kontingent</button><button data-goto="llm">KI-Entwurf</button><button data-goto="voice">Sprache</button><button data-goto="time">Zeit</button><button data-goto="focusareas">Fokus</button><button data-goto="workspaces">Workspaces</button><button data-goto="helpdesk">Helpdesk</button><button data-goto="m365">Microsoft 365</button><button data-goto="app">App und Handy</button><button data-goto="update">Update und Dienst</button><button data-goto="calls">Aufrufe nach aussen</button><button data-goto="more">Weiteres</button><button data-goto="where">Ablage</button>
    </nav>
    <div>
   ${sect('gitlab', 'GitLab', 'Zeigt deine MRs, die Review-Queue und offene Branches. Der Token braucht nur Leserechte.', `
@@ -264,6 +264,29 @@ async function loadSettings() {
     <div class="row"><button class="primary" id="lm-test">Verbindung testen</button></div>
     <div id="lm-result"></div>`)}
 
+  ${sect('voice', 'Sprache', 'Diktieren in Prompt-Felder und Sprachbefehle an Agenten. Erkannt wird auf einem Server in deinem Netz; die Aufnahme geht nur dorthin und wird nicht gespeichert.', `
+    <label class="check"><input type="checkbox" id="vo-on" ${S.voice.enabled ? 'checked' : ''}><span><strong>Spracherkennung einschalten</strong></span></label>
+    <div class="grid2">
+      <div class="field"><label for="vo-kind">Art des Servers</label>
+        <select class="full" id="vo-kind">${S.voice.kinds.map(k => `<option value="${esc(k.id)}" ${k.id === S.voice.kind ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}</select>
+        <div class="help">tinyops ruft <code id="vo-path">${esc((S.voice.kinds.find(k => k.id === S.voice.kind) || S.voice.kinds[0]).path)}</code> auf.</div></div>
+      ${field('vo-url', 'Adresse', S.voice.url, { err: 'voice.url', ph: 'http://127.0.0.1:8178', help: 'Nur Adressen im eigenen Netz, wie beim KI-Entwurf.' })}
+    </div>
+    <div class="grid2">
+      ${field('vo-model', 'Modell', S.voice.model, { err: 'voice.model', ph: 'mistralai/Voxtral-Mini-3B-2507', help: 'Nur beim OpenAI-kompatiblen Server: der Name, den der Server unter /v1/models nennt. Bei whisper.cpp leer lassen (das Modell wählt der Server beim Start).' })}
+      <div class="field"><label for="vo-lang">Sprache</label>
+        <select class="full" id="vo-lang">${[['de', 'Deutsch'], ['en', 'Englisch'], ['fr', 'Französisch'], ['it', 'Italienisch'], ['auto', 'erkennen lassen']].map(([v, l]) => `<option value="${v}" ${v === S.voice.language ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <div class="help">Fest eingestellt ist die Erkennung schneller und sicherer. Fachwörter wie Ticket-Keys kommen auf Deutsch meist richtig an.</div></div>
+    </div>
+    <div class="grid2">
+      ${field('vo-max', 'Längste Aufnahme in Sekunden', S.voice.max_seconds, { type: 'number', err: 'voice.max_seconds', help: 'Danach endet die Aufnahme von selbst (10 bis 300).' })}
+      ${field('vo-key', 'Schlüssel (optional)', '', { type: 'password', ph: S.secrets.voice_key && S.secrets.voice_key.set ? '•••••••• gespeichert' : 'nur wenn der Server einen verlangt', err: 'voice_key', help: 'Zum Beispiel <code>vllm serve … --api-key</code>. Lokal meist leer.' })}
+    </div>
+    <label class="check"><input type="checkbox" id="vo-remote" ${S.voice.allow_remote ? 'checked' : ''}>
+      <span>Adresse ausserhalb des eigenen Netzes erlauben <span class="quiet small">(nicht empfohlen: deine Sprache verlässt dann das Netz)</span></span></label>
+    <div class="row"><button class="primary" id="vo-test">Erkennung testen</button></div>
+    <div id="vo-result"></div>`)}
+
   ${sect('app', 'App und Handy', 'tinyops als eigenes Fenster auf dem Rechner und als App auf dem Handy. Das Panel bleibt dabei nur für gekoppelte Geräte offen.', `
     <div class="row" style="align-items:center;gap:12px;margin-bottom:14px"><button id="app-install" ${PWA.prompt ? '' : 'disabled'}>${ic('plus')} Als App installieren</button>
       <span class="quiet small" id="app-inst-msg">${PWA.installed ? 'Läuft schon als App.' : PWA.prompt ? 'Öffnet tinyops in einem eigenen Fenster, mit Symbol im Dock oder Startmenü.' : 'Chrome oder Edge: Menü → «App installieren». Safari: Teilen → «Zum Home-Bildschirm».'}</span></div>
@@ -318,6 +341,10 @@ async function loadSettings() {
     renderLlmKey();
   };
   $('us-test').onclick = testUsage;
+  $('vo-test').onclick = testVoice; $('vo-kind').onchange = () => {          // 0.43: Art wechseln setzt die übliche Adresse, solange keine eigene drinsteht
+    const k = S.voice.kinds.find(x => x.id === val('vo-kind')), cur = val('vo-url');
+    if (k) { $('vo-path').textContent = k.path; if (!cur || S.voice.kinds.some(x => x.url === cur)) $('vo-url').value = k.url; }
+  };
   $('sq-test').onclick = testSonar; if ($('sq-del')) $('sq-del').onclick = () => delSecrets(['sonar_token'], 'Sonar-Token');
   $('gl-test').onclick = testGitlab; $('ji-test').onclick = testJira; $('st-save').onclick = saveSettings;
   $('pj-search').onclick = searchProjects; $('pj-q').onkeydown = ev => { if (ev.key === 'Enter') searchProjects(); };
@@ -433,6 +460,15 @@ function renderLlmKey() {
     help: secretHelp('llm_key', 'Schlüssel') + ' Lokale Server brauchen meist keinen.' }) : '';
 }
 function llmForm() { return { provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout'), secret: $('lm-secret') ? $('lm-secret').value : '' }; }
+async function testVoice() {
+  const out = $('vo-result');
+  await busy($('vo-test'), 'Teste …', async () => {
+    try {
+      const r = await api('POST', '/api/settings/test/voice', { kind: val('vo-kind'), url: val('vo-url'), model: val('vo-model'), language: val('vo-lang'), allow_remote: $('vo-remote').checked, secret: val('vo-key') });
+      out.innerHTML = stepsHtml(r).replace('Verbindung in Ordnung.', 'Die Spracherkennung antwortet.');
+    } catch (e) { out.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+  });
+}
 async function testLlm() {
   const out = $('lm-result');
   await busy($('lm-test'), 'Teste …', async () => {
@@ -766,6 +802,7 @@ function collect() {
   if ($('sq-secret').value.trim()) secrets.sonar_token = $('sq-secret').value;
   if ($('gh-secret').value.trim()) secrets.github_token = $('gh-secret').value;
   if ($('lm-secret') && $('lm-secret').value.trim()) secrets.llm_key = $('lm-secret').value;
+  if ($('vo-key') && $('vo-key').value.trim()) secrets.voice_key = $('vo-key').value;
   if ($('bc-secret') && $('bc-secret').value.trim()) secrets.bcs_token = $('bc-secret').value;
   if ($('hd-secret') && $('hd-secret').value.trim()) secrets[val('hd-auth') === 'bearer' ? 'helpdesk_token' : 'helpdesk_password'] = $('hd-secret').value;
   return {
@@ -781,6 +818,7 @@ function collect() {
       allow_create: $('ji-create').checked, create_type: val('ji-ctype') },
     usage: { claude: $('us-claude').checked, codex: $('us-codex').checked, mistral: $('us-mistral').checked, claude_file: val('us-claude-file'), codex_file: val('us-codex-file'), cache_seconds: val('us-cache') },
     sonar: { enabled: $('sq-on').checked, url: val('sq-url'), cache_seconds: val('sq-cache'), max_items: val('sq-max'), report_max: val('sq-rep') },
+    voice: { enabled: $('vo-on').checked, kind: val('vo-kind'), url: val('vo-url'), model: val('vo-model'), language: val('vo-lang'), allow_remote: $('vo-remote').checked, max_seconds: val('vo-max') },
     llm: { enabled: $('lm-on').checked, provider: val('lm-prov'), url: val('lm-url'), model: val('lm-model'), allow_remote: $('lm-remote').checked, timeout: val('lm-timeout') },
     features: { ideas: $('ft-ideas').checked, ai: $('ft-ai').checked, score: $('ft-score').checked },
     ux: { enabled: $('ux-on').checked, days: val('ux-days') },

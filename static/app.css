@@ -1005,3 +1005,21 @@
   .rvrow textarea { resize: vertical; }
   .rvinfo { margin-left: 74px; } .rvinfo .bad { color: var(--bad); }
   @media (max-width: 600px) { .rvrow { grid-template-columns: 1fr; gap: 4px; } .rvinfo { margin-left: 0; } }
+  /* 0.43: Voice Prompting */
+  #voiceBtn { display: inline-flex; align-items: center; padding: 6px 8px; } #voiceBtn[hidden] { display: none; } #voiceBtn svg { width: 18px; height: 18px; }
+  .vmic { position: fixed; z-index: 60; height: 28px; min-width: 28px; padding: 0 6px; display: inline-flex; gap: 4px; align-items: center; justify-content: center;
+    border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--quiet); font-size: 12px; cursor: pointer; }
+  .vmic svg { width: 15px; height: 15px; } .vmic:hover { color: var(--ink); border-color: var(--ink); }
+  .vmic.rec { color: #fff; background: var(--bad); border-color: var(--bad); box-shadow: 0 0 0 calc(var(--lvl, 0) * 8px) color-mix(in srgb, var(--bad) 30%, transparent); }
+  .vmic.busy { color: var(--focus); border-color: var(--focus); }
+  #vBar { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; gap: 10px;
+    padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+  #vBar .vrow { display: flex; gap: 10px; align-items: center; } #vBar .vrow.wrap { flex-wrap: wrap; } #vBar .sp { flex: 1; }
+  #vBar .vdot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); animation: vpulse 1s ease-in-out infinite; }
+  @keyframes vpulse { 50% { opacity: .3; } } @media (prefers-reduced-motion: reduce) { #vBar .vdot { animation: none; } }
+  #vBar .vsaid { color: var(--quiet); font-style: italic; overflow-wrap: anywhere; }
+  #vBar .vplan { display: grid; gap: 8px; } #vBar .vwhat { font-size: 15px; overflow-wrap: anywhere; }
+  #vBar label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--quiet); }
+  #vBar select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; max-width: 260px; }
+  #vBar .warn-t { color: var(--warn); }
+  @media (max-width: 700px) { #vBar { bottom: 84px; } }

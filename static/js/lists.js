@@ -330,6 +330,7 @@ function renderAside() {
   const f = F();
   $('ideasBox').hidden = !f.ideas;
   $('ideaBtn').hidden = !f.ideas;
+  renderVoice();                                   // 0.43: «Sagen» nur mit Spracherkennung und Agenten
   const hasUsage = !!(state.usage_providers || []).length;
   $('usageBox').hidden = !hasUsage;
   renderUsageBox();

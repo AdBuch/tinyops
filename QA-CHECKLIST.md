@@ -103,6 +103,17 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.43.0
+
+Voice Prompting: diktieren und Sprachbefehle an Agenten, erkannt auf deinem Server. Damit die Liste unter 60 Punkten von Hand bleibt, sind `r28-04` bis `r28-06` (Microsoft 365 im Fokus) und `r29-03`, `r29-04`, `r29-07` (BCS) zu je einem Punkt zusammengelegt; du prüfst sie ohnehin zusammen mit den echten Systemen.
+
+- [ ] `r43-01` Einstellungen → Sprache: whisper.cpp (`whisper-server -m models/ggml-small.bin --host 127.0.0.1 --port 8178 -l de`) oder Voxtral Mini über vLLM eintragen, «Erkennung testen» → grün, mit Dauer; danach Einstellungen → «Aufrufe nach aussen» zeigt «Spracherkennung»
+- [ ] `r43-02` Agent zuweisen → im Auftrag oben rechts das Mikrofon (oder Alt+M), zwei Sätze sprechen, nochmal klicken → der Text steht an der Cursorstelle, Umlaute und Ticket-Keys stimmen; ebenso in «Nachricht an …», im Review-Ziel und in der Idee (Taste i)
+- [ ] `r43-03` Taste v: «DLP-… an <dein Agent> zum Entwickeln» → Vorschlag mit Ticket, Agent und Rolle; einen Cloud-Agenten an einem restricted-Projekt wählen → ausgegraut mit Grund; zurück, «Starten» → der Lauf läuft, im Auftrag steht «Dein gesprochener Auftrag»; dann «Review für MR … mit …» → Review startet
+- [ ] `r43-04` Erkennung: whisper.cpp und OpenAI-kompatibel, nur eigenes Netz, nur WAV, Länge begrenzt, Stille ergibt keinen Text [auto: test_v43.Transcribe]
+- [ ] `r43-05` Sprachbefehle: Ticket, MR, Agent, Rolle, «nur zuweisen», nicht Erlaubtes mit Grund, Rückfall aufs lokale Modell nur mit bekannten Tickets [auto: test_v43.Commands]
+- [ ] `r43-06` Ausführen nur über Zuweisen, Starten, Review-Start; gesprochener Auftrag im Prompt, nicht im Verlauf; Demo startet nichts [auto: test_v43.Run]
+
 ## 0.42.0
 
 Seit 0.42 prüft ein Test `b-13`, `b-14` und `b-15` (Schritt ohne Ticket, tiny-Ticket, Teilschritte); dafür ist Platz für die drei Punkte unten.
@@ -233,10 +244,8 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 
 - [ ] `r29-01` Einstellungen → Zeiterfassung → BCS-Middleware: Adresse `http://127.0.0.1:3210` oder, mit Haken «Middleware im eigenen Netz», die Adresse des Windows-Hosts (und Token, falls gesetzt) speichern → in der Zeit-Ansicht erscheint die Karte «BCS» mit Anwesenheit und den Einträgen des Tages
 - [ ] `r29-02` Eine Adresse ausserhalb von 127.0.0.1/localhost wird beim Speichern abgelehnt [auto: test_v29.Unit]
-- [ ] `r29-03` Entwurf bestätigen → «BCS-Aufgabe wählen» → Suche findet die Aufgabe, «oft gebucht» zeigt Vorschläge; mit «für alle DLP-… merken» haben auch andere DLP-Entwürfe die Aufgabe
-- [ ] `r29-04` «In BCS prüfen» → Dialog zeigt die Buchungen mit «DLP-… …», in BCS ist noch nichts gebucht; dann «In BCS buchen» → «In BCS gebucht», in BCS stehen die Einträge genau einmal
+- [ ] `r29-04` Mit der echten Middleware einmal ganz: Entwurf bestätigen → «BCS-Aufgabe wählen» (Suche, «oft gebucht», «für alle DLP-… merken») → «In BCS prüfen» zeigt die Buchungen mit «DLP-… …», in BCS ist noch nichts gebucht; eine Warnung der Middleware (unbekannte Aufgabe, Konflikt) steht im Dialog und «In BCS buchen» fehlt dann; ohne Warnung «In BCS buchen» → «In BCS gebucht», in BCS stehen die Einträge genau einmal (seit 0.43 mit `r29-03` und `r29-07`)
 - [ ] `r29-06` Entwurf nach dem Prüfen ändern, dann buchen → tinyops verlangt eine neue Prüfung [auto: test_v29.Flow]
-- [ ] `r29-07` Eine Warnung der Middleware (unbekannte Aufgabe, Konflikt) steht im Dialog, «In BCS buchen» fehlt dann
 - [ ] `r29-08` Middleware im Probelauf: «In BCS buchen» meldet «Probelauf», die Entwürfe bleiben bestätigt [auto: test_v29.Flow]
 - [ ] `r29-09` Middleware während «In BCS buchen» stoppen → Entwürfe «unklar», gesperrt; nach dem Neustart «Mit BCS abgleichen» → gebucht oder zurück auf bestätigt, nichts doppelt [auto: test_v29.Flow]
 - [ ] `r29-10` «Lernende» aufklappen → Wochen-, Jahressaldo und Ferien übrig wie in BCS
@@ -246,9 +255,7 @@ Abgelöst, weil neuere Punkte dasselbe prüfen: `r20-07` und `r20-08` durch `r32
 ## 0.28.0
 
 - [ ] `r28-01` Einstellungen → Microsoft 365: Tenant und Client-ID speichern, «Anmelden» (oder «Mit Code anmelden») mit 2FA → «Angemeldet als …», im Log «Microsoft 365: angemeldet»
-- [ ] `r28-04` Fokus: Karte «Heute» zeigt die Termine von heute in der richtigen Uhrzeit, abgesagte fehlen; «Beitreten» erscheint kurz vor Beginn
-- [ ] `r28-05` Fokus: «Wartet auf dich» zeigt eine Mail direkt an dich, die du noch nicht beantwortet hast; nach dem Antworten verschwindet sie beim nächsten Lesen
-- [ ] `r28-06` Ein ungelesener Teams-Chat erscheint unter «Teams, ungelesen»; nach dem Lesen in Teams verschwindet er
+- [ ] `r28-04` Fokus mit echtem Konto: «Heute» zeigt die Termine von heute in der richtigen Uhrzeit, abgesagte fehlen, «Beitreten» kurz vor Beginn; «Wartet auf dich» zeigt eine Mail direkt an dich, die du noch nicht beantwortet hast, nach dem Antworten verschwindet sie; ein ungelesener Teams-Chat steht unter «Teams, ungelesen» und verschwindet nach dem Lesen (seit 0.43 mit `r28-05` und `r28-06`)
 - [ ] `r28-07` Vergangener Termin → «als Zeit» → auf ein Ticket übernehmen → steht in der Zeiterfassung; ein zweites Mal wird abgelehnt [auto: test_v28.AppM365]
 - [ ] `r28-08` «Fokuszeit im Kalender eintragen dürfen» an, neu anmelden, Sitzung mit Haken starten → Termin «Fokus: …» im Outlook-Kalender
 - [ ] `r28-09` Tags darauf ohne neue Anmeldung kommen die Daten weiter; «Abmelden» → «Nicht angemeldet», das gespeicherte Token ist weg
