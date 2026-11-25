@@ -1,8 +1,8 @@
 # tinyops Roadmap
 
-**Stand:** 2026-11-25. Ab hier gilt der Plan 0.33–0.50. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
+**Stand:** 2026-11-25. Ab hier gilt der Plan 0.33–0.53. Der frühere Plan 0.15–0.20 und alle Releases bis 0.32 stehen weiter unten.
 
-## Plan 0.33 – 0.50: aufräumen, entscheiden, dann wenig Neues
+## Plan 0.33 – 0.53: aufräumen, entscheiden, dann wenig Neues
 
 **17.11.:** Auf deinen Wunsch kam vor dem Umbau noch 0.36.0 mit deinen Wünschen und dem Bericht vom 17.11. Alles ab «Server zerlegen» rückt um eine Version nach hinten. Die App (PWA) mit Handy-Kopplung ist aus dem letzten Release vorgezogen; dort bleibt der zweite Bereich.
 
@@ -19,6 +19,8 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 **23.11., später:** Testen von Hand und Reviews in GitLab kamen zusammen in 0.42.0 (dein Wunsch: «implementier 42 mit den agent-reviews, und testing enhancements»). Alles ab «Einstellungen und Datenbank» rückt eine Version nach vorne; der Plan endet mit 0.48.
 
 **25.11.:** Voice Prompting Wednesday: auf deinen Wunsch kommt 0.43.0 mit Diktieren und Sprachbefehlen an Agenten, alles mit einem lokalen Modell. Das bricht die Regel vom 24.11. («erst die Prüfliste») bewusst, auf deinen Wunsch. Alles ab «Einstellungen und Datenbank» rückt um eine Version nach hinten. Am selben Tag kam 0.44.0 dazu (eingebautes Whisper ohne Grafikkarte); der Plan endet jetzt mit 0.50.
+
+**25.11., abends:** Deine Berichte zu 0.44.1 (Prüfliste 22 geprüft, 0 Fehler; Nutzungsbericht mit fünf Wünschen). Dein Vorschlag: zuerst das Refactoring. Darum bleibt 0.45 «Einstellungen und Datenbank». Danach kommen deine Wünsche in drei Releases (0.46 bis 0.48), vor «Tests und Doku». Alles ab «Tests und Doku» rückt um drei Versionen nach hinten; der Plan endet mit 0.53. Das Agentenpanel (0.47) ist der erste Teil des Redesigns vom 24.11.
 
 **24.11.:** Deine Rückmeldung: «es ist momentan ein bisschen viel». Offen sind Outlook und Teams mit echten Konten zu testen, das Härten der Anbindungen (0.45) und ein **Redesign der Oberfläche** (neu, noch ohne Termin). Bis du die Prüfliste 0.40 bis 0.42 durch hast, kommen nur Korrekturen aus deinen Rückmeldungen (wie 0.42.1), keine neuen Themen. Wo das Redesign hingehört, entscheiden wir danach; ein Kandidat ist der Platz von «Tests und Doku» (seit 25.11.: 0.46), weil Tests und Doku ohnehin dem neuen Aussehen folgen müssten.
 
@@ -47,12 +49,15 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 | **0.42.0/0.42.1** ✓ | Testen von Hand und Reviews in GitLab: Prüfliste je Ticket mit «Jetzt testen», Fehler zurück ans Entwickeln; «▶ Review mit Agent» mit Befunden als deine Entwürfe in GitLab (E14); jeder Aufruf nach aussen in den Einstellungen; dazu Korrekturen aus dem Bericht vom 23.11. (geliefert 2026-11-23). 0.42.1: beim Review den Agenten wählen und Ticket und Ziel des MR mitgeben (Rückmeldung vom 24.11.) | Neu + Korrekturen | E14 ✓ |
 | **0.43.0** ✓ | Voice Prompting: Mikrofon an den Prompt-Feldern (Auftrag, «Nachricht an …», Review-Ziel, Ideen, Prüfliste), Sprachbefehle an Agenten (zuweisen, starten, Review anstossen) mit Bestätigung; Erkennung nur über einen Server im eigenen Netz (whisper.cpp, Voxtral Mini über vLLM, speaches) (geliefert 2026-11-25) | Wunsch | E15 ✓ |
 | **0.44.0/0.44.1** ✓ | Eingebautes Whisper: tinyops baut whisper.cpp für deinen Prozessor, lädt das Modell (small, base, turbo) mit Prüfsumme und startet den Server selbst, nur auf 127.0.0.1; ohne Grafikkarte (geliefert 2026-11-25). 0.44.1: Review-Befunde auch von Agenten ohne `tinyops-finding` (aus dem Bericht gelesen) und vor dem Anlegen bearbeitbar (Rückmeldung vom 25.11.) | Wunsch + Korrektur | E15 ✓ |
-| 0.45.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version | Refactoring | – |
-| 0.46.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
-| 0.47.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
-| 0.48.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab), tinyops ohne Code-Plattform nutzbar | Neu, klein | – |
-| 0.49.0 | Neu: angefangene Projekte aus Claude, ChatGPT und Mistral tracken | Neu, klein | E8 |
-| 0.50.0 | Neu: zweiter Bereich (Privat/Geschäft) mit eigenem Worker; die App gibt es seit 0.36 | Neu | E7 |
+| 0.45.0 | Einstellungen und Datenbank: Schema statt Handarbeit, Migrationen mit Version; `settings.py` (1'630 Zeilen) geteilt | Refactoring | – |
+| 0.46.0 | Aufräumen und Zugang: Worktrees aufräumen, lokal und auf den Agenten-Rechnern; Zugriff von aussen (Handy) in den Einstellungen, nur mit Zugangsschlüssel; Review-Start ohne Ordner bietet Klonen an | Wünsche + Korrekturen | – |
+| 0.47.0 | Agentenpanel neu: Gespräch, Akzeptanzkriterien, Review-Punkte und Log klar getrennt; die vier Vorlagen direkt erreichbar; im Auftrag wählst du, welche Kriterien und Review-Punkte jetzt drankommen | Wunsch (Redesign, Teil 1) | – |
+| 0.48.0 | Commits einzeln: Liste je Commit mit dem, was passiert ist; Review je Commit, auch Zeilen-Review auf eigene Tickets | Wunsch | – |
+| 0.49.0 | Tests und Doku neu ordnen: nach Modul statt nach Version, README als Handbuch | Aufräumen | – |
+| 0.50.0 | Echte Anbindungen härten: BCS, M365, Helpdesk, Agent auf der devops-Maschine | Korrekturen | – |
+| 0.51.0 | Neu: weitere Projekte tracken (ausserhalb von Jira/GitLab), tinyops ohne Code-Plattform nutzbar | Neu, klein | – |
+| 0.52.0 | Neu: angefangene Projekte aus Claude, ChatGPT und Mistral tracken | Neu, klein | E8 |
+| 0.53.0 | Neu: zweiter Bereich (Privat/Geschäft) mit eigenem Worker; die App gibt es seit 0.36 | Neu | E7 |
 
 ### Entscheide (mit meiner Empfehlung)
 
@@ -64,9 +69,9 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 | E4 | Fokus: Fokusbereiche, Wochenziel, Fokus-Sitzung, Fokus-Modus, Fokus-Leiste? | **Entschieden 2026-11-16:** **Fokus** (mit Sitzung) und **Bereiche** (Wochenziel); «Fokus-Modus» heisst «Vollbild» | 0.35 |
 | E5 | Standard-Zyklus der Agenten? | **Entschieden 2026-11-16:** Umsetzen → Review, Planen und Test je Ticket zuschaltbar | 0.40 |
 | E6 | Oberfläche mit oder ohne Build-Schritt? | **Entschieden 2026-11-16:** Build (React) nur für die eigene Privat-App; die tinyops-Seite bleibt ohne Build | 0.39 |
-| E7 | Privat und Geschäft? | **Entschieden 2026-11-16:** zwei lokale Instanzen; die Privat-App in eigenem Repo mit eigenem Release-Zyklus (E7a) | 0.50 |
-| E8 | KI-Projekte: woher kommen die Daten? | Lesezeichen und Daten-Export, dazu neu (18.11.): ein Prompt, mit dem die Chat-App deine offenen Themen als JSON liefert, und die lokalen Sitzungen der Coding-Agenten. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.49 |
-| E9–E11 | App: React-PWA, HTTPS mit echtem Namen, Heim- und Arbeitsadresse je Instanz | **Entschieden 2026-11-16** (siehe Entscheide) | 0.50 |
+| E7 | Privat und Geschäft? | **Entschieden 2026-11-16:** zwei lokale Instanzen; die Privat-App in eigenem Repo mit eigenem Release-Zyklus (E7a) | 0.53 |
+| E8 | KI-Projekte: woher kommen die Daten? | Lesezeichen und Daten-Export, dazu neu (18.11.): ein Prompt, mit dem die Chat-App deine offenen Themen als JSON liefert, und die lokalen Sitzungen der Coding-Agenten. Nie Browser-Cookies, kein Auslesen fremder Sitzungen | 0.52 |
+| E9–E11 | App: React-PWA, HTTPS mit echtem Namen, Heim- und Arbeitsadresse je Instanz | **Entschieden 2026-11-16** (siehe Entscheide) | 0.53 |
 | E12 | Dürfen Agenten pushen? | **Entschieden 2026-11-17:** je Agent einschaltbar; nur der eigene Lauf-Branch. tinyops selbst pusht nie | 0.36 |
 | E14 | Darf tinyops in GitLab Review-Kommentare anlegen? | **Entschieden 2026-11-20:** nur als deine Entwürfe (`draft_notes`) mit eigenem Token; abschicken, Approve und Merge nie | 0.42 |
 | E13 | Wie koppelt sich ein Gerät? | **Entschieden 2026-11-17:** Einmal-Code je Gerät; die tinyops-Seite per Cookie, die eigene React-App per Token und CORS | 0.36 |
@@ -202,19 +207,40 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 - Voxtral bleibt über den OpenAI-kompatiblen Weg möglich, braucht aber eine Grafikkarte.
 - 0.44.1: Ein anderer Agent lieferte das Review nur als Text. tinyops liest Befunde jetzt auch aus Bericht und letzter Antwort (Block, JSON, Tabelle, Aufzählung), und du bearbeitest die Liste vor dem Anlegen in GitLab.
 
-**0.45.0 – Einstellungen und Datenbank**
-- `settings.py`: ein Schema je Feld (Typ, Grenzen, Hilfe) statt handgeschriebener Prüfungen. Die Oberfläche liest die Hilfe aus derselben Quelle.
-- Datenbank mit `schema_version` und nummerierten Migrationen statt tolerantem `alter table`.
+**0.45.0 – Einstellungen und Datenbank** (Refactoring, auf deinen Vorschlag vom 25.11. vor den neuen Wünschen)
+- `settings.py` (1'630 Zeilen) teilen: Verbindungstests in ein eigenes Modul, Speichern und Anzeigen nach Schema.
+- Ein Schema je Feld (Typ, Grenzen, Hilfe) statt handgeschriebener Prüfungen. Die Oberfläche liest die Hilfe aus derselben Quelle.
+- Datenbank mit `schema_version` und nummerierten Migrationen statt tolerantem `alter table`. Die neuen Tabellen für 0.46 bis 0.48 (Commits, Zugang) kommen dann als Migration dazu.
 - Veraltete Einstellungen werden beim Laden migriert und entfernt.
 - **Fertig, wenn:** Eine neue Einstellung ist eine Zeile im Schema, und ein Upgrade von 0.25 auf 0.45 ist getestet.
 
-**0.46.0 – Tests und Doku**
+**0.46.0 – Aufräumen und Zugang** (Wünsche vom 25.11.)
+- **Worktrees aufräumen, lokal und auf den Agenten** («cleanup von work trees muss funktionieren»): Eine Liste aller Worktrees von tinyops, je Ort (dieser Rechner, jeder Agenten-Rechner über SSH), mit Lauf, Alter, Branch und ob er sauber ist. «Aufräumen» entfernt alle sauberen, deren Commits auf einem Branch liegen; geänderte bleiben mit Grund. Auch `git worktree prune` für verwaiste Einträge.
+- **Zugriff von aussen** («alles, was nicht 127.0.0.1 ist, vorerst nur mit Accesskey»): Einstellungen → App und Handy: Adresse wählen (Netzwerk-Schnittstelle oder alle), Zugangsschlüssel erzeugen und anzeigen, erlaubte Hostnamen. Ohne Schlüssel lässt sich nichts ausser 127.0.0.1 einschalten. Bisher ging das nur über `config.json` und `--set-secret access_token`. Gekoppelte Geräte (0.36) bleiben wie sie sind.
+- **Korrekturen aus dem Bericht:** «Review mit Agent» scheiterte 8× an «Arbeitsverzeichnis gibt es nicht»; der Start bietet dann «Jetzt klonen» an (wie beim Zuweisen seit 0.27). `systemctl --user daemon-reload` schlug einmal fehl; die Meldung sagt, was zu tun ist. Der Rückfall der Sprachbefehle aufs lokale Modell dauerte 75 s; nach 15 s bricht tinyops ab und zeigt die Beispiele.
+- **Fertig, wenn:** Nach einem Tag mit Agenten bleibt nach «Aufräumen» kein sauberer Worktree liegen, und das Handy erreicht tinyops nur mit Schlüssel.
+
+**0.47.0 – Agentenpanel neu** (Wünsche vom 25.11.; erster Teil des Redesigns)
+- **Klare Trennung** («sehr kompliziert und unübersichtlich»): oben Rolle, Stand und nächster Schritt; darunter Reiter **Gespräch** (Auftrag, deine Nachrichten, Antworten), **Kriterien** (je AK Stand und Beleg), **Review-Punkte** (Befunde mit Datei:Zeile, offen oder erledigt), **Änderungen** (Commits, Dateien) und **Log**.
+- **Log lesbar:** Werkzeugaufrufe, Befehle und Fehler als Zeilen mit Symbol, lange Ausgaben zugeklappt, Suche.
+- **Vorlagen direkt** («klarer Zugriff auf alle 4 default prompts»): Planen, Entwickeln, Review und Test als Reiter im Auftrag, je mit «Ansehen», «Bearbeiten», «Zurücksetzen». Die Vorlage gilt für alle Tickets, deine Änderung für dieses eine.
+- **Auswahl, was jetzt drankommt** («genau auswählen, welche Review-Punkte oder AK jetzt umgesetzt werden»): Beim Planen, Entwickeln und Nachbessern stehen alle Kriterien und offenen Review-Punkte als Haken; nur die angehakten gehen in den Auftrag, die anderen als «nicht in dieser Runde».
+- Aus dem Bericht: 10 Wutklicks und 2.8 s Zögern im Agentenfenster; 35 tote Klicks auf den Hintergrund im Fokus.
+- **Fertig, wenn:** Du findest in einem fertigen Lauf ohne Suchen, was der Agent gesagt hat, welche Kriterien offen sind und welche Review-Punkte noch fehlen.
+
+**0.48.0 – Commits einzeln** (Wunsch vom 25.11.: «der ganze Workflow muss dynamischer, aber auch durchlässiger werden»)
+- **Liste je Commit** im Detail-Panel und im Lauf: Nachricht, Autor (Agent oder Mensch), Dateien mit +/−, und was der Bericht des Agenten dazu sagt.
+- **Review je Commit:** «Review mit Agent» für einen oder mehrere Commits statt für den ganzen MR; die Befunde hängen am Commit.
+- **Zeilen-Review auf eigene Tickets:** dasselbe Review wie bei Kollegen-MRs (0.42/0.44.1) auch für deine eigenen Branches und die deiner Agenten, mit Befunden zum Zurückschicken ans Entwickeln statt als Entwurf in GitLab.
+- **Fertig, wenn:** Ein Commit eines Agenten lässt sich einzeln ansehen, reviewen und mit den Befunden zurückschicken.
+
+**0.49.0 – Tests und Doku**
 - 13 Testdateien `test_vNN.py` gehen in Testdateien je Modul auf.
 - Das README wird ein Handbuch nach Themen statt der Abschnitte «neu in 0.x».
 - Die Hilfe in der Oberfläche verweist auf dieselben Kapitel.
 - **Fertig, wenn:** Zu jedem Modul gibt es eine Testdatei, und das README hat höchstens 15 Kapitel.
 
-**0.47.0 – Echte Anbindungen härten**
+**0.50.0 – Echte Anbindungen härten**
 - Mit dir gemeinsam:
   - BCS gegen die echte Middleware
   - M365 nur, wenn du es dann brauchst (20.11.: kein Schwerpunkt)
@@ -224,24 +250,43 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 - Fehlerbilder, die dabei auftauchen, werden zu Tests mit Fault-Injection.
 - **Fertig, wenn:** Jede Anbindung ist einmal echt gelaufen oder hat einen klaren Blocker, den die IT lösen muss.
 
-**0.48.0 – Weitere Projekte tracken**
+**0.51.0 – Weitere Projekte tracken**
 - Ein «Vorhaben» ohne Jira und GitLab: Name, Ziel, nächster Schritt, Status, Links. Optional mit einem Ordner aus Workspaces oder einem GitHub-Repo.
 - Erscheint im Fokus und in den Listen wie ein Ticket.
 - **Ohne Code-Plattform nutzbar** (19.11.): tinyops läuft auch nur mit Workspaces, Ideen und Vorhaben, etwa zu Hause ohne GitLab. Die Meldung «GitLab-Adresse fehlt» erscheint nicht mehr, wenn GitHub oder gar keine Plattform eingerichtet ist.
 - **Forgejo** als dritte Quelle neben GitLab und GitHub, sobald du eines hast. Gehört nach E7a vielleicht eher in die Privat-App.
 - **Fertig, wenn:** Ein privates GitHub-Projekt und ein Projekt ohne Repo stehen mit nächstem Schritt in den Listen.
 
-**0.49.0 – KI-Projekte aus Claude, ChatGPT, Mistral**
-- Lesezeichen «In tinyops merken»: Es übernimmt Titel und Link des offenen Chats oder Projekts als Vorhaben aus 0.48, mit Anbieter-Piktogramm.
+**0.52.0 – KI-Projekte aus Claude, ChatGPT, Mistral**
+- Lesezeichen «In tinyops merken»: Es übernimmt Titel und Link des offenen Chats oder Projekts als Vorhaben aus 0.51, mit Anbieter-Piktogramm.
 - Import der offiziellen Daten-Exporte, lokal ausgewertet: Projekt- und Chatnamen und Datum, ohne Inhalte, falls du das willst.
 - Ehrlich: Die drei Anbieter haben keine offizielle Schnittstelle, die deine Chatliste herausgibt. Mehr als Lesezeichen und Export geht nicht, ohne Regeln zu umgehen.
 - **Fertig, wenn:** Ein Claude-Projekt, ein ChatGPT-Chat und ein Mistral-Chat stehen als Vorhaben mit nächstem Schritt in tinyops.
 
-**0.50.0 – Zweiter Bereich** (nach E7, E7a, E9–E11)
+**0.53.0 – Zweiter Bereich** (nach E7, E7a, E9–E11)
 - E7: Privat und Geschäft als zwei Instanzen mit eigenem Datenordner, eigenen Secrets und eigenem Audit. Jede hat eigene Agenten, also einen eigenen Worker.
 - Ein Umschalter oben wechselt zwischen den beiden. Der Launcher startet beide.
 - **App:** seit 0.36 da (PWA, Handy über Kopplung). Hier kommt nur der Umschalter dazu: Jede Instanz koppelt ihre Geräte selbst.
 - **Fertig, wenn:** Ein privates Vorhaben ist in der Geschäfts-Instanz nicht sichtbar, und das Handy kann zwischen beiden wechseln.
+
+### Auswertung 25.11.: Prüf- und Nutzungsbericht 0.44.1
+
+**Was die Berichte zeigen**
+- **Prüfliste:** 22 geprüft, 0 Fehler, 47 offen. Offen sind vor allem echte Systeme (BCS, M365, SSH-Agenten), die Sprache (`r43-01` bis `r43-03`) und die neuen Abläufe 0.40 bis 0.42.
+- **Ansichten:** Fokus 72 %, Einstellungen 15 %, Prüfen 12 %. Fokus ↔ Einstellungen wieder 15× und 13× hin und her. Die Hilfe zu M365, KI-Entwurf und App ging je 22× auf.
+- **Agentenfenster:** 74 Klicks, 2.8 s Zögern, 10 Wutklicks, 6 von 24 Mal ohne Aktion geschlossen. Das deckt sich mit deinem Wunsch, das Panel zu überarbeiten (0.47).
+- **Tote Klicks:** 35× auf den leeren Hintergrund im Fokus, 12× auf Text in Prüfen, 9× auf das Banner im Fokus.
+- **Fehler:** «Review mit Agent» 8× ohne Arbeitsverzeichnis beim Agenten (0.46); einmal `systemctl --user daemon-reload`; ein Sprachbefehl ohne erkanntes Ticket.
+- **Langsam:** Sprachbefehl mit Rückfall aufs lokale Modell 75 s; GitLab-Verbindungstest 5.9 s; Workspaces 11.7 s.
+- **Wünsche** (fünf, wörtlich im Bericht): Worktrees aufräumen (0.46), Zugriff von aussen mit Schlüssel (0.46), Commits einzeln reviewen (0.48), Agentenpanel und Log (0.47), Vorlagen und Auswahl der Kriterien (0.47).
+
+**Empfehlungen**
+
+| Wann | Empfehlung | Warum |
+|---|---|---|
+| 0.45 | Beim Teilen der Einstellungen die Abschnitte M365, KI-Entwurf und App mit kürzerer Hilfe und einem «Was fehlt noch?» oben. | Hilfe je 22× aufgeklappt, 28 Wechsel Fokus ↔ Einstellungen. |
+| 0.46 | Klick auf den leeren Fokus-Hintergrund schliesst Detail- und Agentenpanel (wie seit 0.42 neben dem Agentenpanel). | 35 tote Klicks. |
+| 0.47 | Das Agentenpanel mit Playwright-Test für «findet in 3 Klicks: Antwort, offene AK, offene Review-Punkte». | 10 Wutklicks, 2.8 s Zögern. |
 
 ### Auswertung 16.11.: Prüf- und Nutzungsbericht 0.33, Verlauf
 
@@ -308,10 +353,10 @@ Dafür kamen zwei Releases dazu (0.42 und 0.43). Alles ab «Einstellungen und Da
 - **Wünsche:** vier neue (Review-Vorfilter, Sitzung fortsetzen, Git-User je Agent, Prüfliste je Ticket). Nachtrag 20.11.: Weiterführen heisst «in derselben Sitzung» (0.40). Der Review-Vorfilter wird ein Review als Entwurf in GitLab mit «Review starten» (0.43, E14). Die Prüfliste je Ticket kommt mit «Jetzt testen» in 0.42.
 - Die Versionsnummern in den Auswertungen 16.11. und 17.11. gelten vor den Verschiebungen vom 20. und 23.11. (ab 0.41 drei Versionen später).
 
-### Bewusst nicht im Plan bis 0.50
+### Bewusst nicht im Plan bis 0.53
 - Native App (iOS/Android; die Web-App seit 0.36 reicht), zentrale Datenbank, Agenten-Cluster über mehrere Rechner
 - Schreiben in GitLab ausser Review-Entwürfen (E14): kein Approve, Merge oder Abschicken eines Reviews. Confluence
-- Neue Anbindungen ausser denen in 0.48 bis 0.50
+- Neue Anbindungen ausser denen in 0.51 bis 0.53
 
 ---
 

@@ -13,7 +13,7 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 | 2026-11-05 | Agenten über SSH/tmux, kein CI-Gateway | Worktree je Lauf, Zeitlimit |
 | 2026-11-05 | tinyops läuft auf deinem Rechner | Handy später über VPN |
 | 2026-11-05 | Confluence hat keine Priorität | nicht im Plan |
-| 2026-11-15 | Bis 0.45 vor allem aufräumen; neu nur Projekte tracken, KI-Projekte, zweiter Bereich und App | Plan 0.33–0.45 in der Roadmap (seit 17.11.: 0.33–0.46, seit 20.11.: 0.33–0.48, seit 23.11.: 0.33–0.49) |
+| 2026-11-15 | Bis 0.45 vor allem aufräumen; neu nur Projekte tracken, KI-Projekte, zweiter Bereich und App | Plan 0.33–0.45 in der Roadmap (seit 17.11.: 0.33–0.46, seit 20.11.: 0.33–0.48, seit 23.11.: 0.33–0.49, seit 25.11.: 0.33–0.53) |
 | 2026-11-15 | **E1:** Gebucht wird nur über BCS | Projectron-Export (0.19), MCP-Einstellungen und `/api/time/export` entfallen in 0.34; bisherige Entwürfe bleiben lesbar |
 | 2026-11-15 | **E2:** Direkt ausführen reicht. Prompts und Shell-Befehle zum Kopieren bleiben, für den Fall, dass kein Agent eingerichtet ist | Helm-Deploy je MR, Jobs und alte Agenten-Knöpfe pro MR entfallen in 0.34 (`deploy/` bleibt: damit läuft tinyops selbst in Kubernetes). Die Review-Umgebung (0.32) führt direkt aus, auch für MRs. Review-Brief, Smoke-Test und Repro-Test bleiben als «Prompt kopieren» am MR, dazu die Befehle der Review-Umgebung und zum Auschecken zum Kopieren |
 | 2026-11-16 | **E3:** Spielstand bleibt, als eine Karte im Fokus, abschaltbar | Level-Balken entfällt, Schalter «Spielstand» (seit 0.35.1 unter Einstellungen → Fokus). Entschieden mit «implement plans for 35» nach meiner Empfehlung |
@@ -46,15 +46,16 @@ Seit dem 17.11. ist der Plan um eine Version verschoben (0.36 kam vor dem Umbau 
 | 2026-11-25 | **E15: Voice Prompting nur lokal.** Erkannt wird auf einem Server im eigenen Netz (whisper.cpp, Voxtral Mini über vLLM, speaches), wie beim KI-Entwurf: andere Adressen nur mit «Externe Adresse erlauben» | Wunsch vom 25.11. («gerne lokal»). Die Aufnahme geht als WAV nur an diesen Server und wird nirgends gespeichert; im Log stehen nur Länge und Dauer (0.43) |
 | 2026-11-25 | **Sprachbefehle dürfen zuweisen, starten und Review anstossen, immer erst nach deiner Bestätigung** | tinyops zeigt, was es verstanden hat (Ticket oder MR, Agent, Rolle, starten), mit Grund, wenn etwas nicht erlaubt ist. Ausgeführt wird über dieselben Wege wie die Knöpfe. Feste Regeln zuerst, das lokale Sprachmodell nur als Rückfall. Im Verlauf steht die Aktion, nicht der Wortlaut (0.43) |
 | 2026-11-25 | **Eingebautes Whisper:** tinyops darf auf deinen Klick whisper.cpp (fester Tag) holen und bauen und ein Modell von Hugging Face laden | Wunsch vom 25.11. («einfach reinziehen», ohne Grafikkarte). Nur auf «Einrichten», nur in den Datenordner, ohne sudo; Modell nur mit passender SHA1; der Server hört nur auf 127.0.0.1 und läuft nur, solange du diktierst (0.44) |
+| 2026-11-25 | Erst das Refactoring (0.45 Einstellungen und Datenbank), dann deine fünf Wünsche aus dem Bericht vom 25.11. in 0.46 bis 0.48, vor «Tests und Doku» | Dein Vorschlag («maybe first start up with refactoring»). Die Wünsche brauchen neue Tabellen und Einstellungen; mit Schema und Migrationen kommen die sauber dazu. Der Plan endet mit 0.53 |
 
 ## Offen
 
 | Nr. | Frage | Optionen | Empfehlung | Bis |
 |---|---|---|---|---|
-| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · c) **Prompt zum Kopieren** (neu 18.11.): tinyops gibt dir je App einen Prompt, die App listet deine offenen Themen als JSON, du fügst das in tinyops ein · d) **Sitzungen der Coding-Agenten** (neu 18.11.): Claude Code, Codex und Vibe legen ihre Sitzungen als Dateien auf deinem Rechner ab; tinyops liest Ordner, Titel und Datum · b) mehr | **a + c + d**. c nutzt, was die Chat-Apps selbst über deine Chats wissen (bei Claude die Suche in früheren Chats); das ist hilfreich, aber nicht vollständig. d ist vollständig für die Agenten, weil es deine eigenen Dateien sind. Die Agenten selbst sehen deine Web-Chats nicht. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.49 |
+| E8 | Woher kommen KI-Projekte aus Claude, ChatGPT, Mistral? | a) Lesezeichen «In tinyops merken» und Import der offiziellen Daten-Exporte · c) **Prompt zum Kopieren** (neu 18.11.): tinyops gibt dir je App einen Prompt, die App listet deine offenen Themen als JSON, du fügst das in tinyops ein · d) **Sitzungen der Coding-Agenten** (neu 18.11.): Claude Code, Codex und Vibe legen ihre Sitzungen als Dateien auf deinem Rechner ab; tinyops liest Ordner, Titel und Datum · b) mehr | **a + c + d**. c nutzt, was die Chat-Apps selbst über deine Chats wissen (bei Claude die Suche in früheren Chats); das ist hilfreich, aber nicht vollständig. d ist vollständig für die Agenten, weil es deine eigenen Dateien sind. Die Agenten selbst sehen deine Web-Chats nicht. Mehr ginge nur über Browser-Cookies oder fremde Sitzungen, und das macht tinyops nicht | 0.52 |
 
 ## Ideen, nicht geplant
 
-- Home Assistant als Anbindung (Waschmaschine, Vorräte, Garten): noch keine Entscheidung, Einordnung nach 0.48.
+- Home Assistant als Anbindung (Waschmaschine, Vorräte, Garten): noch keine Entscheidung, Einordnung nach 0.53.
 - Mehrere Haushaltsmitglieder mit Rechten: an den Team-Betrieb gekoppelt, nicht geplant.
 - Team-Betrieb als bezahlte Version: Idee, nicht geplant.
