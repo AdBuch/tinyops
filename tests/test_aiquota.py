@@ -288,7 +288,7 @@ class Settings(unittest.TestCase):
         self.assertTrue(cfg["usage"]["mistral"])
         self.assertIn("__ORIGIN__", settings.view(cfg, "/x/config.json")["usage"]["bookmarklet_src"])
         _, err = settings.build_config({"projects": []}, {"usage": {"cache_seconds": "5"}})
-        self.assertIn("aiquota.cache_seconds", err)
+        self.assertIn("usage.cache_seconds", err)          # 0.45: Fehler am Feld, wie die Oberfläche ihn sucht
         # Das Token selbst taucht nirgends in Config oder Ansicht auf
         self.assertNotIn("token", json.dumps(v["usage"]).lower())
 

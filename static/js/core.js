@@ -119,13 +119,19 @@ function wirePromptBox(root, id) {
 const val = id => ($(id) ? $(id).value : '').trim();
 const split = t => t.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
 const uniq = a => [...new Set(a)];
+// 0.45: Grenzen und Standard der Zahlenfelder aus dem Schema des Servers (settings_schema.py), gesetzt beim Laden der Einstellungen
+let SET_SCHEMA = {};
 function field(id, label, value, opts = {}) {
   const t = opts.type || 'text';
+  const sch = t === 'number' && opts.err ? SET_SCHEMA[opts.err] : null;
+  const lim = sch ? `min="${sch.min}" max="${sch.max}" inputmode="numeric"` : '';
   const input = opts.area
     ? `<textarea class="full" id="${id}" rows="${opts.rows || 3}" spellcheck="false">${esc(value)}</textarea>`
-    : `<input type="${t}" id="${id}" value="${esc(value)}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} autocomplete="off" spellcheck="false">`;
+    : `<input type="${t}" id="${id}" value="${esc(value)}" ${lim} ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} autocomplete="off" spellcheck="false">`;
+  const range = sch ? `<span class="quiet">${sch.min} bis ${sch.max}, Standard ${sch.default}.</span>` : '';
+  const help = [opts.help || (sch && sch.help ? esc(sch.help) : ''), range].filter(Boolean).join(' ');
   return `<div class="field"><label for="${id}">${esc(label)}</label>${input}
-    ${opts.help ? `<div class="help">${opts.help}</div>` : ''}<div class="ferr" data-err="${esc(opts.err || '')}"></div></div>`;
+    ${help ? `<div class="help">${help}</div>` : ''}<div class="ferr" data-err="${esc(opts.err || '')}"></div></div>`;
 }
 // ================================================================ Fokus: jede Aufgabe fährt dieselbe Strecke, genau ein nächster Schritt
 const ICONS = {

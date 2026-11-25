@@ -449,6 +449,12 @@ Bei restricted-Projekten erinnert der Dialog daran, dass Kommentare Code oder Ku
 
 **Review-App:** Hat ein Projekt GitLab-Environments, zeigt das Panel den Link der Review-App, wenn deren Name auf den Branch-Slug endet (`review/$CI_COMMIT_REF_SLUG`) oder die letzte Bereitstellung den Branch hat. Ein GET je Projekt und Minute, nur lesend; tinyops deployt dafür nichts.
 
+## 5l. Einstellungen und Datenbank aufgeräumt (neu in 0.45.0)
+
+Für dich ändert sich fast nichts. Neu sichtbar: Zahlenfelder in den Einstellungen nennen ihren erlaubten Bereich und den Standard, und der Browser lässt nur diesen Bereich zu. Ein falscher Wert ergibt überall denselben Hinweis («Ganze Zahl von 1 bis 200.»), direkt am Feld.
+
+Unter der Haube: Die Datenbank `tinyops.db` hat jetzt eine Schema-Version (`pragma user_version`, im Selbsttest als «Schema 1 von 1»). Alle Tabellen stehen in `dbschema.py`; beim ersten Start bringt tinyops die Datei einmal auf den neuesten Stand, auch eine aus 0.25. Einstellungen, die es nicht mehr gibt (z. B. `kube_context` aus der alten Testumgebung), ignoriert tinyops beim Laden; beim nächsten Speichern verschwinden sie aus der `config.json`.
+
 ## 5k. Eingebautes Whisper (neu in 0.44.0)
 
 Einstellungen → Sprache → **«Eingebaut»** → «Einrichten»: tinyops holt whisper.cpp (v1.9.5), baut es mit cmake für deinen Prozessor und lädt das Modell («small» 181 MB, «base» 57 MB, «turbo» 547 MB) mit Prüfsumme. Der Server startet beim ersten Diktieren, nur auf 127.0.0.1, und hört nach 20 Minuten ohne Nutzung auf. Zum Bauen braucht der Rechner git, cmake und einen C++-Compiler (Ubuntu: `sudo apt install build-essential cmake git`). Alles liegt in `<Datenordner>/whisper/`.
@@ -852,8 +858,12 @@ Die Ideenbox fasst höchstens 25 Ideen, unbehandelte verfallen nach 30 Tagen. Si
     gitlab_client.py     GitLab lesen: MRs, Branches, Pipelines, Freigaben
     jira_client.py       Jira lesen, Tickets nur mit Freigabe anlegen
     ideas.py             Ideen (SQLite in data/) und ähnliche finden
+    dbschema.py          Datenbank: alle Tabellen an einer Stelle, nummerierte Migrationen, Version in user_version
     demo.py              Demo-Daten für --demo und die Tests
-    settings.py          Einstellungsseite: Verbindungstests, Speichern
+    settings.py          Einstellungsseite: anzeigen, prüfen, speichern
+    settings_schema.py   Zahlenfelder der Einstellungen: Grenzen, Standard, Hilfe (auch für die Oberfläche)
+    conntest.py          Verbindungstests: GitLab, GitHub, Sonar, lokales Modell, Sprache, Agenten
+    conntest_jira.py     Verbindungstests: Jira und Helpdesk
     net.py               Netzwerk: TLS, Fehlerarten, keine Weiterleitungen
     tlog.py              Logging (Rotation, Schwärzung)
     secretstore.py       Secret-Speicher

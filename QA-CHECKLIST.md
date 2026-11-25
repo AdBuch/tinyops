@@ -103,6 +103,17 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 - [ ] `r211-04` Launcher mit `--where` → zeigt Ordner, Repo `AdBuch/tinyops`, Version v0.21.1 und dein Python [auto: test_launcher.Launcher]
 - [ ] `r211-06` `python3 tinyops-launcher.pyz --demo` → wie der Launcher, mit Demo-Daten [auto: test_launcher.Launcher]
 
+## 0.45.0
+
+Refactoring (Einstellungen und Datenbank). Abgelöst: `r39-01` (Arbeitstag nach dem Umbau 0.39) durch `r45-01`, damit die Liste unter 60 Punkten von Hand bleibt.
+
+- [ ] `r45-01` Update auf 0.45 mit deiner echten Datenbank: Prüfen → Selbsttest zeigt bei «Datenbank» «Schema 1 von 1»; einen Arbeitstag normal arbeiten (Fokus, Detail-Panel, Agent zuweisen, Review, Zeit, Einstellungen speichern) → alles wie mit 0.44, deine Läufe, Ideen und Zeiten sind noch da; Einstellungen → Sonar: bei «Höchstens so viele Prüfungen» steht «1 bis 200, Standard 40.»
+- [ ] `r45-02` Datenbank: frisch wie 0.44, Upgrade aus 0.25 ohne Datenverlust, neuere Datei läuft weiter, fehlgeschlagene Migration nimmt alles zurück, paralleler erster Start [auto: test_dbschema.Migrations]
+- [ ] `r45-03` Kein Modul legt Tabellen selbst an, Migrationen ohne Lücke [auto: test_dbschema.OnePlace]
+- [ ] `r45-04` Zahlenfelder: jedes Feld der Oberfläche steht im Schema, gleiche Grenzen beim Prüfen und Anzeigen, ein Fehlertext [auto: test_v45.Schema]
+- [ ] `r45-05` Veraltete Einstellungen fallen beim Laden weg und sind nach dem Speichern aus der config.json; kein Code liest sie mehr [auto: test_v45.Obsolete]
+- [ ] `r45-06` `settings.py` unter 700 Zeilen, Verbindungstests in `conntest*.py`, alte Namen erreichbar [auto: test_v45.Split]
+
 ## 0.44.0
 
 0.44.1: `r42-03` prüft jetzt auch einen Agenten, der `tinyops-finding` nicht nutzt, und das Bearbeiten der Befunde.
@@ -158,9 +169,8 @@ Abgelöst: `r36-01` (Weiterführen) durch `r40-01`, `r28-12` (Ausgabe während d
 
 ## 0.39.0
 
-Oberfläche zerlegt (sichtbar gleich), dazu QR-Code, Agentenfenster als Seitenpanel und Klicks im Detail-Panel. Abgelöst: `r37-01` und `r38-01` (Arbeitstag nach dem Umbau) durch `r39-01`, `r36-05` (Koppeln) durch `r39-02`.
+Oberfläche zerlegt (sichtbar gleich), dazu QR-Code, Agentenfenster als Seitenpanel und Klicks im Detail-Panel. Abgelöst: `r37-01` und `r38-01` (Arbeitstag nach dem Umbau) durch `r39-01`, `r36-05` (Koppeln) durch `r39-02`. Seit 0.45 ist `r39-01` in `r45-01` aufgegangen.
 
-- [ ] `r39-01` Einen Arbeitstag normal mit tinyops arbeiten: Fokus, Detail-Panel, Board, Listen, Zeit, Prüfen, Einstellungen speichern, Agent zuweisen. Ausser den Punkten unten sieht alles aus wie mit 0.37/0.38 und tut dasselbe; sonst ist das ein Fehler
 - [ ] `r39-02` Einstellungen → App und Handy: Adresse fürs Handy gespeichert, «Code erzeugen» → QR-Code neben dem Code; mit der Handy-Kamera scannen → Kopplungsseite mit eingesetztem Code, «Koppeln» → Panel auf dem Handy; «Entfernen» → Handy sieht «Noch nicht gekoppelt»
 - [ ] `r39-03` Agent zuweisen oder Lauf öffnen → Seitenpanel rechts; daneben im Fokus weiterklicken geht, das Panel bleibt offen; auf dem breiten Bildschirm steht es neben dem Detail-Panel; × oder Esc schliesst es. Im Detail-Panel öffnet ein Klick auf den Titel eines MR den MR
 - [ ] `r39-04` Detail-Panel: Klick auf Branch-Code, Repo- oder Branch-Namen kopiert ihn; Klick auf einen Chip mit Erklärung zeigt sie; das Agentenfenster ist ein Seitenpanel [auto: test_ui.SidePanel]

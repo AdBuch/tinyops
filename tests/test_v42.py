@@ -397,9 +397,9 @@ class ApiCalls(unittest.TestCase):
                 continue
             if n:
                 self.assertGreaterEqual(src.count("apicalls.record("), 1 if f.name in ("m365.py", "net.py", "httpclient.py") else n, f.name)
-        for f in ("github.py", "sonar.py", "settings.py"):
+        for f in ("github.py", "sonar.py", "settings.py", "conntest.py", "conntest_jira.py"):      # 0.45: Verbindungstests in conntest*
             src = (ROOT / f).read_text(encoding="utf-8")
-            self.assertEqual(len(re.findall(r"net\.probe\((?![^\n]*svc=)", src)), 0 if f != "settings.py" else 0, f)
+            self.assertEqual(len(re.findall(r"net\.probe\((?![^\n]*svc=)", src)), 0, f)
 
     def test_paths_in_code_are_listed(self):
         import re

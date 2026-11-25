@@ -5,6 +5,30 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.45.0]
+
+Einstellungen und Datenbank, auf deinen Vorschlag vom 25.11. («maybe first start up with refactoring») vor deinen neuen Wünschen. Ein Refactoring: Für dich ändert sich wenig, die nächsten Releases (0.46 bis 0.48) bauen darauf auf.
+
+### Geändert
+- **Zahlenfelder in den Einstellungen** nennen unter dem Feld ihren Bereich und den Standard («1 bis 200, Standard 40.»), und der Browser lässt nur diesen Bereich zu. Die Grenzen kommen vom Server (`settings_schema.py`), dieselben, mit denen er prüft.
+- Ein falscher Wert ergibt überall denselben Hinweis, «Ganze Zahl von … bis ….». Bisher gab es drei verschiedene Texte.
+- **Veraltete Einstellungen** (`kube_context`, `namespace_prefix`, `deploy_command`, `teardown_command`, `job_timeout`, `agent_command` aus der alten Testumgebung, `time.mcp_url` und Verwandte aus dem Projectron-Export, `features.testenv`) ignoriert tinyops beim Laden, mit einer Zeile im Log. Beim nächsten Speichern sind sie aus der `config.json` verschwunden.
+
+### Behoben
+- KI-Kontingent: Ein falscher Wert bei «Zwischenspeicher in Sekunden» zeigte keinen Hinweis am Feld (der Fehler lief unter einem anderen Namen als das Feld).
+- Leitplanken der Agenten: Fehlte beim Speichern eine der beiden Zahlen, gab es einen Fehler; jetzt bleibt der bisherige Wert.
+
+### Intern
+- **Datenbank mit Version:** Alle Tabellen stehen in `dbschema.py`, als nummerierte Migrationen; die Version steht in der Datei (`pragma user_version`). Bisher legten sechs Module ihre Tabellen selbst an, `links.Store` sogar bei jeder Verbindung, auch beim Lesen. Jetzt passiert das einmal je Prozess, in einer Transaktion: Zwei Threads oder Prozesse beim ersten Start warten aufeinander, und eine fehlgeschlagene Migration nimmt alles zurück.
+  - Migration 1 ist der Stand von 0.44. Sie ergänzt nur, was fehlt; ein Test bringt eine Datenbank aus 0.25 damit auf den heutigen Stand, ohne Daten zu verlieren.
+  - Eine neuere Datei (nach einem Rückfall von `start.py` auf die vorige Version) läuft weiter; Neues bleibt ungenutzt, mit einer Warnung im Log.
+  - Der Selbsttest zeigt die Version: «Schema 1 von 1».
+- **`settings.py` geteilt** (1'630 → 600 Zeilen): Die Verbindungstests stehen in `conntest.py` und `conntest_jira.py`, die Zahlenfelder in `settings_schema.py`. Die bisherigen Namen (`settings.test_gitlab` …) bleiben erreichbar.
+- Tests: `test_dbschema` (frische Datei gleich dem Schnappschuss von 0.44, Upgrade aus 0.25, neuere Datei, Rückfall, paralleler Start, kein Modul legt mehr Tabellen an), `test_v45` (jedes Zahlenfeld der Oberfläche steht im Schema und umgekehrt, gleiche Grenzen in Prüfung und Anzeige, veraltete Schlüssel liest kein Code mehr).
+
+### Nicht gemacht
+- Die Oberfläche baut die Felder noch nicht aus dem Schema; sie liest daraus nur Grenzen, Standard und Hilfe. Eine neue Zahl ist darum eine Zeile im Schema, ein Aufruf in `build_config` und ein `field()` in `settings.js`, nicht nur eine Zeile. Texte, Listen und die Abschnitte mit eigenen Regeln (Projekte, Agenten, Fokusbereiche) prüfen weiter ihre eigenen Funktionen.
+
 ## [0.44.1]
 
 Korrektur nach deiner Rückmeldung: Mit einem anderen Agenten kam das Review an, aber nicht in einer Form, die tinyops als Entwürfe in GitLab anlegen konnte.

@@ -163,18 +163,21 @@ def clean(m, cfg, errors):
     vc["url"] = (m.get("url") or "").strip().rstrip("/")[:300]
     vc["builtin_model"] = m.get("builtin_model") if m.get("builtin_model") in voicekit.MODELS else "small"
     vc["program"] = (m.get("program") or "").strip()[:500]
+    import settings_schema                   # 0.45: Grenzen aus dem Schema (dort importiert es voice, darum erst hier)
+    nt = settings_schema.NUMBERS["voice.threads"]
     try:
-        vc["threads"] = max(0, min(64, int(m.get("threads") or 0)))
+        vc["threads"] = max(nt.lo, min(nt.hi, int(m.get("threads") or 0)))
     except (TypeError, ValueError):
         errors["voice.threads"] = "Eine Zahl, 0 heisst automatisch."
     vc["model"] = (m.get("model") or "").strip()[:120]
     vc["language"] = m.get("language") if m.get("language") in LANGS else "de"
     vc["allow_remote"] = bool(m.get("allow_remote", False))
-    for k, lo, hi in (("max_seconds", 10, 300), ("timeout", 5, 300)):
+    for k in ("max_seconds", "timeout"):
+        n = settings_schema.NUMBERS["voice." + k]
         try:
-            vc[k] = max(lo, min(hi, int(m.get(k) if m.get(k) not in (None, "") else DEFAULTS[k])))
+            vc[k] = max(n.lo, min(n.hi, int(m.get(k) if m.get(k) not in (None, "") else DEFAULTS[k])))
         except (TypeError, ValueError):
-            errors["voice." + k] = "Eine Zahl von %d bis %d." % (lo, hi)
+            errors["voice." + k] = settings_schema.message("voice." + k)
     if vc["kind"] == "openai" and vc["enabled"] and not vc["model"]:
         errors["voice.model"] = "Der OpenAI-kompatible Server braucht den Modellnamen (z. B. mistralai/Voxtral-Mini-3B-2507)."
     if vc["enabled"] and vc["kind"] != "builtin":

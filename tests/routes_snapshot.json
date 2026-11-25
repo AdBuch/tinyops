@@ -140,6 +140,7 @@
    "problems",
    "projects",
    "review_kinds",
+   "schema",
    "secrets",
    "server",
    "sonar",

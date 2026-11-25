@@ -16,6 +16,8 @@ import threading
 import time
 from pathlib import Path
 
+import dbschema
+
 LINE = re.compile(r"^\s*- \[[ xX]\] `([a-z0-9][a-z0-9.\-]{0,30})` (.+?)\s*$")
 HEAD = re.compile(r"^##\s+(.+?)\s*$")
 STATES = ("ok", "fehler", "übersprungen")
@@ -55,11 +57,9 @@ class QaBook:
         self.lock = threading.Lock()
 
     def _conn(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        dbschema.ensure(self.path)
         c = sqlite3.connect(str(self.path), timeout=10)
         c.row_factory = sqlite3.Row
-        c.execute("create table if not exists qa_check(id text primary key, status text not null, note text not null default '',"
-                  " version text not null default '', hash text not null default '', ts real not null)")
         return c
 
     def states(self):
@@ -171,7 +171,8 @@ def check_db(db, audit_log, step):
             res = c.execute("pragma integrity_check").fetchone()[0]
         finally:
             c.close()
-        step("db", "Datenbank", "ok" if res == "ok" else "fail", "%s: %s" % (Path(db).name, res))
+        ver = dbschema.version(db)
+        step("db", "Datenbank", "ok" if res == "ok" else "fail", "%s: %s, Schema %d von %d" % (Path(db).name, res, ver, dbschema.LATEST))
     except sqlite3.Error as e:
         step("db", "Datenbank", "fail", str(e))
     v = audit_log.verify()

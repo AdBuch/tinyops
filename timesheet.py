@@ -16,6 +16,8 @@ import time
 from datetime import date as _date, datetime, timedelta
 from pathlib import Path
 
+import dbschema
+
 STATES = ("offen", "bestätigt", "gebucht", "abgelehnt", "fehlgeschlagen", "verworfen", "unklar")    # unklar (0.29): Bestätigen in BCS brach ab, erst abgleichen
 LOCKED = ("gebucht",)                       # nie mehr ändern
 DEFAULTS = {
@@ -57,34 +59,9 @@ class TimeBook:
         self.lock = threading.RLock()
 
     def _conn(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        dbschema.ensure(self.path)
         c = sqlite3.connect(str(self.path), timeout=10)
         c.row_factory = sqlite3.Row
-        c.execute("create table if not exists time_seg(id integer primary key autoincrement, key text not null, title text not null default '',"
-                  " start real not null, end real, last_seen real not null, source text not null default 'fokus')")
-        c.execute("create index if not exists time_seg_start on time_seg(start)")
-        c.execute("create table if not exists time_gap(id integer primary key autoincrement, key text not null, title text not null default '',"
-                  " start real not null, end real not null, state text not null default 'offen')")
-        c.execute("create table if not exists time_draft(id text primary key, date text not null, ticket text not null, title text not null default '',"
-                  " project_hint text not null default '', minutes integer not null, calc_minutes integer not null default 0, text text not null default '',"
-                  " evidence text not null default '[]', state text not null default 'offen', edited integer not null default 0, manual integer not null default 0,"
-                  " reference text not null default '', message text not null default '', attempts integer not null default 0, sent real,"
-                  " merged_into text not null default '', updated real not null)")
-        c.execute("create index if not exists time_draft_date on time_draft(date)")
-        for t in ("time_seg", "time_gap"):                       # 0.23: Fokusbereich und Tätigkeit je Abschnitt
-            have = {r[1] for r in c.execute("pragma table_info(%s)" % t)}
-            for col in ("area", "activity"):
-                if col not in have:
-                    try:
-                        c.execute("alter table %s add column %s text not null default ''" % (t, col))
-                    except sqlite3.OperationalError as e:          # zwei Threads beim ersten Start: der andere war schneller
-                        if "duplicate column" not in str(e):
-                            raise
-        c.execute("create table if not exists focus_session(id integer primary key autoincrement, key text not null, title text not null default '',"
-                  " area text not null default '', activity text not null default '', planned_min integer not null, start real not null, end real,"
-                  " parked integer not null default 0, result text not null default '', note text not null default '')")
-        c.execute("create table if not exists bcs_target(pattern text primary key, task_id text not null, name text not null default '',"
-                  " path text not null default '', updated real not null)")      # 0.29: Ticket oder Projekt → BCS-Aufgabe
         return c
 
     # -- BCS-Ziele (0.29): exaktes Ticket vor Projekt-Präfix («DLP-*»)

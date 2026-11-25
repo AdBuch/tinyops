@@ -1,6 +1,7 @@
 """Config von tinyops (0.38 aus server.py gelöst): Standardwerte, Laden, Umgebungsvariablen, Teil-Configs je Anbindung.
 Wo die Config liegt (Programmordner, Datenordner), bleibt in server.py."""
 import json
+import logging
 import os
 
 import github
@@ -95,11 +96,38 @@ def reject_plain_secrets(cfg):
                     % (scope, k))
 
 
+# 0.45: Einstellungen, die es nicht mehr gibt (Version, in der sie entfielen). Beim Laden fallen sie weg, beim nächsten Speichern
+# auch aus der config.json. Nur anhängen; ein Test prüft, dass kein Code sie mehr liest.
+OBSOLETE = (
+    ("kube_context", "0.34"), ("namespace_prefix", "0.34"), ("deploy_command", "0.34"), ("teardown_command", "0.34"),
+    ("job_timeout", "0.34"), ("agent_command", "0.34"),                      # alte Testumgebung je MR (E2)
+    ("time.mcp_url", "0.34"), ("time.send_on_confirm", "0.34"), ("time.allow_remote", "0.34"),   # Projectron-Export (E1)
+    ("features.testenv", "0.34"),
+)
+
+
+def drop_obsolete(cfg):
+    """Entfernt veraltete Schlüssel in der Config (im Speicher). Gibt die entfernten zurück."""
+    gone = []
+    for key, _ in OBSOLETE:
+        *parents, last = key.split(".")
+        cur = cfg
+        for part in parents:
+            cur = cur.get(part) if isinstance(cur, dict) else None
+        if isinstance(cur, dict) and last in cur:
+            del cur[last]
+            gone.append(key)
+    return gone
+
+
 def load_config(path):
     cfg = dict(DEFAULTS)
     if path:
         with open(path, encoding="utf-8") as f:
             cfg.update(json.load(f))
+    gone = drop_obsolete(cfg)
+    if gone:
+        logging.getLogger("tinyops").info("Veraltete Einstellungen ignoriert (fallen beim nächsten Speichern weg): %s", ", ".join(gone))
     reject_plain_secrets(cfg)
     apply_env(cfg)
     return cfg

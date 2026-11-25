@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from common import UserError, age_days
+import dbschema
 
 
 class Ideas:
@@ -15,16 +16,7 @@ class Ideas:
         self.path = str(path)
         self.cap = cap
         self.expire_days = expire_days
-        with self._conn() as c:
-            c.execute(
-                "create table if not exists ideas("
-                "id integer primary key autoincrement, text text not null,"
-                "status text not null default 'neu', created text not null)"
-            )
-            have = {r[1] for r in c.execute("pragma table_info(ideas)")}
-            for col in ("assessment", "ticket", "draft"):            # 0.20: Bewertung, Ticket aus der Idee
-                if col not in have:
-                    c.execute("alter table ideas add column %s text not null default ''" % col)
+        dbschema.ensure(self.path)                  # 0.45: Tabelle in dbschema
 
     @contextmanager
     def _conn(self):

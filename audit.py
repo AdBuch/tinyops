@@ -16,6 +16,7 @@ import time
 import uuid
 from pathlib import Path
 
+import dbschema
 import secretstore as store
 import tlog
 
@@ -78,15 +79,9 @@ class AuditLog:
         self._instance = None
 
     def _conn(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        dbschema.ensure(self.path)                  # 0.45: Tabelle, Index und Sperr-Trigger stehen in dbschema
         c = sqlite3.connect(str(self.path), timeout=10, isolation_level=None)
         c.row_factory = sqlite3.Row
-        c.execute("create table if not exists audit(id integer primary key autoincrement, ts real not null, instance text not null, actor text not null,"
-                  " action text not null, target text not null default '', detail text not null default '{}', ok integer not null, prev text not null, hash text not null)")
-        c.execute("create index if not exists audit_target on audit(target, id)")
-        c.execute("create table if not exists audit_meta(key text primary key, value text not null)")
-        c.execute("create trigger if not exists audit_no_update before update on audit begin select raise(abort, 'audit ist nur anhängend'); end")
-        c.execute("create trigger if not exists audit_no_delete before delete on audit begin select raise(abort, 'audit ist nur anhängend'); end")
         return c
 
     def instance(self):

@@ -11,6 +11,7 @@ function stepsHtml(res) {
 async function loadSettings() {
   const box = $('viewSettings');
   try { S = await api('GET', '/api/settings'); } catch (e) { box.innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return; }
+  SET_SCHEMA = S.schema || {};
   P = S.projects.map(p => ({ ...p }));
   const g = S.gitlab, j = S.jira, b = S.branch_filter;
   const glTokenUrl = g.url ? esc(g.url.replace(/\/+$/, '')) + '/-/user_settings/personal_access_tokens' : '';
@@ -280,7 +281,7 @@ async function loadSettings() {
         <div class="help">Fest eingestellt ist die Erkennung schneller und sicherer. Fachwörter wie Ticket-Keys kommen auf Deutsch meist richtig an.</div></div>
     </div>
     <div class="grid2">
-      ${field('vo-max', 'Längste Aufnahme in Sekunden', S.voice.max_seconds, { type: 'number', err: 'voice.max_seconds', help: 'Danach endet die Aufnahme von selbst (10 bis 300).' })}
+      ${field('vo-max', 'Längste Aufnahme in Sekunden', S.voice.max_seconds, { type: 'number', err: 'voice.max_seconds', help: 'Danach endet die Aufnahme von selbst.' })}
       <div class="vo-ext">${field('vo-key', 'Schlüssel (optional)', '', { type: 'password', ph: S.secrets.voice_key && S.secrets.voice_key.set ? '•••••••• gespeichert' : 'nur wenn der Server einen verlangt', err: 'voice_key', help: 'Zum Beispiel <code>vllm serve … --api-key</code>. Lokal meist leer.' })}</div>
     </div>
     <label class="check vo-ext"><input type="checkbox" id="vo-remote" ${S.voice.allow_remote ? 'checked' : ''}>

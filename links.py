@@ -14,6 +14,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+import dbschema
+
 TICKET_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,19}-\d{1,9}$")
 
 
@@ -601,61 +603,11 @@ class Store(_AiMixin, _BoardMixin, _SnapMixin, _AgentMixin, _FlowMixin, _AcceptM
         if not write and not self.path.exists():
             yield None
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        dbschema.ensure(self.path)                  # 0.45: Schema an einer Stelle, einmal je Prozess
         conn = sqlite3.connect(str(self.path))
         conn.row_factory = sqlite3.Row
         try:
             with conn:
-                conn.execute("create table if not exists links(ref text primary key, ticket text not null, created text not null)")
-                conn.execute("create table if not exists pools(id integer primary key autoincrement, name text not null unique, created text not null)")
-                conn.execute("create table if not exists pool_items(pool_id integer not null, kind text not null, value text not null, created text not null,"
-                             " primary key(pool_id, kind, value))")
-                conn.execute("create table if not exists ai_accounts(id integer primary key autoincrement, name text not null unique, kind text not null,"
-                             " window_hours real not null, budget real not null, unit text not null, used real not null default 0, window_start real not null default 0)")
-                conn.execute("create table if not exists tasks(id integer primary key autoincrement, title text not null, created text not null)")
-                conn.execute("create table if not exists task_stage(key text primary key, stage text not null, updated real not null)")
-                conn.execute("create table if not exists sonar_snap(scope text not null, ts real not null, vals text not null)")
-                conn.execute("create index if not exists sonar_snap_scope on sonar_snap(scope, ts)")
-                conn.execute("create table if not exists agent_runs(id integer primary key autoincrement, agent text not null, ticket text not null, project_id integer,"
-                             " branch text not null default '', title text not null default '', status text not null, workdir text not null default '',"
-                             " prompt text not null default '', note text not null default '', exit_code integer, created real not null,"
-                             " started real, finished real)")
-                conn.execute("create index if not exists agent_runs_ticket on agent_runs(ticket)")
-                have = {r[1] for r in conn.execute("pragma table_info(agent_runs)")}
-                for col in ("mode", "out_branch", "wt", "taken",        # 0.16: Isolation je Lauf
-                            "question", "answered", "qa", "summary", "checks", "ack",   # 0.18: Rückfragen und Bericht
-                            "criteria", "ak", "result",                                  # 0.26: Akzeptanzkriterien und Änderungen je Lauf
-                            "phase", "parent", "gate", "gate_note", "msteps", "mchecks", "renv",   # 0.31: Zyklus, Freigaben, manuelle Prüfpunkte
-                            "session", "resume_of", "next_run", "ask", "reply", "fresh",   # 0.40: Sitzung fortsetzen, Gespräch
-                            "mr", "findings"):                                         # 0.42: Review eines MR, Befunde mit Datei und Zeile
-                    if col not in have:
-                        try:
-                            conn.execute("alter table agent_runs add column %s text not null default ''" % col)
-                        except sqlite3.OperationalError as e:      # zwei Threads beim ersten Start: der andere war schneller
-                            if "duplicate column" not in str(e):
-                                raise
-                conn.execute("create table if not exists flow_state(key text primary key, phase integer not null, max_phase integer not null, ts real not null)")
-                conn.execute("create table if not exists flow_events(id integer primary key autoincrement, ref text not null default '', key text not null,"
-                             " title text not null default '', kind text not null, phase integer not null, xp integer not null, text text not null default '', ts real not null)")
-                conn.execute("create index if not exists flow_events_ref on flow_events(ref)")
-                conn.execute("create table if not exists acceptance(key text not null, ref text not null, sha text not null, ts real not null,"
-                             " note text not null default '', env text not null default '', primary key(key, ref))")
-                conn.execute("create table if not exists pin(id integer primary key check (id = 1), key text not null, ts real not null)")
-                conn.execute("create table if not exists hd_seen(key text primary key, ts real not null)")
-                conn.execute("create table if not exists ide_wt(ref text primary key, host text not null, project_id integer not null, iid integer not null,"
-                             " sha text not null, path text not null, repo text not null, ts real not null)")
-                conn.execute("create table if not exists review_env(key text primary key, state text not null, ts real not null)")   # 0.34: Lauf und MR
-                conn.execute("create table if not exists hd_jira(hd_key text primary key, jira_key text not null, ts real not null)")   # 0.36: Helpdesk → Jira
-                conn.execute("create table if not exists devices(id integer primary key autoincrement, name text not null, hash text not null, "
-                             "created real not null, last_seen real, revoked integer not null default 0)")   # 0.36: gekoppelte Geräte (nur der Hash des Tokens)
-                conn.execute("create table if not exists checklist(id integer primary key autoincrement, key text not null, text text not null,"
-                             " done integer not null default 0, pos integer not null, created real not null, done_ts real)")
-                conn.execute("create table if not exists ticket_group(key text primary key, head text not null, ts real not null)")   # 0.30
-                conn.execute("create table if not exists review_drafts(project_id integer not null, iid integer not null, draft_id integer not null,"
-                             " run integer not null default 0, sha text not null default '', ts real not null, primary key(project_id, iid, draft_id))")
-                conn.execute("create table if not exists ticket_checks(key text not null, id text not null, text text not null, source text not null,"
-                             " state text not null default '', note text not null default '', sha text not null default '', ts real not null,"
-                             " pos integer not null default 0, primary key(key, id))")   # 0.42: Prüfliste je Ticket
                 yield conn
         finally:
             conn.close()

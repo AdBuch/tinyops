@@ -22,6 +22,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import briefing
+import dbschema
 import secretstore as store
 
 KINDS = {"click", "dead", "key", "type", "view", "dialog", "move", "env", "error", "wish", "fail", "slow", "help"}
@@ -52,12 +53,9 @@ class UxLog:
         self._pruned = 0.0
 
     def _conn(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        dbschema.ensure(self.path)
         c = sqlite3.connect(str(self.path), timeout=10)
         c.row_factory = sqlite3.Row
-        c.execute("create table if not exists ux_event(id integer primary key autoincrement, ts real not null, sess text not null, view text not null default '',"
-                  " kind text not null, target text not null default '', ctx text not null default '', x real, y real, extra text not null default '')")
-        c.execute("create index if not exists ux_event_ts on ux_event(ts)")
         return c
 
     def add_batch(self, sess, events, days=30, now=None):
