@@ -5,6 +5,19 @@ Solange die Hauptversion 0 ist, kann sich auch bei einer minor-Version noch etwa
 Die Version steht in `server.py` (`VERSION`), im Git-Tag `vX.Y.Z`, im Docker-Tag und oben rechts im Panel.
 Die frühere Zählung (1.0 bis 2.6) endet hier; **0.7.0 ist der neue Anfang** und enthält alles davon.
 
+## [0.45.1]
+
+Dein Wunsch vom 27.11.: «Review mit Agent» auch für deine eigenen MRs, auch als Draft, damit ein anderer Agent eine zweite Meinung zu deinem KI-Gebastel gibt.
+
+### Neu
+- **Co-Review deines eigenen MR:** Im Detail-Panel deiner Aufgabe steht unter «MRs und Branches» der Abschnitt «Co-Review mit Agent», oben im Fokus der Knopf «Co-Review». Es gilt für jeden offenen GitLab-MR der Aufgabe, auch als Draft; hat sie mehrere, wählst du einen. Sonst alles wie beim Review fremder MRs (0.42 bis 0.44.1): Agent, Ticket und Ziel wählen, Befunde mit Datei und Zeile, bearbeiten, «als Entwürfe in GitLab» (die siehst nur du, bis du sie abschickst) oder «Kopieren».
+- **Ein anderer Agent prüft:** Wer am MR mitgebaut hat (Läufe am Ticket oder auf dem Branch des MR), steht zuletzt in der Auswahl, mit «hat mitgebaut». Vorgewählt ist ein anderer, auch vor einem Agenten mit der Rolle Review. Wählst du trotzdem einen, der mitgebaut hat, sagt das Formular, dass es dann keine echte zweite Meinung ist; erlaubt bleibt es.
+- Der Reviewer erfährt, dass es dein eigener MR ist, zum Teil mit KI-Agenten gebaut, und dass er genauso streng prüfen soll wie bei einem Kollegen. Bei einem Draft: Unfertiges ist erwartet, er nennt es trotzdem, wenn es so nicht bleiben darf. Im Lauf und im Verlauf steht «mine».
+
+### Grenzen
+- Die Befunde gehen noch nicht mit einem Klick an den Entwickler-Agenten; dafür «Kopieren» und «Nachricht an …» im Lauf. Das kommt mit «Commits einzeln» (0.48), wo Review-Punkte zurück ans Entwickeln gehen.
+- Nur GitLab, wie bisher. GitHub-PRs haben kein Review mit Agent.
+
 ## [0.45.0]
 
 Einstellungen und Datenbank, auf deinen Vorschlag vom 25.11. («maybe first start up with refactoring») vor deinen neuen Wünschen. Ein Refactoring: Für dich ändert sich wenig, die nächsten Releases (0.46 bis 0.48) bauen darauf auf.

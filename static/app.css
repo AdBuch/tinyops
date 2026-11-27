@@ -1005,6 +1005,9 @@
   .rvrow textarea { resize: vertical; }
   .rvinfo { margin-left: 74px; } .rvinfo .bad { color: var(--bad); }
   @media (max-width: 600px) { .rvrow { grid-template-columns: 1fr; gap: 4px; } .rvinfo { margin-left: 0; } }
+  /* 0.45.1: Co-Review, MR wählen */
+  .rvpick { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; }
+  .rvpick .chip.on { background: var(--focus-bg); color: var(--focus); border-color: var(--focus); }
   /* 0.44.1: Befunde bearbeiten */
   .rvsrc { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; padding: 6px 10px; margin-bottom: 8px; border-radius: 8px; border-left: 3px solid var(--warn); background: var(--raised); }
   ul.rvedit select, ul.rvedit input, ul.rvedit textarea { padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; min-width: 0; }

@@ -105,7 +105,7 @@ Endet eine Zeile mit `[auto: test_modul.Klasse]`, prüft das ein automatischer T
 
 ## 0.45.0
 
-Refactoring (Einstellungen und Datenbank). Abgelöst: `r39-01` (Arbeitstag nach dem Umbau 0.39) durch `r45-01`, damit die Liste unter 60 Punkten von Hand bleibt.
+Refactoring (Einstellungen und Datenbank); 0.45.1: Co-Review deines eigenen MR, von Hand in `r42-03`. Abgelöst: `r39-01` (Arbeitstag nach dem Umbau 0.39) durch `r45-01`, damit die Liste unter 60 Punkten von Hand bleibt.
 
 - [ ] `r45-01` Update auf 0.45 mit deiner echten Datenbank: Prüfen → Selbsttest zeigt bei «Datenbank» «Schema 1 von 1»; einen Arbeitstag normal arbeiten (Fokus, Detail-Panel, Agent zuweisen, Review, Zeit, Einstellungen speichern) → alles wie mit 0.44, deine Läufe, Ideen und Zeiten sind noch da; Einstellungen → Sonar: bei «Höchstens so viele Prüfungen» steht «1 bis 200, Standard 40.»
 - [ ] `r45-02` Datenbank: frisch wie 0.44, Upgrade aus 0.25 ohne Datenverlust, neuere Datei läuft weiter, fehlgeschlagene Migration nimmt alles zurück, paralleler erster Start [auto: test_dbschema.Migrations]
@@ -113,6 +113,7 @@ Refactoring (Einstellungen und Datenbank). Abgelöst: `r39-01` (Arbeitstag nach 
 - [ ] `r45-04` Zahlenfelder: jedes Feld der Oberfläche steht im Schema, gleiche Grenzen beim Prüfen und Anzeigen, ein Fehlertext [auto: test_v45.Schema]
 - [ ] `r45-05` Veraltete Einstellungen fallen beim Laden weg und sind nach dem Speichern aus der config.json; kein Code liest sie mehr [auto: test_v45.Obsolete]
 - [ ] `r45-06` `settings.py` unter 700 Zeilen, Verbindungstests in `conntest*.py`, alte Namen erreichbar [auto: test_v45.Split]
+- [ ] `r45-07` 0.45.1 Co-Review: eigener MR und Draft erkannt, wer mitgebaut hat zuletzt, Reviewer erfährt es, fremde MRs unverändert, Abschnitt im Detail-Panel deiner Aufgabe [auto: test_v451.CoReview]
 
 ## 0.44.0
 
@@ -141,7 +142,7 @@ Seit 0.42 prüft ein Test `b-13`, `b-14` und `b-15` (Schritt ohne Ticket, tiny-T
 
 - [ ] `r42-01` Aufgabe in «Testen» mit MR (oder fertigem Agenten-Lauf): Fokus zeigt sie unter «Wartet auf deinen Test»; Details → «Jetzt testen» → IntelliJ geht auf dem Commit des MR auf, die Review-Umgebung startet (wenn eingetragen); die Prüfliste zeigt die Akzeptanzkriterien und die Testschritte
 - [ ] `r42-02` Einen Punkt ✗ mit einem Satz, «↺ Fehler zurück an …» → der Entwickler bessert in seiner Sitzung nach, der Punkt ist wieder offen; nach dem Nachtesten alles ✓ → «Alles ok: Getestet» → Abnahme am Commit
-- [ ] `r42-03` MR eines Kollegen → «▶ Review mit Agent» → Agent wählen (ein nicht erlaubter ist ausgegraut mit Grund), Ticket ist erkannt, ein Satz als Ziel → «Review starten» → nach dem Lauf sagt der Bericht, ob das Ziel erreicht ist; Befunde mit Datei:Zeile im Detail-Panel; dasselbe mit einem anderen Agenten (Codex, Vibe …) → stehen seine Befunde nur im Bericht, liest tinyops sie dort und sagt es dazu; «Bearbeiten» → Zeile ändern, einen löschen, einen hinzufügen, «Speichern»; mit Review-Token «als Entwürfe in GitLab» → im MR stehen sie als ausstehendes Review an den richtigen Zeilen, nichts ist abgeschickt; noch einmal → nur die von tinyops werden ersetzt
+- [ ] `r42-03` MR eines Kollegen → «▶ Review mit Agent» → Agent wählen (ein nicht erlaubter ist ausgegraut mit Grund), Ticket ist erkannt, ein Satz als Ziel → «Review starten» → nach dem Lauf sagt der Bericht, ob das Ziel erreicht ist; Befunde mit Datei:Zeile im Detail-Panel; dasselbe mit einem anderen Agenten (Codex, Vibe …) → stehen seine Befunde nur im Bericht, liest tinyops sie dort und sagt es dazu; «Bearbeiten» → Zeile ändern, einen löschen, einen hinzufügen, «Speichern»; mit Review-Token «als Entwürfe in GitLab» → im MR stehen sie als ausstehendes Review an den richtigen Zeilen, nichts ist abgeschickt; noch einmal → nur die von tinyops werden ersetzt; seit 0.45.1 dasselbe an deinem eigenen Draft-MR: Detail-Panel deiner Aufgabe → «Co-Review mit Agent» → ein Agent, der nicht mitgebaut hat, ist vorgewählt, der Bericht nennt es ein Co-Review
 - [ ] `r42-04` Prüfliste: Quellen, Fehler nur mit Satz, eigene Punkte, Fehler zurück, Abnahme nur ohne Fehler [auto: test_v42.Checklist]
 - [ ] `r42-07` Review-Start: Agenten mit Grund, Ticket aus dem MR, Ziel, Kriterien und geschwärzte MR-Beschreibung im Auftrag [auto: test_v42.ReviewStart]
 - [ ] `r42-05` Entwürfe: nur erlaubte Pfade, Position im Diff, nur eigene ersetzt, nie abschicken, ohne Token Kopieren, Agent ohne Token [auto: test_v42.Drafts]

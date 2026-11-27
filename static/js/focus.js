@@ -97,7 +97,7 @@ function fRow(e) {
     ${e.t === 'hd' ? `<span class="hdprio p${Math.min(5, e.h.prio_rank)}" title="Priorität ${esc(e.h.priority || 'ohne')}"></span>` : trackHtml(e.d)}
     <div class="fmain"><div class="fl1"><span class="fkey">${esc(eKey(e))}</span><span class="ftitle" title="${esc(eTitle(e))}">${esc(eTitle(e))}</span></div><div class="fl2">${srcTags(e)}${metaOf(e)}</div></div>
     <div class="fnext" title="${esc(OWNER_T[n.owner] || '')}"><span class="fown">${OWNER[n.owner] ? ic(OWNER[n.owner]) : ''}</span><div><b>${esc(n.label)}</b><small title="${esc(n.why)}">${esc(n.why)}</small></div></div>
-    <div class="fbtns">${doneBtn(e)}${rvBtn(e)}${goBtn(e)}</div></div>`;
+    <div class="fbtns">${doneBtn(e)}${e.t === 'review' ? rvBtn(e) : ''}${goBtn(e)}</div></div>`;
 }
 // 0.36: Die Fokus-Aufgabe als Arbeitsfläche: worum es geht, wann es fertig ist, Teilschritte und Agenten direkt da
 // (Wunsch: «das Fokus-Ticket ist wie ein Titel, nicht etwas, um daran zu arbeiten»)

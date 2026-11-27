@@ -3,22 +3,36 @@
 // 0.42.1: ▶ öffnet erst einen kurzen Start: Agent wählen, Ticket und Ziel des MR mitgeben, dann «Review starten».
 // 0.44.1: Befunde lassen sich vor dem Anlegen bearbeiten (Ort, Schwere, Text, löschen, hinzufügen). Meldet ein Agent sie nicht über
 // tinyops-finding, liest tinyops sie aus Bericht oder letzter Antwort und sagt das dazu.
+// 0.45.1: auch für deine eigenen MRs (Co-Review, auch als Draft): im Detail-Panel deiner Aufgabe; mit mehreren MRs wählst du einen.
 let RV = { k: null, d: null, t: 0, off: {}, form: null, edit: null };
+const RV_PICK = {};                                   // Aufgabe → gewählter MR ("projekt:iid"), wenn sie mehrere hat
+function rvMrs(e) {
+  if (!e) return [];
+  if (e.t === 'review') return (e.r.host || 'gitlab') === 'gitlab' ? [e.r] : [];
+  if (e.t !== 'card') return [];
+  return (e.c.items || []).filter(x => x.iid && (x.host || 'gitlab') === 'gitlab' && x.project_id != null && x.state !== 'merged');
+}
+function rvMr(e) { const l = rvMrs(e), p = RV_PICK[e && e.id]; return l.find(x => `${x.project_id}:${x.iid}` === p) || l[0] || null; }
 const RV_LAST = 'tinyops.rvAgent';
 function rvLastAgent() { try { return localStorage.getItem(RV_LAST) || ''; } catch (e) { return ''; } }
-function rvOk(e) { return e.t === 'review' && (e.r.host || 'gitlab') === 'gitlab' && state.agents && state.agents.enabled; }
+function rvOk(e) { return !!rvMr(e) && !!(state.agents && state.agents.enabled); }
 function rvRef(r) { return { host: 'gitlab', project_id: r.project_id, iid: r.iid }; }
 function rvBtn(e, cls) {
   if (!rvOk(e)) return '';
-  return `<button class="${cls || 'fgo ghost'}" data-rvfx="${esc(e.id)}" title="Agent wählen, Ticket und Ziel mitgeben, Review auf ${esc((e.r.sha || '').slice(0, 8))} starten">${ic('play')}<span>Review mit Agent</span></button>`;
+  const m = rvMr(e), own = e.t === 'card';
+  return `<button class="${cls || 'fgo ghost'}" data-rvfx="${esc(e.id)}" title="${own ? 'Zweite Meinung zu deinem MR !' + esc(m.iid) + ': ' : ''}Agent wählen, Ticket und Ziel mitgeben, Review auf ${esc((m.sha || '').slice(0, 8))} starten">${ic('play')}<span>${own ? 'Co-Review' : 'Review mit Agent'}</span></button>`;
 }
 function rvHtml(e) {
-  const k = `${e.r.project_id}:${e.r.iid}`;
+  const m = rvMr(e), all = rvMrs(e), own = e.t === 'card';
+  const k = `${m.project_id}:${m.iid}`;
   if (RV.k !== k) RV = { k, d: null, t: 0, off: {}, form: RV.pending === k ? { loading: true } : null, edit: null };
-  if (RV.form && RV.form.loading && !RV.form.req) { RV.form.req = 1; setTimeout(() => rvOpenForm(e.r), 0); }
+  if (RV.form && RV.form.loading && !RV.form.req) { RV.form.req = 1; setTimeout(() => rvOpenForm(m), 0); }
   const busy = RV.d && (RV.d.runs || []).some(r => r.active);
-  if (!RV.d || Date.now() - RV.t > (busy ? 8000 : 30000)) setTimeout(() => rvLoad(e.r), 0);
-  return `<div class="rvsec"><h3>Review mit Agent <small>Befunde werden Entwürfe in GitLab; abschicken machst du dort</small></h3><div id="rvBox">${RV.d ? rvInner(RV.d) : '<div class="small quiet">lädt …</div>'}</div></div>`;
+  if (!RV.d || Date.now() - RV.t > (busy ? 8000 : 30000)) setTimeout(() => rvLoad(m), 0);
+  const pick = all.length > 1 ? `<div class="rvpick small">MR: ${all.map(x => `<button class="chip ${x === m ? 'on' : ''}" data-rvpick="${esc(e.id)}|${x.project_id}:${x.iid}" title="${esc(x.title || '')}">!${esc(x.iid)}${x.draft ? ' · Draft' : ''}</button>`).join('')}</div>` : '';
+  const head = own ? `Co-Review mit Agent <small>Zweite Meinung zu deinem MR !${esc(m.iid)}${m.draft ? ' (Draft)' : ''}, von einem anderen Agenten; Entwürfe in GitLab siehst nur du</small>`
+    : 'Review mit Agent <small>Befunde werden Entwürfe in GitLab; abschicken machst du dort</small>';
+  return `<div class="rvsec"><h3>${head}</h3>${pick}<div id="rvBox">${RV.d ? rvInner(RV.d) : '<div class="small quiet">lädt …</div>'}</div></div>`;
 }
 async function rvLoad(r) {
   const k = `${r.project_id}:${r.iid}`;
@@ -54,13 +68,15 @@ function rvFormHtml() {
   if (f.error) return `<div class="rvform"><div class="banner bad">${esc(f.error)}</div><button data-rvcancel="1">Abbrechen</button></div>`;
   const o = f.o, v = f.v, byId = Object.fromEntries((AG().agents || []).map(a => [a.id, a]));
   const opts = o.agents.map(a => { const ag = byId[a.id] || { name: a.id };
-    return `<option value="${esc(a.id)}" ${a.ok ? '' : 'disabled'} ${a.id === v.agent ? 'selected' : ''}>${esc(agOptLabel(ag, 'review'))}${a.ok ? '' : ' · ' + esc(a.why)}</option>`; }).join('');
+    return `<option value="${esc(a.id)}" ${a.ok ? '' : 'disabled'} ${a.id === v.agent ? 'selected' : ''}>${esc(agOptLabel(ag, 'review'))}${a.built ? ' · hat mitgebaut' : ''}${a.ok ? '' : ' · ' + esc(a.why)}</option>`; }).join('');
+  const sel = o.agents.find(a => a.id === v.agent);
+  const self = sel && sel.built ? '<div class="small rvinfo warn-t">Dieser Agent hat am MR mitgebaut. Für eine echte zweite Meinung nimm einen anderen.</div>' : '';
   const tk = o.ticket, tkInfo = !v.ticket ? 'Kein Ticket: der Reviewer leitet das Ziel aus Beschreibung, Titel und Commits ab.'
     : !tk ? '' : tk.error ? `<span class="bad">${esc(tk.error)}</span>`
     : `${esc(tk.title || '')}${tk.status ? ' · ' + esc(tk.status) : ''} · ${tk.criteria ? tk.criteria + ' Akzeptanzkriterien, je eines wird geprüft' : 'keine Akzeptanzkriterien'}${tk.desc ? ' · Beschreibung geht mit' : ''}`;
   const keys = o.keys.length > 1 ? `<span class="small">Im MR erkannt: ${o.keys.map(k => `<button class="linkish" data-rvkey="${esc(k)}">${esc(k)}</button>`).join(' ')}</span>` : '';
   return `<div class="rvform">
-    <label class="rvrow"><span>Agent</span><select id="rvAgent">${opts || '<option value="">Kein Agent eingerichtet</option>'}</select></label>
+    <label class="rvrow"><span>Agent</span><select id="rvAgent">${opts || '<option value="">Kein Agent eingerichtet</option>'}</select></label>${self}
     <label class="rvrow"><span>Ticket</span><input id="rvTicket" value="${esc(v.ticket || '')}" placeholder="z. B. DLP-123, leer für keins" autocomplete="off" spellcheck="false"></label>
     <div class="small quiet rvinfo">${tkInfo} ${keys}</div>
     <label class="rvrow top"><span>Ziel</span><textarea id="rvGoal" rows="3" maxlength="2000" placeholder="Worum geht es im MR, worauf soll der Reviewer achten? Geht wörtlich an ihn (optional)">${esc(v.goal || '')}</textarea></label>
@@ -101,23 +117,25 @@ document.addEventListener('click', async ev => {
   const fx = t.closest && t.closest('[data-rvfx]');
   if (fx) {                                    // ▶ aus Liste, Hero oder Detail: Details auf, Start-Formular im Abschnitt «Review mit Agent»
     ev.stopPropagation(); ev.preventDefault();
-    const e = fEntry(fx.dataset.rvfx); if (!e) return;
-    const k = `${e.r.project_id}:${e.r.iid}`;
-    if (FXID === e.id && RV.k === k) rvOpenForm(e.r); else { RV.pending = k; openFx(e.id); }
+    const e = fEntry(fx.dataset.rvfx); const m = rvMr(e); if (!m) return;
+    const k = `${m.project_id}:${m.iid}`;
+    if (FXID === e.id && RV.k === k) rvOpenForm(m); else { RV.pending = k; openFx(e.id); }
     setTimeout(() => { const s = document.querySelector('#fx .rvsec'); if (s) s.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 250);
     return;
   }
+  const pk = t.closest && t.closest('[data-rvpick]');
+  if (pk) { const [id, mk] = pk.dataset.rvpick.split('|'); RV_PICK[id] = mk; if (FXID === id) openFx(id); return; }
   if (!t.closest || !t.closest('#rvBox') || !RV.d) return;
   const e = FXID && fEntry(FXID);
-  if (t.closest('[data-rvgo]') && e) { rvOpenForm(e.r); return; }
+  if (t.closest('[data-rvgo]') && e) { rvOpenForm(rvMr(e)); return; }
   if (t.closest('[data-rvcancel]')) { RV.form = null; rvDraw(); return; }
   const kb = t.closest('[data-rvkey]');
-  if (kb && e) { rvOpenForm(e.r, kb.dataset.rvkey); return; }
+  if (kb && e) { rvOpenForm(rvMr(e), kb.dataset.rvkey); return; }
   const go = t.closest('[data-rvrun]');
   if (go && e && RV.form && RV.form.v) {
     const v = RV.form.v; go.disabled = true;
     try {
-      const r = await post('/api/review/start', { ...rvRef(e.r), agent: v.agent, ticket: v.ticket || '', goal: v.goal || '' });
+      const r = await post('/api/review/start', { ...rvRef(rvMr(e)), agent: v.agent, ticket: v.ticket || '', goal: v.goal || '' });
       try { localStorage.setItem(RV_LAST, v.agent); } catch (x) { /* nur Komfort */ }
       toast(`${r.agent} prüft (Lauf ${r.id}). Die Befunde erscheinen hier.`); RV.form = null; RV.t = 0; await load();
     } catch (err) { toast(err.message); go.disabled = false; }
@@ -145,13 +163,13 @@ document.addEventListener('click', async ev => {
     try {
       const r = await post('/api/review/findings', { run: RV.edit.run, findings: L.map(x => ({ ...x, line: parseInt(x.line, 10) || 0 })) });
       if (r.count < L.length) toast(`${L.length - r.count} Befund(e) verworfen: Pfad ungültig (kein ../, keine Leerzeichen).`); else toast(`${r.count} Befunde gespeichert.`);
-      RV.edit = null; RV.off = {}; await rvLoad(e.r);
+      RV.edit = null; RV.off = {}; await rvLoad(rvMr(e));
     } catch (err) { toast(err.message); sv.disabled = false; }
     return;
   }
   const rs = t.closest('[data-rvreset]');
   if (rs && e) {
-    try { await post('/api/review/findings', { run: +rs.dataset.rvreset, reset: true }); RV.off = {}; toast('Liste des Agenten wiederhergestellt.'); await rvLoad(e.r); }
+    try { await post('/api/review/findings', { run: +rs.dataset.rvreset, reset: true }); RV.off = {}; toast('Liste des Agenten wiederhergestellt.'); await rvLoad(rvMr(e)); }
     catch (err) { toast(err.message); }
     return;
   }
@@ -165,7 +183,7 @@ document.addEventListener('click', async ev => {
     try {
       const r = await post('/api/review/drafts', { run: run.id, only: rvOnly(run) });
       toast(`${r.created} Entwürfe in GitLab (${r.positioned} an der Zeile${r.general ? `, ${r.general} allgemein` : ''}${r.replaced ? `, ${r.replaced} alte ersetzt` : ''}). Abschicken in GitLab.`);
-      RV.t = 0; const e = FXID && fEntry(FXID); if (e && e.t === 'review') await rvLoad(e.r);
+      RV.t = 0; const e = FXID && fEntry(FXID); if (e && rvMr(e)) await rvLoad(rvMr(e));
     } catch (err) { toast(err.message); dr.disabled = false; }
   }
 }, true);
@@ -176,9 +194,9 @@ document.addEventListener('input', ev => {
   const id = ev.target && ev.target.id; if (!RV.form || !RV.form.v) return;
   if (id === 'rvGoal') RV.form.v.goal = ev.target.value;
   else if (id === 'rvTicket') RV.form.v.ticket = ev.target.value.trim().toUpperCase();
-  else if (id === 'rvAgent') { RV.form.v.agent = ev.target.value; const b = document.querySelector('[data-rvrun]'); if (b) b.disabled = !ev.target.value; }
+  else if (id === 'rvAgent') { RV.form.v.agent = ev.target.value; rvDraw(); }   // 0.45.1: neu zeichnen, damit «hat mitgebaut» erscheint
 });
 document.addEventListener('change', ev => {          // anderes Ticket eingetragen: Titel und Kriterien neu lesen
   if (!ev.target || ev.target.id !== 'rvTicket' || !RV.form || !RV.form.o) return;
-  const e = FXID && fEntry(FXID); if (e) rvOpenForm(e.r, ev.target.value.trim().toUpperCase());
+  const e = FXID && fEntry(FXID); if (e) rvOpenForm(rvMr(e), ev.target.value.trim().toUpperCase());
 });

@@ -35,6 +35,7 @@ function renderFx() {
         <div class="ckadd"><input id="fxCkNew" maxlength="200" placeholder="${e.d.checklist.length ? 'Nächster kleiner Schritt …' : 'In kleine Schritte zerlegen, z. B. «Test für Retry schreiben»'}" autocomplete="off"><button data-fckadd="1">Hinzufügen</button></div></div>`;
     }
     if (c.items.length) body += `<div><h3>MRs und Branches <small>${c.items.length}</small></h3>${c.items.map(x => fxItem(c, x)).join('')}</div>`;
+    if (rvOk(e)) body += rvHtml(e);               // 0.45.1: Co-Review deines eigenen MR (auch Draft) von einem anderen Agenten
     else if (!c.idea_id) body += `<div><h3>MRs und Branches</h3><div class="small quiet">Noch keiner. Ein Branch mit ${esc(c.key || 'dem Key')} im Namen erscheint hier von selbst; sonst einen Branch auf die Karte im Board ziehen.</div></div>`;
     if (tcShow(e)) body += tcHtml(e);             // 0.42: Testen von Hand
     if (state.agents && state.agents.enabled && !c.idea_id) body += `<div><h3>Agenten</h3>${agentRow(c.id, c.key || '', c.title, c.url, c.items)}</div>`;

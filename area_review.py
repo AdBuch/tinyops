@@ -38,16 +38,37 @@ class ReviewArea:
     def _rv_key(self, pid, it):
         return links.ref_of(pid, it.get("branch") or "")
 
-    def _rv_agents(self, svc, pid):
-        """Alle Agenten mit «darf» und Grund. Reviewer (Rolle review) zuerst; vorgewählt ist der erste, der darf."""
+    def _rv_agents(self, svc, pid, built=()):
+        """Alle Agenten mit «darf» und Grund. Vorgewählt ist der erste, der darf: Reviewer (Rolle review) zuerst, wer am MR
+        mitgebaut hat (0.45.1, eigene MRs) zuletzt, damit ein anderer Agent die zweite Meinung gibt."""
         rows = []
         for a in svc.agent_list():
             ok, why = svc.allowed(a, pid)
             if ok and svc.mode(a, pid) != "worktree":
                 ok, why = False, "arbeitet nicht in einem eigenen Worktree"
-            rows.append({"id": a["id"], "ok": ok, "why": "" if ok else why, "reviewer": "review" in (a.get("roles") or {})})
-        rows.sort(key=lambda r: (not r["ok"], not r["reviewer"]))
+            rows.append({"id": a["id"], "ok": ok, "why": "" if ok else why, "reviewer": "review" in (a.get("roles") or {}), "built": a["id"] in built})
+        rows.sort(key=lambda r: (not r["ok"], r["built"], not r["reviewer"]))
         return rows
+
+    def _rv_mine(self, pid, iid):
+        """Ist es dein eigener MR (0.45.1)? Dann ist es ein Co-Review: eine zweite Meinung vor dem Freigeben, auch als Draft."""
+        with self.cache_lock:
+            data = self.cache or {}
+        return any(x.get("iid") == iid and x.get("project_id") == pid and (x.get("host") or "gitlab") == "gitlab" for x in data.get("mine") or [])
+
+    def _rv_built(self, svc, keys, it):
+        """Agenten, die an diesem MR mitgebaut haben: Läufe (ausser Reviews) am Ticket oder auf dem Branch des MR."""
+        out = set()
+        branch = it.get("branch") or ""
+        for t in list(keys) + [links.ref_of(it.get("project_id"), branch)]:
+            for r in svc.store.agent_runs(ticket=t):
+                if (r["phase"] or "develop") != "review":
+                    out.add(r["agent"])
+        if branch:
+            for r in svc.store.agent_runs(limit=300):
+                if r["branch"] == branch and (r["phase"] or "develop") != "review":
+                    out.add(r["agent"])
+        return out
 
     def _rv_detail(self, pid, iid):
         try:
@@ -84,12 +105,22 @@ class ReviewArea:
         if brief is not None:
             tk = {"key": brief["key"], "title": brief["title"], "status": brief["status"], "kind": brief["kind"], "criteria": len(brief["criteria"]),
                   "desc": len(brief["description"]), "error": brief["error"], "url": brief["url"], "source": brief["source"]}
-        return {"agents": self._rv_agents(self.agents, pid) if self.agents else [], "keys": keys, "ticket": tk,
-                "mr_desc": len((d.get("description") or "").strip()), "target": d.get("target_branch") or it.get("target_branch") or ""}
+        built = self._rv_built(self.agents, keys, it) if self.agents else set()
+        return {"agents": self._rv_agents(self.agents, pid, built) if self.agents else [], "keys": keys, "ticket": tk,
+                "mr_desc": len((d.get("description") or "").strip()), "target": d.get("target_branch") or it.get("target_branch") or "",
+                "mine": self._rv_mine(pid, iid), "draft": bool(it.get("draft"))}
 
-    def _rv_context(self, goal, desc, brief, cloud):
-        """Was der Reviewer über das Ziel erfährt: dein Satz, die MR-Beschreibung, das Ticket mit Kriterien. Fremdtext als Daten markiert."""
+    def _rv_context(self, goal, desc, brief, cloud, mine=False, draft=False):
+        """Was der Reviewer über das Ziel erfährt: dein Satz, die MR-Beschreibung, das Ticket mit Kriterien. Fremdtext als Daten markiert.
+        0.45.1: beim eigenen MR (Co-Review) und bei einem Draft steht das dabei."""
         out = []
+        if mine:
+            out += ["## Wessen MR", "", "Das ist der eigene MR des Menschen, der dich beauftragt; gebaut hat er ihn zum Teil mit anderen "
+                    "KI-Agenten. Er will eine zweite Meinung, bevor er ihn freigibt. Prüf genauso streng wie einen fremden MR: Was ein "
+                    "Kollege im Review bemängeln würde, ist ein Befund."
+                    + (" Der MR ist noch ein Entwurf (Draft): Unfertiges ist erwartet; nenn es trotzdem, wenn es so nicht bleiben darf." if draft else ""), ""]
+        elif draft:
+            out += ["Der MR ist noch ein Entwurf (Draft). Unfertiges ist erwartet; nenn es trotzdem, wenn es so nicht bleiben darf.", ""]
         if goal:
             out += ["## Worum es geht (vom Menschen, der dich beauftragt)", "", goal, ""]
         if desc:
@@ -105,8 +136,8 @@ class ReviewArea:
                 out += ["**Akzeptanzkriterien.** Prüf je Kriterium, ob der MR es erfüllt. Was fehlt oder anders umgesetzt ist, ist ein Befund "
                         "(`tinyops-finding` an der Stelle, sonst mit `-` als Zeile):", ""]
                 out += ["AK%d: %s" % (n, c) for n, c in enumerate(brief["criteria"], 1)] + [""]
-        if not out:
-            out = ["Zum Ziel des MR gibt es weder Beschreibung noch Ticket. Leite es aus Titel und Commits ab und sag im Bericht, was du angenommen hast.", ""]
+        if not (goal or desc or (brief and not brief["error"])):
+            out += ["Zum Ziel des MR gibt es weder Beschreibung noch Ticket. Leite es aus Titel und Commits ab und sag im Bericht, was du angenommen hast.", ""]
         return "\n".join(out)
 
     def review_start(self, b):
@@ -117,7 +148,8 @@ class ReviewArea:
         pid, iid, it = self._rv_mr(b)
         if not it.get("sha"):
             raise UserError("Der MR hat noch keinen Commit.")
-        rows = self._rv_agents(svc, pid)
+        d = self._rv_detail(pid, iid)
+        rows = self._rv_agents(svc, pid, self._rv_built(svc, self._rv_keys(it, d), it))
         if not rows:
             raise UserError("Noch kein Agent eingerichtet (Einstellungen → Agenten).")
         aid = str(b.get("agent") or "") or rows[0]["id"]
@@ -127,12 +159,12 @@ class ReviewArea:
         if not row["ok"]:
             raise UserError("%s darf dieses Review nicht machen: %s" % (svc.agent(aid)["name"], row["why"]))
         a = svc.agent(aid)
-        d = self._rv_detail(pid, iid)
         target = d.get("target_branch") or it.get("target_branch") or "main"
         goal = " ".join(str(b.get("goal") or "").split())[:2000]
         tkey = str(b.get("ticket") or "").strip().upper()
         brief = self._rv_brief(tkey) if tkey else None
-        ctx = self._rv_context(goal, (d.get("description") or "").strip(), brief, bool(a.get("cloud", True)))
+        mine = self._rv_mine(pid, iid)
+        ctx = self._rv_context(goal, (d.get("description") or "").strip(), brief, bool(a.get("cloud", True)), mine=mine, draft=bool(it.get("draft")))
         extra = {"source": it.get("branch") or "", "target": target, "sha": it["sha"], "mr_ref": "refs/merge-requests/%d/head" % iid, "context": ctx}
         key = self._rv_key(pid, it)
         title = "!%d %s" % (iid, it.get("title") or "")
@@ -147,8 +179,8 @@ class ReviewArea:
             raise UserError(str(e))
         svc.store.agent_run_update(rid, mr=json.dumps({"host": "gitlab", "project_id": pid, "iid": iid, "sha": it["sha"], "target": target,
                                                        "url": it.get("url") or "", "ticket": brief["key"] if brief and not brief["error"] else "",
-                                                       "goal": goal[:300]}))
-        self.audit("review.start", key, run=rid, agent=a["id"], mr=iid, sha=it["sha"][:12], ticket=tkey, goal=bool(goal))
+                                                       "goal": goal[:300], "mine": mine}))
+        self.audit("review.start", key, run=rid, agent=a["id"], mr=iid, sha=it["sha"][:12], ticket=tkey, goal=bool(goal), mine=mine)
         return {"id": rid, "agent": a["name"]}
 
     def review_state(self, b):
